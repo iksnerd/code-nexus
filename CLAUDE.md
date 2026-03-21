@@ -1,0 +1,161 @@
+# CodeNexus
+
+Code intelligence MCP server — provides graph-powered semantic search, call graph traversal, and impact analysis for any codebase.
+
+## Building
+
+```bash
+mix deps.get
+mix compile
+```
+
+### Tree-sitter NIF (Rust)
+
+The tree-sitter parser is a Rust NIF that must be compiled separately. Requires Rust toolchain (`rustup`).
+
+**To compile the NIF through Mix (correct ERTS ABI):**
+```bash
+# Temporarily set skip_compilation? to false in lib/elixir_nexus/tree_sitter_parser.ex
+# Then:
+PATH="$HOME/.cargo/bin:$PATH" mix compile --force
+# Revert skip_compilation? to true after
+```
+
+The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime via `load_from` — no recompilation needed for Elixir changes, only for Rust source changes.
+
+**Important:** The Cargo crate (`native/tree_sitter_nif/Cargo.toml`) uses `rustler = "0.37"` which must match the Elixir dep (`{:rustler, "~> 0.37"}`). The NIF must be compiled through Mix (not raw `cargo build`) to get the correct ERTS NIF ABI linking.
+
+**After changing Rust source:**
+1. Edit `lib/elixir_nexus/tree_sitter_parser.ex` — remove `skip_compilation?: true` and `load_from`
+2. Run `PATH="$HOME/.cargo/bin:$PATH" mix compile --force`
+3. Restore `skip_compilation?: true, load_from: {:elixir_nexus, "priv/native/tree_sitter_nif"}`
+4. Restart the server
+
+## Testing
+
+```bash
+mix test                    # All tests (~211, 0 compile warnings)
+mix test --trace            # Verbose output
+mix test --include performance  # Performance benchmarks (32 tests)
+mix test test/elixir_nexus/parsers/  # Parser tests
+mix test test/elixir_nexus/indexer_test.exs  # Indexer tests
+```
+
+Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
+
+## Running
+
+```bash
+# Docker — starts Phoenix :4000 + MCP HTTP :3001 in a single BEAM
+docker-compose up -d
+```
+
+When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3001`), `application.ex` auto-starts the MCP HTTP server alongside Phoenix in a single BEAM instance. Both share ETS caches and PubSub — no sync delay. Requires Qdrant at `http://localhost:6333` (configurable via `QDRANT_URL`).
+
+### Workspace mount (Docker)
+
+Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container: `WORKSPACE=~/Documents docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server.ex`.
+
+**Path resolution order** (`reindex` path argument):
+1. `nil` / omitted → indexes `/app` (CodeNexus itself)
+2. Bare project name (e.g. `"claude-vision"`) → `/workspace/claude-vision` if it exists
+3. Full host path (e.g. `"/Users/yourname/Documents/claude-vision"`) → stripped via `WORKSPACE_HOST` → `/workspace/claude-vision`
+4. Container path (e.g. `"/workspace/claude-vision"`) → passthrough
+
+On failure (path not found or no source dirs), the error message lists available projects in `/workspace`.
+
+### Local development
+
+For building/testing CodeNexus itself:
+
+```bash
+docker-compose up -d qdrant                          # Qdrant only
+nohup mix phx.server > /tmp/nexus_server.log 2>&1 &  # Phoenix dashboard
+mix mcp                                               # MCP stdio transport
+mix mcp_http --port 3001                              # MCP HTTP transport
+```
+
+In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but not ETS or PubSub.
+
+## Architecture
+
+- **MCP Server** (`lib/elixir_nexus/mcp_server.ex`) — stdio + HTTP (Streamable HTTP at `/mcp`) transport, ex_mcp 0.9.0
+- **Phoenix Dashboard** (`lib/elixir_nexus_web/`) — LiveView dashboard on port 4000, auto-syncs from Qdrant
+- **Indexing Pipeline** — Broadway-based: parse (tree-sitter/sourceror) -> chunk -> embed (Bumblebee) -> store (Qdrant + ETS)
+- **ETS Caches** — `ChunkCache` (chunks by file) + `GraphCache` (call graph nodes) — owned by `CacheOwner` GenServer
+- **TF-IDF ETS** — IDF vocabulary in ETS with `read_concurrency: true` for lock-free concurrent embeddings
+- **Supervision** — `rest_for_one` strategy: if a dependency crashes, all processes started after it restart
+- **Registry** — `ElixirNexus.Registry` for IndexingProducer PID lookup
+
+### Multi-instance sync (MCP + Phoenix)
+
+- **Docker mode**: MCP HTTP and Phoenix run in a single BEAM instance — they share ETS, PubSub, and Qdrant. No sync delay.
+- **Local mode**: MCP (stdio) and Phoenix are separate BEAM instances — they share Qdrant but not ETS or PubSub
+- Dashboard auto-detects when Qdrant point count diverges from local ETS (every 3s tick) and reloads via `ProjectSwitcher.reload_from_qdrant/0`
+- Within a single BEAM instance, PubSub delivers live updates for indexing progress, completion, and file changes
+
+### Multi-project support
+
+- Each project gets its own Qdrant collection (`nexus_<project_name>`)
+- MCP `reindex(path: "/path/to/project")` auto-detects source dirs, switches collection, indexes, and re-wires file watchers
+- Dashboard dropdown lists all Qdrant collections; switching reloads ETS from Qdrant via `ProjectSwitcher`
+
+### MCP spec compliance (ex_mcp 0.9.0)
+
+- **`get_tools/0` override**: ExMCP DSL stores atom keys (`:input_schema`, `:display_name`, `:meta`), but MCP spec requires camelCase strings (`inputSchema`). `mcp_server.ex` overrides `get_tools/0` to normalize keys so clients discover tools correctly.
+- **Dockerfile timeout patch**: ExMCP's default tool call timeout is 10s, too short for `reindex`. The Dockerfile patches `message_processor.ex` via `sed` to increase it to 120s, then recompiles `ex_mcp`.
+- **MCP string arg coercion**: MCP tool arguments arrive as JSON strings even for numeric params. The `to_int/2` helper in `mcp_server.ex` coerces string args to integers with a default fallback. Must be used for all numeric `deftool` params.
+
+### Concurrency & safety
+
+- Concurrent `index_directory` / `index_directories` calls are rejected with `{:error, :indexing_in_progress}` to prevent state corruption
+- Graph rebuild after indexing is async (non-blocking)
+- All Qdrant HTTP calls have 30s timeouts (120s for batch upsert)
+- MCP tool results use safe `Jason.encode` (not `encode!`) — serialization failures return error text instead of crashing
+
+### Tree-sitter NIF depth limits
+
+The NIF filters AST nodes via `is_significant_node()` and has depth limits (20/25). When adding support for new languages or node types, update `is_significant_node` in `native/tree_sitter_nif/src/lib.rs` and rebuild.
+
+Key node types that must be included:
+- Declarations: `function`, `method`, `class`, `interface`, `declaration`, `definition`
+- Calls: `call_expression`, `new_expression`, `member_expression`
+- Blocks: `statement_block`, `expression_statement`, `return_statement`, control flow
+- Imports: `import_clause`, `named_imports`, `import_specifier`, `string`, `string_fragment`
+- Python: `import_statement`, `import_from_statement`, `dotted_name`, `decorator`, `decorated_definition`
+- Generic: `import_declaration`, `use_declaration`, `include_directive`, `package_clause`
+
+### Source directory detection
+
+`IndexingHelpers.detect_indexable_dirs/1` checks for: lib, src, app, pages, components, utils, packages, services, infrastructure, repositories, core, hooks, api, modules, controllers, models, views.
+
+### Telemetry events
+
+| Event | Metadata | When |
+|-------|----------|------|
+| `[:nexus, :pipeline, :file_parsed]` | duration_ms, chunk_count, file | File successfully parsed |
+| `[:nexus, :pipeline, :file_error]` | file, reason | File parse failure |
+| `[:nexus, :search, :query]` | duration_ms, result_count, query | Search query completed |
+| `[:nexus, :qdrant, :upsert]` | duration_ms, point_count | Batch upsert to Qdrant |
+| `[:nexus, :qdrant, :upsert_error]` | batch_size, reason | Batch upsert failed |
+| `[:nexus, :qdrant, :hybrid_search]` | duration_ms, limit | Hybrid search completed |
+| `[:nexus, :embed_and_store]` | duration_ms, chunk_count | Embedding + storage batch |
+
+## Key files
+
+| File | Purpose |
+|------|---------|
+| `native/tree_sitter_nif/src/lib.rs` | Rust NIF — tree-sitter parsing + AST filtering |
+| `lib/elixir_nexus/parsers/javascript_extractor.ex` | JS/TS entity + call + import/export extraction from AST |
+| `lib/elixir_nexus/parsers/python_extractor.ex` | Python entity + call + import + decorator extraction |
+| `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Go/Rust/Java |
+| `lib/elixir_nexus/search/queries.ex` | Call graph queries with reverse call index for O(1) lookups |
+| `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
+| `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |
+| `lib/elixir_nexus/indexing_helpers.ex` | File processing, embedding, Qdrant storage |
+| `lib/elixir_nexus/mcp_server.ex` | MCP tool definitions and handlers |
+| `lib/mix/tasks/mcp_http.ex` | Mix task for HTTP/SSE MCP transport |
+| `lib/elixir_nexus/project_switcher.ex` | Collection switching + ETS reload from Qdrant |
+| `lib/elixir_nexus/tfidf_embedder.ex` | TF-IDF embedder with ETS-backed IDF for concurrent reads |
+| `lib/elixir_nexus/dirty_tracker.ex` | SHA256-based incremental indexing (polyglot) |
+| `lib/elixir_nexus/qdrant_client.ex` | Qdrant HTTP client with timeouts + safe JSON |

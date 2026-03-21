@@ -1,0 +1,84 @@
+graph LR
+    subgraph D1["Decision 1: Embeddings"]
+        D1Q["How to embed<br/>code chunks?"]
+        D1A["Bumblebee (primary)<br/>all-MiniLM-L6-v2"]
+        D1B["TF-IDF (fallback)<br/>+ sparse vectors"]
+        D1Why["Bumblebee: high-quality semantic vectors.<br/>TF-IDF: always works + keyword matching.<br/>IDF in ETS (read_concurrency) for<br/>lock-free concurrent embeddings."]
+    end
+
+    subgraph D2["Decision 2: Vector DB"]
+        D2Q["Where to store<br/>embeddings?"]
+        D2A["Qdrant"]
+        D2Why["Named vectors, sparse vectors,<br/>RRF fusion server-side,<br/>per-project collections,<br/>source of truth for cross-BEAM sync."]
+    end
+
+    subgraph D3["Decision 3: Parsing"]
+        D3Q["How to parse<br/>multiple languages?"]
+        D3A["Sourceror (Elixir)<br/>+ Tree-sitter NIF (polyglot)"]
+        D3Why["Sourceror: rich Elixir metadata.<br/>Tree-sitter NIF (Rustler):<br/>JS, TS, Python, Go, Rust, Java<br/>with depth-limited AST filtering."]
+    end
+
+    subgraph D4["Decision 4: Entity Extraction"]
+        D4Q["Generic or<br/>language-specific?"]
+        D4A["Language-specific extractors<br/>with generic fallback"]
+        D4Why["JS: import/export/arrow fn handling.<br/>Python: decorator/import extraction.<br/>Generic: import extraction for<br/>Go/Rust/Java. All feed call graph."]
+    end
+
+    subgraph D5["Decision 5: Search + Ranking"]
+        D5Q["How to rank<br/>search results?"]
+        D5A["Hybrid RRF<br/>+ graph re-ranking"]
+        D5Why["RRF fuses dense + sparse server-side.<br/>Graph boost re-ranks by call edges.<br/>Reverse call index: O(1) impact analysis.<br/>Name-indexed graph: O(1) resolution."]
+    end
+
+    subgraph D6["Decision 6: Multi-instance"]
+        D6Q["How to sync<br/>MCP + Phoenix?"]
+        D6A["Qdrant as source of truth<br/>+ auto-sync on divergence"]
+        D6Why["Separate BEAMs can't share ETS/PubSub.<br/>Dashboard polls Qdrant count every 3s.<br/>On divergence: clear ETS, reload from Qdrant.<br/>Within same BEAM: PubSub for instant updates."]
+    end
+
+    subgraph D7["Decision 7: Supervision"]
+        D7Q["How to handle<br/>process crashes?"]
+        D7A["rest_for_one strategy<br/>+ concurrent indexing guard"]
+        D7Why["rest_for_one: crash cascades to dependents.<br/>Concurrent index_directory rejected<br/>to prevent state corruption.<br/>Async graph rebuild: non-blocking."]
+    end
+
+    D1Q --> D1A
+    D1Q --> D1B
+    D1A --> D1Why
+    D1B --> D1Why
+
+    D2Q --> D2A
+    D2A --> D2Why
+
+    D3Q --> D3A
+    D3A --> D3Why
+
+    D4Q --> D4A
+    D4A --> D4Why
+
+    D5Q --> D5A
+    D5A --> D5Why
+
+    D6Q --> D6A
+    D6A --> D6Why
+
+    D7Q --> D7A
+    D7A --> D7Why
+
+    subgraph D8["Decision 8: MCP Spec Compliance"]
+        D8Q["How to ensure<br/>tool discovery works?"]
+        D8A["get_tools/0 override<br/>+ Dockerfile timeout patch"]
+        D8Why["ExMCP DSL uses snake_case atom keys<br/>(:input_schema, :display_name, :meta).<br/>MCP spec requires camelCase strings.<br/>Override normalizes keys for clients.<br/>Dockerfile patches 10s→120s timeout<br/>for long-running tools like reindex."]
+    end
+
+    D8Q --> D8A
+    D8A --> D8Why
+
+    style D1 fill:#c8e6c9
+    style D2 fill:#bbdefb
+    style D3 fill:#ffe0b2
+    style D4 fill:#f8bbd0
+    style D5 fill:#d1c4e9
+    style D6 fill:#fff9c4
+    style D7 fill:#b2dfdb
+    style D8 fill:#ffccbc
