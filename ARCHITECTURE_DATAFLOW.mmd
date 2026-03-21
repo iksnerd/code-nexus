@@ -1,0 +1,57 @@
+sequenceDiagram
+    participant User
+    participant MCP as MCP / UI / REST
+    participant Search as Search Module
+    participant Embedder as EmbeddingModel
+    participant TFIDF as TFIDFEmbedder
+    participant IDFETS as IDF Table (ETS)
+    participant Qdrant as Qdrant DB
+    participant Graph as RelationshipGraph
+    participant Boost as GraphBoost
+    participant Telemetry as Telemetry
+
+    User->>MCP: search_code("parse", 10)
+    MCP->>Search: search_code("parse", 10)
+    Search->>Telemetry: [:nexus, :search, :query] start
+
+    Search->>Embedder: embed("parse")
+    alt Bumblebee available
+        Embedder->>Embedder: Nx.Serving batch inference
+        Embedder-->>Search: dense vector [384 dims]
+    else Bumblebee unavailable
+        Embedder-->>Search: {:error, _}
+        Search->>TFIDF: embed("parse")
+        TFIDF->>IDFETS: read IDF values (concurrent, no lock)
+        IDFETS-->>TFIDF: IDF map
+        TFIDF-->>Search: dense vector [384 dims]
+    end
+
+    Search->>TFIDF: sparse_vector("parse")
+    TFIDF->>IDFETS: read IDF values
+    TFIDF-->>Search: sparse vector (indices + values)
+
+    Search->>Qdrant: hybrid_search(dense, sparse, limit=30)
+    Note over Qdrant: Prefetch dense + sparse<br/>RRF fusion (server-side)<br/>30s HTTP timeout
+    Qdrant-->>Search: top-30 results + payloads
+
+    Search->>Search: deduplicate by name + type
+
+    Search->>Graph: build_graph(results)
+    Graph->>Graph: build_name_index (O(1) lookups)
+    Graph->>Graph: count incoming edges (indexed)
+    Graph-->>Search: graph structure
+
+    Search->>Boost: apply_graph_boost(results, graph)
+    Boost->>Boost: seed = top 5 by score
+    Boost->>Boost: boost seeds (+0.1)
+    Boost->>Boost: boost by incoming refs
+    Boost->>Boost: boost by calls to seeds
+    Boost-->>Search: re-ranked results
+
+    Search->>Search: sort by combined score, take top-10
+    Search->>Telemetry: [:nexus, :search, :query] complete
+    Search-->>MCP: {:ok, results} (safe JSON encode)
+    MCP-->>User: ranked code entities
+
+    Note over Search,Graph: Graph boost brings related<br/>code closer to top results
+    Note over TFIDF,IDFETS: ETS read_concurrency:<br/>no GenServer bottleneck<br/>for concurrent searches

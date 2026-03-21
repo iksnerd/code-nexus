@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage:z
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - nexus
+
+  elixir_nexus:
+    image: iksnerd/elixir-nexus:latest
+    build: .
+    container_name: elixir_nexus
+    ports:
+      - "4000:4000"
+      - "3001:3001"
+    environment:
+      MIX_ENV: dev
+      QDRANT_URL: "http://qdrant:6333"
+      MCP_HTTP_PORT: "3001"
+      WORKSPACE_HOST: "${WORKSPACE:-}"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - ${WORKSPACE:-.}:/workspace:ro
+    networks:
+      - nexus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  qdrant_storage:
+
+networks:
+  nexus:
+    driver: bridge
