@@ -1,6 +1,6 @@
 # Dashboard UI Architecture
 
-The ElixirNexus web dashboard is a Phoenix LiveView application at `http://localhost:4000`.
+The ElixirNexus web dashboard is a Phoenix LiveView application at `http://localhost:4100`.
 
 ## Current Implementation
 

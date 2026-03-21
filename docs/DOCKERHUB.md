@@ -8,7 +8,7 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 WORKSPACE=~/Documents docker-compose up -d
 ```
 
-This starts CodeNexus (Phoenix dashboard on `:4000`, MCP HTTP on `:3001`) and Qdrant (vector DB on `:6333`).
+This starts CodeNexus (Phoenix dashboard on `:4100`, MCP HTTP on `:3001`) and Qdrant (vector DB on `:6333`).
 
 ### Without docker-compose
 
@@ -16,7 +16,7 @@ This starts CodeNexus (Phoenix dashboard on `:4000`, MCP HTTP on `:3001`) and Qd
 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:latest
 
 docker run -d --name elixir_nexus \
-  -p 4000:4000 -p 3001:3001 \
+  -p 4100:4100 -p 3001:3001 \
   -e QDRANT_URL=http://host.docker.internal:6333 \
   -e MCP_HTTP_PORT=3001 \
   -e WORKSPACE_HOST="$HOME/Documents" \
