@@ -23,7 +23,7 @@ This starts three services in a single BEAM instance:
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| Phoenix Dashboard | `localhost:4000` | Web UI for search, vectors, stats |
+| Phoenix Dashboard | `localhost:4100` | Web UI for search, vectors, stats |
 | MCP HTTP Server | `localhost:3001` | MCP tools for AI agents |
 | Qdrant | `localhost:6333` | Vector database |
 
@@ -59,7 +59,7 @@ For building and testing CodeNexus itself:
 ```bash
 docker-compose up -d qdrant   # Qdrant only
 mix deps.get
-mix phx.server                # Phoenix dashboard on :4000
+mix phx.server                # Phoenix dashboard on :4100
 mix mcp                       # MCP stdio transport
 mix mcp_http --port 3001      # MCP HTTP transport
 ```
@@ -143,7 +143,7 @@ graph LR
 graph TB
     subgraph Docker["Docker (docker-compose up)"]
         direction LR
-        PHX_D["Phoenix :4000"]
+        PHX_D["Phoenix :4100"]
         MCP_D["MCP HTTP :3001"]
         PHX_D & MCP_D --- BEAM_D["Single BEAM Instance"]
         BEAM_D --- QD_D["Qdrant :6333"]
@@ -251,7 +251,7 @@ Tree-sitter support requires the Rust toolchain. Without it, only Elixir files a
 
 ## Web Dashboard
 
-Phoenix LiveView UI at `http://localhost:4000`:
+Phoenix LiveView UI at `http://localhost:4100`:
 
 - **Dashboard** -- Indexing statistics, system health, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
 - **Search** -- Interactive hybrid search with scored results, entity badges, call/is_a tags

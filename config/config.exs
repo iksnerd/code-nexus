@@ -5,7 +5,7 @@ config :elixir_nexus,
 
 config :elixir_nexus, ElixirNexus.Endpoint,
   url: [host: "localhost"],
-  http: [port: 4000, transport_options: [socket_opts: []]],
+  http: [port: 4100, transport_options: [socket_opts: []]],
   render_errors: [
     formats: [html: ElixirNexus.ErrorHTML, json: ElixirNexus.ErrorJSON],
     layout: false
@@ -49,7 +49,7 @@ if Mix.env() == :prod do
   config :elixir_nexus, ElixirNexus.Endpoint,
     url: [scheme: "https", host: System.get_env("DOMAIN"), port: 443],
     http: [
-      port: String.to_integer(System.get_env("PORT") || "4000"),
+      port: String.to_integer(System.get_env("PORT") || "4100"),
       transport_options: [socket_opts: []]
     ],
     cache_static_manifest: "priv/static/cache_manifest.json"

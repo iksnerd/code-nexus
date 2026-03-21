@@ -22,7 +22,7 @@ services:
     build: .
     container_name: elixir_nexus
     ports:
-      - "4000:4000"
+      - "4100:4100"
       - "3001:3001"
     environment:
       MIX_ENV: dev
@@ -33,12 +33,11 @@ services:
       qdrant:
         condition: service_healthy
     volumes:
-      - .:/app
       - ${WORKSPACE:-.}:/workspace:ro
     networks:
       - nexus
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:4100/"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -25,11 +25,14 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 
 **Important:** The Cargo crate (`native/tree_sitter_nif/Cargo.toml`) uses `rustler = "0.37"` which must match the Elixir dep (`{:rustler, "~> 0.37"}`). The NIF must be compiled through Mix (not raw `cargo build`) to get the correct ERTS NIF ABI linking.
 
-**After changing Rust source:**
+**Docker NIF build:** The Dockerfile automatically handles NIF compilation for Linux — it deletes the host macOS `.so`, temporarily enables `skip_compilation?: false`, runs `mix compile --force`, then restores the flag. No manual steps needed.
+
+**After changing Rust source (local):**
 1. Edit `lib/elixir_nexus/tree_sitter_parser.ex` — remove `skip_compilation?: true` and `load_from`
 2. Run `PATH="$HOME/.cargo/bin:$PATH" mix compile --force`
 3. Restore `skip_compilation?: true, load_from: {:elixir_nexus, "priv/native/tree_sitter_nif"}`
 4. Restart the server
+5. Rebuild Docker image if using Docker: `docker-compose build elixir_nexus`
 
 ## Testing
 
@@ -46,11 +49,13 @@ Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
 ## Running
 
 ```bash
-# Docker — starts Phoenix :4000 + MCP HTTP :3001 in a single BEAM
-docker-compose up -d
+# Docker — starts Phoenix :4100 + MCP HTTP :3001 in a single BEAM
+WORKSPACE=~/www docker-compose up -d
 ```
 
 When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3001`), `application.ex` auto-starts the MCP HTTP server alongside Phoenix in a single BEAM instance. Both share ETS caches and PubSub — no sync delay. Requires Qdrant at `http://localhost:6333` (configurable via `QDRANT_URL`).
+
+**Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `docker-compose build elixir_nexus`.
 
 ### Workspace mount (Docker)
 
@@ -80,7 +85,7 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 ## Architecture
 
 - **MCP Server** (`lib/elixir_nexus/mcp_server.ex`) — stdio + HTTP (Streamable HTTP at `/mcp`) transport, ex_mcp 0.9.0
-- **Phoenix Dashboard** (`lib/elixir_nexus_web/`) — LiveView dashboard on port 4000, auto-syncs from Qdrant
+- **Phoenix Dashboard** (`lib/elixir_nexus_web/`) — LiveView dashboard on port 4100, auto-syncs from Qdrant
 - **Indexing Pipeline** — Broadway-based: parse (tree-sitter/sourceror) -> chunk -> embed (Bumblebee) -> store (Qdrant + ETS)
 - **ETS Caches** — `ChunkCache` (chunks by file) + `GraphCache` (call graph nodes) — owned by `CacheOwner` GenServer
 - **TF-IDF ETS** — IDF vocabulary in ETS with `read_concurrency: true` for lock-free concurrent embeddings

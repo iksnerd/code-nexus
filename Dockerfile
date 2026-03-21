@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     curl \
+    inotify-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust (for tree-sitter NIF compilation)
@@ -38,15 +39,21 @@ COPY config config
 COPY priv priv
 COPY test test
 
-# Compile application
-RUN mix compile
+# Remove macOS NIF binary (will be rebuilt for Linux below)
+RUN rm -f priv/native/tree_sitter_nif.so
+
+# Compile application + rebuild tree-sitter NIF for Linux
+# Temporarily enable NIF compilation by patching skip_compilation
+RUN sed -i 's/skip_compilation?: true/skip_compilation?: false/' lib/elixir_nexus/tree_sitter_parser.ex && \
+    mix compile --force && \
+    sed -i 's/skip_compilation?: false/skip_compilation?: true/' lib/elixir_nexus/tree_sitter_parser.ex
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # Expose ports (Phoenix + MCP HTTP)
-EXPOSE 4000 3001
+EXPOSE 4100 3001
 
 # Start both Phoenix and MCP HTTP servers
 CMD ["./docker-entrypoint.sh"]
