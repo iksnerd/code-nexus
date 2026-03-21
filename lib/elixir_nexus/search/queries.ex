@@ -413,6 +413,10 @@ defmodule ElixirNexus.Search.Queries do
     top_connected =
       graph_nodes
       |> Map.values()
+      |> Enum.reject(fn node ->
+        name = node["name"] || ""
+        String.length(name) <= 2
+      end)
       |> Enum.map(fn node ->
         degree = (node["outgoing_degree"] || 0) + (node["incoming_count"] || 0)
         %{name: node["name"] || "?", degree: degree}

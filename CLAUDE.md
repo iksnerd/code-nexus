@@ -111,6 +111,10 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 - **Dockerfile timeout patch**: ExMCP's default tool call timeout is 10s, too short for `reindex`. The Dockerfile patches `message_processor.ex` via `sed` to increase it to 120s, then recompiles `ex_mcp`.
 - **MCP string arg coercion**: MCP tool arguments arrive as JSON strings even for numeric params. The `to_int/2` helper in `mcp_server.ex` coerces string args to integers with a default fallback. Must be used for all numeric `deftool` params.
 
+### Auto-reindex on queries
+
+MCP query tools (`search_code`, `find_all_callees`, `find_all_callers`, `analyze_impact`, `get_community_context`, `get_graph_stats`, `find_module_hierarchy`) automatically check for dirty files via `DirtyTracker.get_dirty_files_recursive/1` before executing. Changed files are reindexed individually via `Indexer.index_file/1` (fast, single-file) so queries always return fresh results. Only active after an initial `reindex` (state must have `:indexed_dirs`).
+
 ### Concurrency & safety
 
 - Concurrent `index_directory` / `index_directories` calls are rejected with `{:error, :indexing_in_progress}` to prevent state corruption

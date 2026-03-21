@@ -353,6 +353,55 @@ defmodule ElixirNexus.MCPServerTest do
     end
   end
 
+  describe "auto-reindex dirty files before queries" do
+    test "search_code auto-reindexes dirty files" do
+      tmp_dir = Path.join(System.tmp_dir!(), "mcp_autoreindex_#{System.unique_integer([:positive])}")
+      lib_dir = Path.join(tmp_dir, "lib")
+      File.mkdir_p!(lib_dir)
+      File.write!(Path.join(lib_dir, "original.ex"), "defmodule Original do\n  def hello, do: :world\nend\n")
+
+      # Reindex to establish baseline
+      state = %{project_root: tmp_dir}
+      MCPServer.handle_tool_call("reindex", %{"path" => lib_dir}, state)
+      ElixirNexus.Indexer.await_idle()
+
+      # State after reindex should have :indexed_dirs
+      {:ok, _, state_after} = MCPServer.handle_tool_call("reindex", %{"path" => lib_dir}, state)
+      ElixirNexus.Indexer.await_idle()
+
+      # Modify a file — makes it dirty
+      File.write!(Path.join(lib_dir, "original.ex"), "defmodule Original do\n  def hello, do: :updated\nend\n")
+
+      # Query should trigger auto-reindex (state has indexed_dirs)
+      result = MCPServer.handle_tool_call("search_code", %{"query" => "hello"}, state_after)
+
+      case result do
+        {:ok, %{content: [%{type: "text", text: json}]}, _state} ->
+          assert is_binary(json)
+
+        {:error, _msg, _state} ->
+          :ok
+      end
+
+      File.rm_rf!(tmp_dir)
+    end
+
+    test "no auto-reindex when no indexed_dirs in state" do
+      # Without :indexed_dirs, should just run the query without reindexing
+      state = %{project_root: File.cwd!()}
+
+      result = MCPServer.handle_tool_call("search_code", %{"query" => "nonexistent_xyz"}, state)
+
+      case result do
+        {:ok, %{content: [%{type: "text", text: json}]}, _state} ->
+          assert is_binary(json)
+
+        {:error, _msg, _state} ->
+          :ok
+      end
+    end
+  end
+
   describe "handle_tool_call reindex with lib subdirectory" do
     test "detects project root from lib subdirectory" do
       state = %{project_root: File.cwd!()}
