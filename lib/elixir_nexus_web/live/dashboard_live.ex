@@ -111,7 +111,7 @@ defmodule ElixirNexus.DashboardLive.Index do
       <!-- Live Activity Feed -->
       <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
         <h3 class="text-sm font-semibold text-slate-300 mb-3">Activity</h3>
-        <div class="max-h-64 overflow-y-auto">
+        <div class="max-h-96 overflow-y-auto">
           <%= if @activity == [] do %>
             <p class="text-xs text-slate-500 py-4 text-center">No recent activity</p>
           <% else %>
@@ -296,6 +296,10 @@ defmodule ElixirNexus.DashboardLive.Index do
     top_connected =
       graph_nodes
       |> Map.values()
+      |> Enum.reject(fn node ->
+        name = node["name"] || ""
+        String.length(name) <= 2
+      end)
       |> Enum.map(fn node ->
         degree = (node["outgoing_degree"] || 0) + (node["incoming_count"] || 0)
         {node["name"] || "?", degree}
@@ -372,11 +376,15 @@ defmodule ElixirNexus.DashboardLive.Index do
     event = %{
       type: type,
       message: message,
-      time: Calendar.strftime(DateTime.utc_now(), "%H:%M:%S")
+      time: format_local_time()
     }
 
     activity = [event | socket.assigns.activity] |> Enum.take(@max_activity)
     assign(socket, activity: activity)
+  end
+
+  defp format_local_time do
+    Calendar.strftime(DateTime.utc_now(), "%H:%M:%S UTC")
   end
 
   # Detect when Qdrant has been updated externally (e.g. by MCP in a separate BEAM)

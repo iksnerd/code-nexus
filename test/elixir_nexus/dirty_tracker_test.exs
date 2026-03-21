@@ -109,4 +109,71 @@ defmodule ElixirNexus.DirtyTrackerTest do
       assert {:error, :enoent} = DirtyTracker.get_dirty_files("/tmp/nonexistent_dir_#{System.unique_integer()}")
     end
   end
+
+  describe "get_dirty_files_recursive/1" do
+    test "finds dirty files in nested directories" do
+      sub_dir = Path.join(@test_dir, "nested/deep")
+      File.mkdir_p!(sub_dir)
+
+      File.write!(Path.join(@test_dir, "top.ts"), "export const top = 1;")
+      File.write!(Path.join(sub_dir, "deep.ts"), "export const deep = 2;")
+      File.write!(Path.join(sub_dir, "readme.txt"), "not indexable")
+
+      assert {:ok, dirty} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+
+      dirty_basenames = Enum.map(dirty, &Path.basename/1)
+      assert "top.ts" in dirty_basenames
+      assert "deep.ts" in dirty_basenames
+      refute "readme.txt" in dirty_basenames
+    end
+
+    test "excludes clean files from recursive scan" do
+      sub_dir = Path.join(@test_dir, "src")
+      File.mkdir_p!(sub_dir)
+
+      clean_path = Path.join(sub_dir, "clean.ex")
+      dirty_path = Path.join(sub_dir, "dirty.ex")
+
+      File.write!(clean_path, "defmodule Clean do\nend\n")
+      File.write!(dirty_path, "defmodule Dirty do\nend\n")
+
+      DirtyTracker.mark_clean(clean_path)
+
+      assert {:ok, dirty} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+
+      dirty_basenames = Enum.map(dirty, &Path.basename/1)
+      assert "dirty.ex" in dirty_basenames
+      refute "clean.ex" in dirty_basenames
+    end
+
+    test "skips ignored directories like node_modules" do
+      ignored_dir = Path.join(@test_dir, "node_modules")
+      File.mkdir_p!(ignored_dir)
+      File.write!(Path.join(ignored_dir, "lib.js"), "module.exports = {};")
+
+      assert {:ok, dirty} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+      refute Enum.any?(dirty, &String.contains?(&1, "node_modules"))
+    end
+
+    test "returns empty list when all files are clean" do
+      path = Path.join(@test_dir, "all_clean.ex")
+      File.write!(path, "defmodule AllClean do\nend\n")
+      DirtyTracker.mark_clean(path)
+
+      assert {:ok, []} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+    end
+
+    test "detects file modified after mark_clean" do
+      path = Path.join(@test_dir, "will_change.ts")
+      File.write!(path, "export const v1 = 1;")
+      DirtyTracker.mark_clean(path)
+
+      assert {:ok, []} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+
+      File.write!(path, "export const v2 = 2;")
+
+      assert {:ok, dirty} = DirtyTracker.get_dirty_files_recursive([@test_dir])
+      assert Path.basename(hd(dirty)) == "will_change.ts"
+    end
+  end
 end

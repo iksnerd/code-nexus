@@ -236,7 +236,7 @@ defmodule ElixirNexus.MCPServer do
                 directories: dirs,
                 project_path: display_path
               }
-              json_reply(result, state)
+              json_reply(result, Map.put(state, :indexed_dirs, dirs))
 
             {:error, reason} ->
               {:error, "Reindex failed: #{inspect(reason)}", state}
@@ -249,12 +249,14 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("search_code", %{"query" => query} = args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 10)
     {:ok, results} = ElixirNexus.Search.search_code(query, limit)
     json_reply(compact_results(results), state)
   end
 
   def handle_tool_call("find_all_callees", %{"entity_name" => name} = args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 20)
 
     case ElixirNexus.Search.find_callees(name, limit) do
@@ -264,6 +266,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("analyze_impact", %{"entity_name" => name} = args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     depth = to_int(Map.get(args, "depth"), 3)
 
     case ElixirNexus.Search.analyze_impact(name, depth) do
@@ -273,6 +276,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("get_community_context", %{"file_path" => path} = args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 10)
 
     case ElixirNexus.Search.get_community_context(path, limit) do
@@ -282,6 +286,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_all_callers", %{"entity_name" => name} = args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 20)
     callers = ElixirNexus.GraphCache.find_callers(name)
 
@@ -306,6 +311,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     case ElixirNexus.Search.get_graph_stats() do
       {:ok, stats} -> json_reply(stats, state)
       {:error, reason} -> {:error, "Graph stats failed: #{inspect(reason)}", state}
@@ -313,6 +319,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_module_hierarchy", %{"entity_name" => name}, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
     case ElixirNexus.Search.find_module_hierarchy(name) do
       {:ok, result} -> json_reply(result, state)
       {:error, :not_found} -> {:error, "Module not found: #{name}", state}
@@ -417,6 +424,41 @@ defmodule ElixirNexus.MCPServer do
       Logger.info("Switching Qdrant collection: #{current} -> #{collection}")
       GenServer.call(ElixirNexus.QdrantClient, {:switch_collection_force, collection}, 30_000)
       ElixirNexus.Events.broadcast_collection_changed(collection)
+    end
+  end
+
+  # Auto-reindex dirty files before queries to avoid stale results.
+  # Only runs if directories have been indexed (state has :indexed_dirs).
+  # Returns {reindexed_count, state} — state unchanged since dirs don't change.
+  defp maybe_reindex_dirty(state) do
+    dirs = Map.get(state, :indexed_dirs, [])
+
+    if dirs == [] do
+      {0, state}
+    else
+      case ElixirNexus.DirtyTracker.get_dirty_files_recursive(dirs) do
+        {:ok, []} ->
+          {0, state}
+
+        {:ok, dirty_files} ->
+          count = length(dirty_files)
+          Logger.info("Auto-reindexing #{count} dirty file(s) before query")
+
+          Enum.each(dirty_files, fn path ->
+            case ElixirNexus.Indexer.index_file(path) do
+              {:ok, _chunks} ->
+                ElixirNexus.DirtyTracker.mark_clean(path)
+
+              {:error, reason} ->
+                Logger.warning("Auto-reindex failed for #{path}: #{inspect(reason)}")
+            end
+          end)
+
+          {count, state}
+
+        {:error, _} ->
+          {0, state}
+      end
     end
   end
 
