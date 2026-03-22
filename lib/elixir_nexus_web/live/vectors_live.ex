@@ -51,11 +51,24 @@ defmodule ElixirNexus.VectorsLive.Index do
       >
         Reset Collection
       </button>
+      <button
+        phx-click="confirm_delete"
+        class="px-4 py-2 bg-red-800/80 hover:bg-red-800 text-white rounded-lg text-sm font-medium transition"
+      >
+        Delete Collection
+      </button>
       <%= if @confirm_reset do %>
         <div class="flex items-center gap-2 bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-2">
           <span class="text-red-300 text-sm">Delete all vectors?</span>
           <button phx-click="reset_collection" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium">Yes, reset</button>
           <button phx-click="cancel_reset" class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-sm font-medium">Cancel</button>
+        </div>
+      <% end %>
+      <%= if @confirm_delete do %>
+        <div class="flex items-center gap-2 bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-2">
+          <span class="text-red-300 text-sm">Permanently delete collection "<%= @collection_name %>"?</span>
+          <button phx-click="delete_collection" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium">Yes, delete</button>
+          <button phx-click="cancel_delete" class="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-sm font-medium">Cancel</button>
         </div>
       <% end %>
     </div>
@@ -270,6 +283,7 @@ defmodule ElixirNexus.VectorsLive.Index do
         filtered_count: 0,
         detail_point: nil,
         confirm_reset: false,
+        confirm_delete: false,
         reindexing: false,
         flash_message: nil,
         flash_type: :info,
@@ -418,6 +432,43 @@ defmodule ElixirNexus.VectorsLive.Index do
 
   def handle_event("cancel_reset", _params, socket) do
     {:noreply, assign(socket, confirm_reset: false)}
+  end
+
+  def handle_event("confirm_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: true)}
+  end
+
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: false)}
+  end
+
+  def handle_event("delete_collection", _params, socket) do
+    case ElixirNexus.QdrantClient.delete_collection() do
+      {:ok, _} ->
+        ElixirNexus.ChunkCache.clear()
+        ElixirNexus.GraphCache.clear()
+
+        # Switch to first available collection or broadcast nil
+        case ElixirNexus.QdrantClient.list_collections() do
+          {:ok, [first | _]} ->
+            ElixirNexus.ProjectSwitcher.switch_project(first)
+
+          _ ->
+            ElixirNexus.Events.broadcast_collection_changed(nil)
+        end
+
+        socket =
+          socket
+          |> assign(confirm_delete: false, page: 0, offset_stack: [], next_offset: nil)
+          |> load_collection_info()
+          |> load_points()
+          |> set_flash("Collection deleted", :info)
+
+        {:noreply, socket}
+
+      {:error, _} ->
+        {:noreply, set_flash(socket, "Failed to delete collection", :error)}
+    end
   end
 
   def handle_event("reset_collection", _params, socket) do

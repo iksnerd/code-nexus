@@ -13,9 +13,10 @@ defmodule ElixirNexus.Search.Queries do
 
     case get_all_entities_cached(2000) do
       {:ok, all_entities} ->
-        # Build reverse call index once: callee_name_lower -> [caller_entities]
-        call_index = build_reverse_call_index(all_entities)
-        tree = build_impact_tree(entity_name, call_index, depth, MapSet.new())
+        # Build reverse edge index once: name_lower -> [referencing_entities]
+        # Includes both calls and imports so import-only dependencies are tracked
+        edge_index = build_reverse_edge_index(all_entities)
+        tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new())
         flat = flatten_impact_tree(tree)
 
         {:ok, %{
@@ -31,13 +32,21 @@ defmodule ElixirNexus.Search.Queries do
     end
   end
 
-  # Build a reverse call index: for each call name, list the entities that make that call.
+  # Build a reverse edge index: for each call or import name, list the entities that reference it.
   # This turns O(n) caller lookups into O(1) map lookups.
-  defp build_reverse_call_index(entities) do
+  # Indexes both `calls` (runtime invocations) and `is_a` (imports/dependencies).
+  defp build_reverse_edge_index(entities) do
     Enum.reduce(entities, %{}, fn e, acc ->
       calls = e.entity["calls"] || []
-      Enum.reduce(calls, acc, fn call, index ->
+      imports = e.entity["is_a"] || []
+
+      acc = Enum.reduce(calls, acc, fn call, index ->
         key = String.downcase(call)
+        Map.update(index, key, [e], fn existing -> [e | existing] end)
+      end)
+
+      Enum.reduce(imports, acc, fn imp, index ->
+        key = String.downcase(imp)
         Map.update(index, key, [e], fn existing -> [e | existing] end)
       end)
     end)
@@ -271,20 +280,26 @@ defmodule ElixirNexus.Search.Queries do
                 []
               end
 
-            # Import-path coupling: only check module entities' is_a (import sources)
+            # Import-path coupling: check all entities' is_a (import sources)
             import_connections =
-              if entity.entity["entity_type"] == "module" do
-                imports = entity.entity["is_a"] || []
-                if Enum.any?(imports, &import_matches_file?(&1, file_path)) do
-                  [%{from: name, to: Path.basename(file_path), direction: :imports}]
-                else
-                  []
-                end
-              else
-                []
-              end
+              (entity.entity["is_a"] || [])
+              |> Enum.filter(&import_matches_file?(&1, file_path))
+              |> Enum.map(fn _imp ->
+                %{from: name, to: Path.basename(file_path), direction: :imports}
+              end)
 
-            connections = outgoing ++ incoming ++ import_connections
+            # Reverse import coupling: check if target file's entities import from this entity's file
+            reverse_import_connections =
+              target_entities
+              |> Enum.flat_map(fn te ->
+                (te.entity["is_a"] || [])
+                |> Enum.filter(&import_matches_file?(&1, other_path))
+                |> Enum.map(fn _imp ->
+                  %{from: Path.basename(file_path), to: name, direction: :imported_by}
+                end)
+              end)
+
+            connections = outgoing ++ incoming ++ import_connections ++ reverse_import_connections
 
             if connections != [] do
               [{other_path, length(connections), connections}]
@@ -305,6 +320,76 @@ defmodule ElixirNexus.Search.Queries do
           file: file_path,
           entities_in_file: length(target_entities),
           coupled_files: coupled
+        }}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Find exported functions/methods with zero callers (dead code).
+  """
+  def find_dead_code(opts \\ []) do
+    path_prefix = Keyword.get(opts, :path_prefix)
+
+    case get_all_entities_cached(2000) do
+      {:ok, all_entities} ->
+        # Build reverse call index (calls only, not imports)
+        call_index =
+          Enum.reduce(all_entities, %{}, fn e, acc ->
+            Enum.reduce(e.entity["calls"] || [], acc, fn call, index ->
+              key = String.downcase(call)
+              Map.update(index, key, true, fn _ -> true end)
+            end)
+          end)
+
+        # Find public functions/methods with zero callers
+        dead =
+          all_entities
+          |> Enum.filter(fn e ->
+            type = e.entity["entity_type"]
+            vis = e.entity["visibility"]
+            type in ["function", "method"] and vis in ["public", nil]
+          end)
+          |> then(fn entities ->
+            if path_prefix do
+              Enum.filter(entities, &String.starts_with?(&1.entity["file_path"] || "", path_prefix))
+            else
+              entities
+            end
+          end)
+          |> Enum.filter(fn e ->
+            name = e.entity["name"] || ""
+            name_lower = String.downcase(name)
+            # No entity calls this function
+            not Map.has_key?(call_index, name_lower) and
+              # Also check qualified name patterns
+              not Enum.any?(Map.keys(call_index), fn k ->
+                String.ends_with?(k, "." <> name_lower)
+              end)
+          end)
+          |> Enum.map(fn e ->
+            %{
+              name: e.entity["name"],
+              file_path: e.entity["file_path"],
+              entity_type: e.entity["entity_type"],
+              start_line: e.entity["start_line"]
+            }
+          end)
+
+        total_public =
+          all_entities
+          |> Enum.count(fn e ->
+            type = e.entity["entity_type"]
+            vis = e.entity["visibility"]
+            type in ["function", "method"] and vis in ["public", nil]
+          end)
+
+        {:ok, %{
+          dead_functions: dead,
+          total_public: total_public,
+          dead_count: length(dead)
         }}
 
       error ->
@@ -355,10 +440,16 @@ defmodule ElixirNexus.Search.Queries do
   Inverse of find_callees — walks call edges inbound.
   """
   def find_callers(entity_name, limit \\ 20) do
-    callers = ElixirNexus.GraphCache.find_callers(entity_name)
+    call_callers = ElixirNexus.GraphCache.find_callers(entity_name)
+    import_callers = ElixirNexus.GraphCache.find_importers(entity_name)
+
+    # Merge and deduplicate by id, preferring call callers
+    all_callers =
+      (call_callers ++ import_callers)
+      |> Enum.uniq_by(fn {id, _node} -> id end)
 
     results =
-      callers
+      all_callers
       |> Enum.take(limit)
       |> Enum.map(fn {id, node} ->
         %{
@@ -424,14 +515,116 @@ defmodule ElixirNexus.Search.Queries do
       |> Enum.sort_by(& &1.degree, :desc)
       |> Enum.take(10)
 
+    critical_files = compute_critical_files(graph_nodes)
+
     {:ok, %{
       total_nodes: map_size(graph_nodes),
       total_chunks: length(chunks),
       entity_types: entity_types,
       edge_counts: %{calls: calls, imports: imports, contains: contains},
       top_connected: top_connected,
-      languages: languages
+      languages: languages,
+      critical_files: critical_files
     }}
+  end
+
+  # Approximate betweenness centrality via sampled BFS.
+  # Identifies files that are bottlenecks — everything flows through them.
+  defp compute_critical_files(graph_nodes) when map_size(graph_nodes) < 3, do: []
+
+  defp compute_critical_files(graph_nodes) do
+    nodes = Map.values(graph_nodes)
+    # Build adjacency: name_lower -> [name_lower of callees]
+    adj =
+      Enum.reduce(nodes, %{}, fn node, acc ->
+        name = String.downcase(node["name"] || "")
+        callees = Enum.map(node["calls"] || [], &String.downcase/1)
+        Map.put(acc, name, callees)
+      end)
+
+    all_names = Map.keys(adj)
+    # Sample up to 30 source nodes for BFS
+    sample_count = min(30, length(all_names))
+    sources = Enum.take_random(all_names, sample_count)
+
+    # Count how many shortest paths pass through each node
+    centrality =
+      Enum.reduce(sources, %{}, fn source, scores ->
+        bfs_centrality(source, adj, scores)
+      end)
+
+    # Group by file path and sum scores
+    name_to_file =
+      Enum.reduce(nodes, %{}, fn node, acc ->
+        Map.put(acc, String.downcase(node["name"] || ""), node["file_path"])
+      end)
+
+    centrality
+    |> Enum.reduce(%{}, fn {name, score}, acc ->
+      case Map.get(name_to_file, name) do
+        nil -> acc
+        file -> Map.update(acc, file, score, &(&1 + score))
+      end
+    end)
+    |> Enum.sort_by(fn {_f, s} -> -s end)
+    |> Enum.take(10)
+    |> Enum.map(fn {file, score} -> %{file_path: file, centrality_score: score} end)
+  end
+
+  defp bfs_centrality(source, adj, scores) do
+    # BFS from source, tracking predecessors for shortest paths
+    queue = :queue.from_list([source])
+    visited = MapSet.new([source])
+    # predecessor map: node -> parent in BFS tree
+    preds = %{}
+
+    {_visited, preds} = bfs_loop(queue, adj, visited, preds)
+
+    # For each reachable node, walk back through predecessors and count intermediaries
+    Enum.reduce(preds, scores, fn {node, _parent}, acc ->
+      # Walk path from node back to source, collect intermediaries (exclude source and node)
+      intermediaries = collect_intermediaries(node, preds, source)
+      Enum.reduce(intermediaries, acc, fn mid, inner ->
+        Map.update(inner, mid, 1, &(&1 + 1))
+      end)
+    end)
+  end
+
+  defp collect_intermediaries(node, preds, source) do
+    do_collect(node, preds, source, [])
+  end
+
+  defp do_collect(node, preds, source, acc) do
+    case Map.get(preds, node) do
+      nil -> acc
+      ^source -> acc
+      parent -> do_collect(parent, preds, source, [parent | acc])
+    end
+  end
+
+  defp bfs_loop(queue, adj, visited, preds) do
+    case :queue.out(queue) do
+      {:empty, _} ->
+        {visited, preds}
+
+      {{:value, current}, rest} ->
+        neighbors = Map.get(adj, current, [])
+
+        {new_queue, new_visited, new_preds} =
+          Enum.reduce(neighbors, {rest, visited, preds}, fn neighbor, {q, vis, p} ->
+            if MapSet.member?(vis, neighbor) do
+              {q, vis, p}
+            else
+              {
+                :queue.in(neighbor, q),
+                MapSet.put(vis, neighbor),
+                Map.put(p, neighbor, current)
+              }
+            end
+          end)
+
+        bfs_loop(new_queue, adj, new_visited, new_preds)
+    end
   end
 
   @doc """
@@ -442,9 +635,9 @@ defmodule ElixirNexus.Search.Queries do
 
     case get_all_entities_cached(2000) do
       {:ok, all_entities} ->
-        case Enum.find(all_entities, fn e ->
-          matches_entity_name?(e.entity["name"] || "", entity_name)
-        end) do
+        target = find_entity_multi_strategy(entity_name, all_entities)
+
+        case target do
           nil ->
             {:error, :not_found}
 
@@ -467,6 +660,39 @@ defmodule ElixirNexus.Search.Queries do
       error ->
         error
     end
+  end
+
+  # Multi-strategy entity lookup: exact match, then file-path match, then substring
+  defp find_entity_multi_strategy(name, entities) do
+    # 1. Exact match (current behavior)
+    Enum.find(entities, fn e ->
+      matches_entity_name?(e.entity["name"] || "", name)
+    end) ||
+    # 2. File-path-based: basename matches query
+    Enum.find(entities, fn e ->
+      file_path_matches_name?(e.entity["file_path"] || "", name)
+    end) ||
+    # 3. Substring: entity name contains query or vice versa
+    Enum.find(entities, fn e ->
+      e_name = String.downcase(e.entity["name"] || "")
+      q_name = String.downcase(name)
+      e_name != "" and q_name != "" and
+        (String.contains?(e_name, q_name) or String.contains?(q_name, e_name))
+    end)
+  end
+
+  defp file_path_matches_name?(file_path, name) when file_path == "" or name == "", do: false
+
+  defp file_path_matches_name?(file_path, name) do
+    basename = file_path |> Path.basename() |> Path.rootname()
+    normalize_name(basename) == normalize_name(name)
+  end
+
+  # Normalize: kebab-case, camelCase, PascalCase → lowercase
+  defp normalize_name(name) do
+    name
+    |> String.replace(~r/[-_]/, "")
+    |> String.downcase()
   end
 
   defp resolve_names(names, all_entities) do

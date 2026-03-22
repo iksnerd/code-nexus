@@ -62,12 +62,23 @@ defmodule ElixirNexus.FileWatcher do
   end
 
   @impl true
-  def handle_info({:file_event, _watcher_pid, {path, _events}}, state) do
+  def handle_info({:file_event, _watcher_pid, {path, events}}, state) do
     if indexable_file?(path) and not ignored_path?(path) do
-      # Debounce: schedule flush, replacing any pending timer for same path
-      new_pending = Map.put(state.pending, path, true)
-      Process.send_after(self(), {:flush, path}, @debounce_ms)
-      {:noreply, %{state | pending: new_pending}}
+      if file_deleted?(events, path) do
+        # File was deleted — clean up immediately (no debounce needed)
+        Logger.info("File deleted, removing from index: #{path}")
+        try do
+          ElixirNexus.Indexer.delete_file(path)
+        rescue
+          e -> Logger.warning("Failed to delete #{path} from index: #{inspect(e)}")
+        end
+        {:noreply, %{state | pending: Map.delete(state.pending, path)}}
+      else
+        # Debounce: schedule flush, replacing any pending timer for same path
+        new_pending = Map.put(state.pending, path, true)
+        Process.send_after(self(), {:flush, path}, @debounce_ms)
+        {:noreply, %{state | pending: new_pending}}
+      end
     else
       {:noreply, state}
     end
@@ -108,6 +119,12 @@ defmodule ElixirNexus.FileWatcher do
       {:error, _} ->
         :ok
     end
+  end
+
+  # Check if file system events indicate deletion and file is gone from disk
+  defp file_deleted?(events, path) do
+    deletion_event = Enum.any?(events, &(&1 in [:removed, :deleted, :renamed]))
+    deletion_event and not File.exists?(path)
   end
 
   defp indexable_file?(path) do

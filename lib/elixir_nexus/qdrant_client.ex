@@ -84,6 +84,15 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, {:delete_points, ids}, @http_timeout)
   end
 
+  @doc "Delete all points matching a file_path filter."
+  def delete_points_by_file(file_path) when is_binary(file_path) do
+    filter = %{
+      "must" => [%{"key" => "file_path", "match" => %{"value" => file_path}}]
+    }
+
+    GenServer.call(__MODULE__, {:delete_points_by_filter, filter}, @http_timeout)
+  end
+
   def list_collections do
     GenServer.call(__MODULE__, :list_collections, @http_timeout)
   end
@@ -330,6 +339,12 @@ defmodule ElixirNexus.QdrantClient do
 
   def handle_call({:delete_points, ids}, _from, state) do
     body = %{"points" => ids}
+    result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
+    {:reply, result, state}
+  end
+
+  def handle_call({:delete_points_by_filter, filter}, _from, state) do
+    body = %{"filter" => filter}
     result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
     {:reply, result, state}
   end

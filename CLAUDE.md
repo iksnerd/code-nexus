@@ -113,7 +113,11 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 
 ### Auto-reindex on queries
 
-MCP query tools (`search_code`, `find_all_callees`, `find_all_callers`, `analyze_impact`, `get_community_context`, `get_graph_stats`, `find_module_hierarchy`) automatically check for dirty files via `DirtyTracker.get_dirty_files_recursive/1` before executing. Changed files are reindexed individually via `Indexer.index_file/1` (fast, single-file) so queries always return fresh results. Only active after an initial `reindex` (state must have `:indexed_dirs`).
+MCP query tools (`search_code`, `find_all_callees`, `find_all_callers`, `analyze_impact`, `get_community_context`, `get_graph_stats`, `find_module_hierarchy`, `find_dead_code`) automatically check for dirty files via `DirtyTracker.get_dirty_files_recursive/1` before executing. Changed files are reindexed individually via `Indexer.index_file/1` (fast, single-file) so queries always return fresh results. Deleted files are also cleaned up from all caches during this pass. Only active after an initial `reindex` (state must have `:indexed_dirs`).
+
+### File deletion handling
+
+When the FileWatcher detects a `:removed`/`:deleted` event and confirms the file is gone from disk, it calls `Indexer.delete_file/1` which orchestrates cleanup across ChunkCache, GraphCache, Qdrant, and DirtyTracker. The `maybe_reindex_dirty/1` pass before queries also scans for files in ChunkCache that no longer exist on disk.
 
 ### Concurrency & safety
 
@@ -132,6 +136,7 @@ Key node types that must be included:
 - Blocks: `statement_block`, `expression_statement`, `return_statement`, control flow
 - Imports: `import_clause`, `named_imports`, `import_specifier`, `string`, `string_fragment`
 - Python: `import_statement`, `import_from_statement`, `dotted_name`, `decorator`, `decorated_definition`
+- Go: `selector_expression`, `field_identifier`, `type_identifier`, `pointer_type`, `parameter_declaration`, `package_clause`, `package_identifier`, `interpreted_string_literal`, `import_spec`, `import_spec_list`, `type_spec`, `field_declaration`, `method_spec`, `short_var_declaration`, `composite_literal`
 - Generic: `import_declaration`, `use_declaration`, `include_directive`, `package_clause`
 
 ### Source directory detection
@@ -157,7 +162,8 @@ Key node types that must be included:
 | `native/tree_sitter_nif/src/lib.rs` | Rust NIF — tree-sitter parsing + AST filtering |
 | `lib/elixir_nexus/parsers/javascript_extractor.ex` | JS/TS entity + call + import/export extraction from AST |
 | `lib/elixir_nexus/parsers/python_extractor.ex` | Python entity + call + import + decorator extraction |
-| `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Go/Rust/Java |
+| `lib/elixir_nexus/parsers/go_extractor.ex` | Go entity + call + import + struct/interface extraction |
+| `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Rust/Java |
 | `lib/elixir_nexus/search/queries.ex` | Call graph queries with reverse call index for O(1) lookups |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
 | `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |

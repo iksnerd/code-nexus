@@ -34,12 +34,20 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       end)
 
     # Create a file-level module entity if there are imports or exports
+    # For barrel files (index.ts/index.js), use parent directory name as module name
     file_entity =
       if imports != [] or exports != [] do
+        basename = Path.basename(file_path, Path.extname(file_path))
+        module_name = if basename == "index" do
+          Path.dirname(file_path) |> Path.basename()
+        else
+          basename
+        end
+
         [%CodeSchema{
           file_path: file_path,
           entity_type: :module,
-          name: Path.basename(file_path, Path.extname(file_path)),
+          name: module_name,
           content: "",
           start_line: 1,
           end_line: 1,

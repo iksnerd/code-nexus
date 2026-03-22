@@ -27,6 +27,11 @@ defmodule ElixirNexus.Indexer do
     GenServer.call(__MODULE__, {:index_file, file_path}, :infinity)
   end
 
+  @doc "Remove a deleted file from all caches and Qdrant."
+  def delete_file(file_path) do
+    GenServer.call(__MODULE__, {:delete_file, file_path}, :infinity)
+  end
+
   def status do
     GenServer.call(__MODULE__, :status)
   end
@@ -209,6 +214,24 @@ defmodule ElixirNexus.Indexer do
         Logger.error("File not found: #{file_path}")
         {:reply, {:error, :enoent}, state}
     end
+  end
+
+  def handle_call({:delete_file, file_path}, _from, state) do
+    Logger.info("Deleting file from index: #{file_path}")
+    ChunkCache.delete_by_file(file_path)
+    GraphCache.delete_by_file(file_path)
+
+    try do
+      ElixirNexus.QdrantClient.delete_points_by_file(file_path)
+    rescue
+      e -> Logger.warning("Failed to delete Qdrant points for #{file_path}: #{inspect(e)}")
+    end
+
+    ElixirNexus.DirtyTracker.forget(file_path)
+    Events.broadcast_file_deleted(file_path)
+
+    new_state = %{state | indexed_files: MapSet.delete(state.indexed_files, file_path)}
+    {:reply, :ok, new_state}
   end
 
   def handle_call(:status, _from, state) do

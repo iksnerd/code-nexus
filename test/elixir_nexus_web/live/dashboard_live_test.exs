@@ -63,6 +63,14 @@ defmodule ElixirNexus.DashboardLiveTest do
       assert is_binary(html)
     end
 
+    test "handles file_deleted event", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      send(view.pid, {:file_deleted, "/app/lib/deleted.ex"})
+      html = render(view)
+      assert is_binary(html)
+      assert html =~ "Deleted" or html =~ "deleted"
+    end
+
     test "handles unknown messages gracefully", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/")
       send(view.pid, {:unknown_event, "some_data"})

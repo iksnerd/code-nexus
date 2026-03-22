@@ -113,6 +113,7 @@ defmodule ElixirNexus.Search do
   defdelegate get_community_context(file_path, limit \\ 10), to: Queries
   defdelegate get_graph_stats(), to: Queries
   defdelegate find_module_hierarchy(entity_name), to: Queries
+  defdelegate find_dead_code(opts \\ []), to: Queries
 
   defp get_embedding(query) do
     case ElixirNexus.EmbeddingModel.embed(query) do

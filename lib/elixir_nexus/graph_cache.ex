@@ -48,6 +48,41 @@ defmodule ElixirNexus.GraphCache do
     )
   end
 
+  @doc "Find entities that import/reference the given name via is_a edges."
+  def find_importers(entity_name) do
+    name_lower = String.downcase(entity_name)
+
+    :ets.foldl(
+      fn {_id, node} = entry, acc ->
+        if Enum.any?(node["is_a"] || [], fn imp ->
+             imp_lower = String.downcase(imp)
+             String.contains?(imp_lower, name_lower)
+           end) do
+          [entry | acc]
+        else
+          acc
+        end
+      end,
+      [],
+      @table
+    )
+  end
+
+  @doc "Remove all graph nodes for a given file path."
+  def delete_by_file(file_path) do
+    ids_to_delete =
+      :ets.foldl(
+        fn {id, node}, acc ->
+          if node["file_path"] == file_path, do: [id | acc], else: acc
+        end,
+        [],
+        @table
+      )
+
+    Enum.each(ids_to_delete, &:ets.delete(@table, &1))
+    :ok
+  end
+
   def clear do
     :ets.delete_all_objects(@table)
     :ok

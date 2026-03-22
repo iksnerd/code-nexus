@@ -41,6 +41,13 @@ defmodule ElixirNexus.DirtyTracker do
   end
 
   @doc """
+  Forget a file's checksum (e.g. when it's been deleted).
+  """
+  def forget(file_path) do
+    GenServer.call(__MODULE__, {:forget, file_path})
+  end
+
+  @doc """
   Clear all checksums (full re-index).
   """
   def reset do
@@ -127,6 +134,10 @@ defmodule ElixirNexus.DirtyTracker do
       end)
 
     {:reply, {:ok, dirty_files}, state}
+  end
+
+  def handle_call({:forget, file_path}, _from, state) do
+    {:reply, :ok, Map.delete(state, file_path)}
   end
 
   def handle_call(:reset, _from, _state) do

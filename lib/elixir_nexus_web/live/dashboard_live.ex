@@ -247,6 +247,15 @@ defmodule ElixirNexus.DashboardLive.Index do
     {:noreply, socket}
   end
 
+  def handle_info({:file_deleted, path}, socket) do
+    socket =
+      socket
+      |> assign_stats()
+      |> add_activity(:file_deleted, "Deleted: #{Path.basename(path)}")
+
+    {:noreply, socket}
+  end
+
   def handle_info({:collection_changed, name}, socket) do
     socket =
       socket
@@ -384,7 +393,7 @@ defmodule ElixirNexus.DashboardLive.Index do
   end
 
   defp format_local_time do
-    Calendar.strftime(DateTime.utc_now(), "%H:%M:%S UTC")
+    DateTime.to_unix(DateTime.utc_now(), :millisecond)
   end
 
   # Detect when Qdrant has been updated externally (e.g. by MCP in a separate BEAM)

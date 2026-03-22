@@ -99,7 +99,7 @@ defmodule ElixirNexusWeb.CoreComponents do
       <span class={"mt-0.5 text-xs #{activity_icon_color(@event.type)}"}><%= activity_icon(@event.type) %></span>
       <div class="flex-1 min-w-0">
         <p class="text-sm text-slate-300 truncate"><%= @event.message %></p>
-        <p class="text-xs text-slate-500"><%= @event.time %></p>
+        <p class="text-xs text-slate-500" id={"activity-time-#{@event.time}"} phx-hook="LocalTime" data-timestamp={@event.time}></p>
       </div>
     </div>
     """
@@ -110,6 +110,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp activity_icon(:file_reindexed), do: "↻"
   defp activity_icon(:collection_changed), do: "⬡"
   defp activity_icon(:synced), do: "⇄"
+  defp activity_icon(:file_deleted), do: "✕"
   defp activity_icon(_), do: "•"
 
   defp activity_icon_color(:indexing_complete), do: "text-emerald-400"
@@ -117,6 +118,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp activity_icon_color(:file_reindexed), do: "text-blue-400"
   defp activity_icon_color(:collection_changed), do: "text-violet-400"
   defp activity_icon_color(:synced), do: "text-cyan-400"
+  defp activity_icon_color(:file_deleted), do: "text-red-400"
   defp activity_icon_color(_), do: "text-slate-400"
 
   attr :errors, :list, required: true

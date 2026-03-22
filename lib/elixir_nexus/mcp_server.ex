@@ -183,6 +183,21 @@ defmodule ElixirNexus.MCPServer do
     }
   end
 
+  deftool "find_dead_code" do
+    meta do
+      name "find_dead_code"
+      description "Find exported functions/methods with zero callers — proactively flag unused code. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
+    end
+
+    input_schema %{
+      type: "object",
+      properties: %{
+        path_prefix: %{type: "string", description: "Optional file path prefix to scope the search (e.g. '/workspace/myproject/src')"}
+      },
+      required: []
+    }
+  end
+
   deftool "reindex" do
     meta do
       name "reindex"
@@ -288,26 +303,11 @@ defmodule ElixirNexus.MCPServer do
   def handle_tool_call("find_all_callers", %{"entity_name" => name} = args, state) do
     {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 20)
-    callers = ElixirNexus.GraphCache.find_callers(name)
 
-    results =
-      callers
-      |> Enum.take(limit)
-      |> Enum.map(fn {id, node} ->
-        %{
-          id: id,
-          score: 0.0,
-          entity: %{
-            "name" => node["name"],
-            "entity_type" => node["type"],
-            "calls" => Enum.take(node["calls"] || [], 10),
-            "is_a" => node["is_a"] || [],
-            "contains" => node["contains"] || []
-          }
-        }
-      end)
-
-    json_reply(results, state)
+    case ElixirNexus.Search.find_callers(name, limit) do
+      {:ok, results} -> json_reply(compact_results(results), state)
+      {:error, reason} -> {:error, "Caller search failed: #{inspect(reason)}", state}
+    end
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do
@@ -315,6 +315,19 @@ defmodule ElixirNexus.MCPServer do
     case ElixirNexus.Search.get_graph_stats() do
       {:ok, stats} -> json_reply(stats, state)
       {:error, reason} -> {:error, "Graph stats failed: #{inspect(reason)}", state}
+    end
+  end
+
+  def handle_tool_call("find_dead_code", args, state) do
+    {_reindexed, state} = maybe_reindex_dirty(state)
+    opts = case Map.get(args, "path_prefix") do
+      nil -> []
+      prefix -> [path_prefix: prefix]
+    end
+
+    case ElixirNexus.Search.find_dead_code(opts) do
+      {:ok, result} -> json_reply(result, state)
+      {:error, reason} -> {:error, "Dead code detection failed: #{inspect(reason)}", state}
     end
   end
 
@@ -442,7 +455,7 @@ defmodule ElixirNexus.MCPServer do
 
         {:ok, dirty_files} ->
           count = length(dirty_files)
-          Logger.info("Auto-reindexing #{count} dirty file(s) before query")
+          if count > 0, do: Logger.info("Auto-reindexing #{count} dirty file(s) before query")
 
           Enum.each(dirty_files, fn path ->
             case ElixirNexus.Indexer.index_file(path) do
@@ -454,12 +467,36 @@ defmodule ElixirNexus.MCPServer do
             end
           end)
 
-          {count, state}
+          # Clean up files that exist in cache but have been deleted from disk
+          deleted_count = cleanup_deleted_files()
+
+          {count + deleted_count, state}
 
         {:error, _} ->
           {0, state}
       end
     end
+  end
+
+  # Remove cached chunks for files that no longer exist on disk.
+  # Catches deletions that happened while the server was down.
+  defp cleanup_deleted_files do
+    deleted_paths =
+      try do
+        ElixirNexus.ChunkCache.all()
+        |> Enum.map(& &1.file_path)
+        |> Enum.uniq()
+        |> Enum.reject(&File.exists?/1)
+      rescue
+        _ -> []
+      end
+
+    Enum.each(deleted_paths, fn path ->
+      Logger.info("Cleaning up deleted file from index: #{path}")
+      ElixirNexus.Indexer.delete_file(path)
+    end)
+
+    length(deleted_paths)
   end
 
   # Safe JSON encoding — returns error text instead of crashing on non-serializable values

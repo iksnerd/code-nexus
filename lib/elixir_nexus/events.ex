@@ -25,6 +25,10 @@ defmodule ElixirNexus.Events do
     Phoenix.PubSub.broadcast(ElixirNexus.PubSub, @topic, {:file_reindexed, file_path})
   end
 
+  def broadcast_file_deleted(file_path) do
+    Phoenix.PubSub.broadcast(ElixirNexus.PubSub, @topic, {:file_deleted, file_path})
+  end
+
   def subscribe_collection do
     Phoenix.PubSub.subscribe(ElixirNexus.PubSub, @collection_topic)
   end

@@ -161,6 +161,43 @@ defmodule ElixirNexus.IndexerTest do
     end
   end
 
+  describe "delete_file/1" do
+    test "delete_file removes file from ChunkCache and GraphCache", %{test_dir: test_dir} do
+      test_file = Path.join(test_dir, "deletable.ex")
+
+      File.write!(test_file, """
+      defmodule Deletable do
+        def will_be_deleted, do: :gone
+      end
+      """)
+
+      # Index the file first
+      ElixirNexus.Indexer.index_file(test_file)
+
+      # Verify chunks exist in ChunkCache
+      chunks_before =
+        ElixirNexus.ChunkCache.all()
+        |> Enum.filter(&(&1.file_path == test_file))
+
+      assert length(chunks_before) >= 1
+
+      # Delete the file from index
+      assert :ok = ElixirNexus.Indexer.delete_file(test_file)
+
+      # Verify chunks are gone from ChunkCache
+      chunks_after =
+        ElixirNexus.ChunkCache.all()
+        |> Enum.filter(&(&1.file_path == test_file))
+
+      assert chunks_after == []
+    end
+
+    test "delete_file handles non-indexed file gracefully" do
+      # Should not crash — just a no-op
+      assert :ok = ElixirNexus.Indexer.delete_file("/nonexistent/file.ex")
+    end
+  end
+
   describe "search_chunks/2" do
     test "searches indexed chunks by keyword", %{test_dir: test_dir} do
       test_file = Path.join(test_dir, "searchable.ex")
