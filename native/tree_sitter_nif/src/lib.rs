@@ -105,7 +105,10 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
             || kind == "new_expression"
             || kind == "identifier"
             || kind == "property_identifier"
-            || kind == "member_expression";
+            || kind == "member_expression"
+            || kind == "selector_expression"
+            || kind == "field_identifier"
+            || kind == "argument_list";
     }
 
     // Declarations and definitions
@@ -172,6 +175,46 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "attribute"
         || kind == "decorated_definition"
         || kind == "decorator"
+        // Go-specific (blocks and statements — needed to reach calls inside function bodies)
+        || kind == "block"
+        || kind == "var_declaration"
+        || kind == "var_spec"
+        || kind == "const_declaration"
+        || kind == "const_spec"
+        || kind == "assignment_statement"
+        || kind == "if_statement"
+        || kind == "for_statement"
+        || kind == "range_clause"
+        || kind == "switch_statement"
+        || kind == "type_switch_statement"
+        || kind == "expression_switch_statement"
+        || kind == "select_statement"
+        || kind == "communication_case"
+        || kind == "expression_case"
+        || kind == "default_case"
+        || kind == "go_statement"
+        || kind == "defer_statement"
+        || kind == "return_statement"
+        || kind == "expression_list"
+        // Go-specific (identifiers and types)
+        || kind == "selector_expression"
+        || kind == "field_identifier"
+        || kind == "type_identifier"
+        || kind == "pointer_type"
+        || kind == "parameter_declaration"
+        || kind == "package_clause"
+        || kind == "package_identifier"
+        || kind == "interpreted_string_literal"
+        || kind == "import_spec"
+        || kind == "import_spec_list"
+        || kind == "type_spec"
+        || kind == "field_declaration"
+        || kind == "field_declaration_list"
+        || kind == "method_spec"
+        || kind == "method_spec_list"
+        || kind == "short_var_declaration"
+        || kind == "composite_literal"
+        || kind == "lexical_binding"
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]

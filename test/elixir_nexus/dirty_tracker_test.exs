@@ -110,6 +110,26 @@ defmodule ElixirNexus.DirtyTrackerTest do
     end
   end
 
+  describe "forget/1" do
+    test "forget removes a file's checksum" do
+      path = Path.join(@test_dir, "forget_me.ex")
+      File.write!(path, "defmodule ForgetMe do\nend\n")
+
+      # Mark clean first
+      DirtyTracker.mark_clean(path)
+      assert {false, _} = DirtyTracker.is_dirty?(path)
+
+      # Forget the file — should make it dirty again (no stored checksum)
+      assert :ok = DirtyTracker.forget(path)
+      assert {true, _} = DirtyTracker.is_dirty?(path)
+    end
+
+    test "forget on unknown file is a no-op" do
+      # Should not crash when forgetting a file we never tracked
+      assert :ok = DirtyTracker.forget("/tmp/never_tracked_#{System.unique_integer()}.ex")
+    end
+  end
+
   describe "get_dirty_files_recursive/1" do
     test "finds dirty files in nested directories" do
       sub_dir = Path.join(@test_dir, "nested/deep")

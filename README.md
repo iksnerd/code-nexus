@@ -84,7 +84,8 @@ graph TB
         RE["RelationshipExtractor<br/>Elixir"]
         JSE["JavaScriptExtractor<br/>JS/TS imports, exports, calls"]
         PYE["PythonExtractor<br/>imports, decorators, calls"]
-        GE["GenericExtractor<br/>Go, Rust, Java"]
+        GOE["GoExtractor<br/>calls, imports, structs"]
+        GE["GenericExtractor<br/>Rust, Java"]
     end
 
     subgraph Indexing["Indexing Pipeline (Broadway)"]
@@ -108,9 +109,9 @@ graph TB
     EX --> SR --> RE
     JS --> TS --> JSE
     PY --> TS --> PYE
-    OTHER --> TS --> GE
+    OTHER --> TS --> GOE & GE
 
-    RE & JSE & PYE & GE --> CH
+    RE & JSE & PYE & GOE & GE --> CH
     CH --> BB & TFIDF
     BB & TFIDF --> QD
     CH --> CC --> GC
@@ -175,17 +176,18 @@ Strategy: `rest_for_one` — if a dependency crashes, all processes started afte
 
 ## MCP Tools
 
-Eight tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
+Nine tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 
 | Tool | Description |
 |------|-------------|
 | **search_code**(query, limit) | Hybrid semantic + keyword search, ranked by vector similarity and graph centrality |
 | **find_all_callees**(entity_name, limit) | Find all functions called by a given function |
-| **find_all_callers**(entity_name, limit) | Find all functions that call a given function (AST-parsed, no false positives) |
-| **analyze_impact**(entity_name, depth) | Transitive blast radius analysis -- walks callers of callers |
-| **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph edges |
-| **get_graph_stats**() | Codebase overview: node counts, edge counts, entity types, languages, top connected |
-| **find_module_hierarchy**(entity_name) | Module parents (behaviours/uses) and children (contained functions) |
+| **find_all_callers**(entity_name, limit) | Find all callers of a function — follows both call edges and import references |
+| **analyze_impact**(entity_name, depth) | Transitive blast radius — walks callers-of-callers AND importers up to `depth` levels |
+| **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph and import edges (bidirectional) |
+| **get_graph_stats**() | Codebase overview: node counts, edge counts, entity types, languages, top connected, critical files (betweenness centrality) |
+| **find_module_hierarchy**(entity_name) | Module parents (behaviours/uses) and children — supports file-path and substring matching for TS/React components |
+| **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — proactively flag unused code |
 | **reindex**(path) | Parse and index source files to build the search index and call graph |
 
 ### Transport
@@ -223,21 +225,26 @@ Elixir files are parsed via Sourceror (richer metadata). Other languages use Tre
 | JavaScript | `.js`, `.jsx` | Tree-sitter | JavaScriptExtractor |
 | TypeScript | `.ts`, `.tsx` | Tree-sitter | JavaScriptExtractor |
 | Python | `.py` | Tree-sitter | PythonExtractor |
-| Go | `.go` | Tree-sitter | GenericExtractor |
+| Go | `.go` | Tree-sitter | GoExtractor |
 | Rust | `.rs` | Tree-sitter | GenericExtractor |
 | Java | `.java` | Tree-sitter | GenericExtractor |
 
 **Extractor capabilities:**
 
-| Feature | JS/TS | Python | Generic |
-|---------|-------|--------|---------|
-| Functions/classes/methods | Y | Y | Y |
-| Import extraction | Y | Y | Y |
-| Export extraction | Y | - | - |
-| Decorator extraction | - | Y | - |
-| Call graph | Y | Y | Y |
-| Arrow function classification | Y | - | - |
-| Visibility (_private convention) | - | Y | - |
+| Feature | JS/TS | Python | Go | Generic |
+|---------|-------|--------|----|---------|
+| Functions/classes/methods | Y | Y | Y | Y |
+| Import extraction | Y | Y | Y | Y |
+| Export extraction | Y | - | - | - |
+| Decorator extraction | - | Y | - | - |
+| Call graph | Y | Y | Y | Y |
+| Package-qualified calls | Y | - | Y | - |
+| Receiver methods | - | - | Y | - |
+| Struct/interface extraction | - | - | Y | - |
+| Arrow function classification | Y | - | - | - |
+| Barrel file resolution | Y | - | - | - |
+| Visibility (Go uppercase convention) | - | - | Y | - |
+| Visibility (_private convention) | - | Y | - | - |
 
 Tree-sitter support requires the Rust toolchain. Without it, only Elixir files are indexed.
 
@@ -260,7 +267,7 @@ Phoenix LiveView UI at `http://localhost:4100`:
 ## Testing
 
 ```bash
-mix test                        # All tests (~211)
+mix test                        # All tests (~614)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests

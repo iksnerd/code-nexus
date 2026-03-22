@@ -50,11 +50,12 @@ If a project isn't found, the error lists all available projects in `/workspace`
 | `reindex` | Parse source files, build search index and call graph |
 | `search_code` | Hybrid semantic + keyword search with graph-boosted ranking |
 | `find_all_callees` | Find all functions called by a given function |
-| `find_all_callers` | Find all callers of a function |
-| `analyze_impact` | Transitive blast radius — callers-of-callers up to N levels |
-| `get_community_context` | Find structurally coupled files via call graph edges |
+| `find_all_callers` | Find all callers of a function (calls + imports) |
+| `analyze_impact` | Transitive blast radius — callers-of-callers AND importers |
+| `get_community_context` | Find structurally coupled files via call graph and import edges |
 | `find_module_hierarchy` | Module parents (uses/implements) and children |
-| `get_graph_stats` | Structural overview of the indexed codebase |
+| `find_dead_code` | Find exported functions with zero callers |
+| `get_graph_stats` | Structural overview with critical files (betweenness centrality) |
 
 ## Supported Languages
 

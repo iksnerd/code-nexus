@@ -342,6 +342,241 @@ defmodule ElixirNexus.Search.QueriesTest do
     end
   end
 
+  describe "find_dead_code/1" do
+    test "finds public functions with zero callers" do
+      {:ok, result} = Queries.find_dead_code()
+
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      # Utils.format is public but never called by anyone
+      assert "Utils.format" in dead_names
+      # Router.dispatch is public and never called by anyone in our test data
+      assert "Router.dispatch" in dead_names
+    end
+
+    test "excludes functions that are called" do
+      {:ok, result} = Queries.find_dead_code()
+
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      # Server.handle_call is called by Client.call_server
+      refute "Server.handle_call" in dead_names
+      # Client.call_server is called by Router.dispatch
+      refute "Client.call_server" in dead_names
+    end
+
+    test "does not flag modules as dead code" do
+      {:ok, result} = Queries.find_dead_code()
+
+      dead_types = Enum.map(result.dead_functions, & &1.entity_type)
+      # Modules should not appear — only functions/methods
+      refute "module" in dead_types
+    end
+
+    test "filters by path_prefix" do
+      {:ok, result} = Queries.find_dead_code(path_prefix: "/app/lib/utils")
+
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      assert "Utils.format" in dead_names
+      # Should not include dead code from other paths
+      refute "Router.dispatch" in dead_names
+    end
+
+    test "handles qualified name matching" do
+      # Add a chunk that calls "format" (unqualified) — should still exclude Utils.format
+      extra_chunk = %{
+        id: "chunk_format_caller",
+        file_path: "/app/lib/formatter.ex",
+        entity_type: :function,
+        name: "Formatter.run",
+        content: "def run(data), do: Utils.format(data)",
+        start_line: 1,
+        end_line: 1,
+        module_path: "Formatter",
+        visibility: :public,
+        parameters: ["data"],
+        calls: ["Utils.format"],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      ChunkCache.insert_many([extra_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      refute "Utils.format" in dead_names
+    end
+
+    test "returns total_public and dead_count" do
+      {:ok, result} = Queries.find_dead_code()
+
+      assert is_integer(result.total_public)
+      assert is_integer(result.dead_count)
+      assert result.dead_count == length(result.dead_functions)
+      assert result.total_public >= result.dead_count
+    end
+  end
+
+  describe "analyze_impact with imports" do
+    test "finds impact through import edges (is_a)" do
+      # Add entities where B imports A via is_a
+      import_source = %{
+        id: "chunk_imp_src",
+        file_path: "/app/lib/base_service.ex",
+        entity_type: :module,
+        name: "BaseService",
+        content: "defmodule BaseService do\nend",
+        start_line: 1,
+        end_line: 2,
+        module_path: "BaseService",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      import_consumer = %{
+        id: "chunk_imp_consumer",
+        file_path: "/app/lib/derived_service.ex",
+        entity_type: :module,
+        name: "DerivedService",
+        content: "defmodule DerivedService do\nend",
+        start_line: 1,
+        end_line: 2,
+        module_path: "DerivedService",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: ["BaseService"],
+        contains: [],
+        language: :elixir
+      }
+
+      ChunkCache.insert_many([import_source, import_consumer])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, result} = Queries.analyze_impact("BaseService")
+
+      affected_names = Enum.map(result.impact, & &1.name)
+      assert "DerivedService" in affected_names
+    end
+  end
+
+  describe "get_graph_stats critical_files" do
+    test "returns critical_files field" do
+      {:ok, stats} = Queries.get_graph_stats()
+
+      assert Map.has_key?(stats, :critical_files)
+      assert is_list(stats.critical_files)
+    end
+  end
+
+  describe "find_module_hierarchy multi-strategy" do
+    test "matches by file path basename" do
+      # Add an entity with a file path that matches via normalize
+      path_chunk = %{
+        id: "chunk_billing_page",
+        file_path: "/app/components/billing-page.tsx",
+        entity_type: :module,
+        name: "default",
+        content: "export default function BillingPage() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "default",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.insert_many([path_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, result} = Queries.find_module_hierarchy("BillingPage")
+      # Should find via file path basename normalization (billing-page -> billingpage == BillingPage -> billingpage)
+      assert result.file_path == "/app/components/billing-page.tsx"
+    end
+
+    test "matches by substring" do
+      # Add an entity with a longer name that contains the query
+      substr_chunk = %{
+        id: "chunk_billing_comp",
+        file_path: "/app/components/billing.tsx",
+        entity_type: :function,
+        name: "BillingPageComponent",
+        content: "function BillingPageComponent() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "BillingPageComponent",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.insert_many([substr_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, result} = Queries.find_module_hierarchy("BillingPage")
+      # Should find via substring match
+      assert String.contains?(result.name, "BillingPage")
+    end
+  end
+
+  describe "get_community_context with imports" do
+    test "detects files that import the target" do
+      # File A: base service
+      file_a_chunk = %{
+        id: "chunk_ctx_a",
+        file_path: "/app/src/services/auth-service.ts",
+        entity_type: :function,
+        name: "AuthService.authenticate",
+        content: "function authenticate() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "AuthService",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      # File B: imports from file A via is_a path
+      file_b_chunk = %{
+        id: "chunk_ctx_b",
+        file_path: "/app/src/controllers/login.ts",
+        entity_type: :function,
+        name: "LoginController.login",
+        content: "function login() { authenticate() }",
+        start_line: 1,
+        end_line: 1,
+        module_path: "LoginController",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: ["@/services/auth-service"],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.insert_many([file_a_chunk, file_b_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, result} = Queries.get_community_context("/app/src/services/auth-service.ts")
+
+      coupled_paths = Enum.map(result.coupled_files, & &1.file_path)
+      assert "/app/src/controllers/login.ts" in coupled_paths
+    end
+  end
+
   describe "resolve_call - dotted name stripping" do
     test "resolves dotted call names by stripping prefix" do
       # Add a chunk with a dotted call name
