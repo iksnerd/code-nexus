@@ -63,7 +63,12 @@ defmodule ElixirNexus.ProjectSwitcher do
 
         ChunkCache.insert_many(chunks)
         GraphCache.rebuild_from_chunks(chunks)
-        Logger.info("Reloaded #{length(chunks)} chunks from Qdrant into ETS caches")
+
+        # Rebuild TF-IDF vocabulary from chunk content so keyword search works without reindex
+        texts = chunks |> Enum.map(& &1.content) |> Enum.reject(&(&1 == ""))
+        if texts != [], do: ElixirNexus.TFIDFEmbedder.update_vocabulary(texts)
+
+        Logger.info("Reloaded #{length(chunks)} chunks from Qdrant into ETS caches (vocab: #{length(texts)} docs)")
 
       _ ->
         Logger.info("No points found in new collection")
