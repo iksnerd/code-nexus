@@ -577,6 +577,132 @@ defmodule ElixirNexus.Search.QueriesTest do
     end
   end
 
+  describe "find_callers/2 - file_path not null after rebuild_from_chunks" do
+    test "callers have non-null file_path" do
+      {:ok, results} = Queries.find_callers("handle_call")
+
+      assert results != []
+
+      Enum.each(results, fn r ->
+        assert r.entity["file_path"] != nil,
+               "Expected file_path to be set, got nil for caller #{r.entity["name"]}"
+      end)
+    end
+
+    test "callers have correct file_path" do
+      {:ok, results} = Queries.find_callers("handle_call")
+
+      paths = Enum.map(results, fn r -> r.entity["file_path"] end)
+      # Client.call_server is in client.ex and calls handle_call
+      assert "/app/lib/client.ex" in paths
+    end
+  end
+
+  describe "get_graph_stats/0 - critical_files with connected graph" do
+    test "critical_files returns entries when graph has connected nodes" do
+      # Build a denser graph: A → B → C → D → E, all passing through B and C
+      chain = [
+        %{id: "c_a", file_path: "/app/lib/a.ex", entity_type: :function, name: "A.run",
+          content: "", start_line: 1, end_line: 1, module_path: "A", visibility: :public,
+          parameters: [], calls: ["B.run"], is_a: [], contains: [], language: :elixir},
+        %{id: "c_b", file_path: "/app/lib/b.ex", entity_type: :function, name: "B.run",
+          content: "", start_line: 1, end_line: 1, module_path: "B", visibility: :public,
+          parameters: [], calls: ["C.run"], is_a: [], contains: [], language: :elixir},
+        %{id: "c_c", file_path: "/app/lib/c.ex", entity_type: :function, name: "C.run",
+          content: "", start_line: 1, end_line: 1, module_path: "C", visibility: :public,
+          parameters: [], calls: ["D.run"], is_a: [], contains: [], language: :elixir},
+        %{id: "c_d", file_path: "/app/lib/d.ex", entity_type: :function, name: "D.run",
+          content: "", start_line: 1, end_line: 1, module_path: "D", visibility: :public,
+          parameters: [], calls: ["E.run"], is_a: [], contains: [], language: :elixir},
+        %{id: "c_e", file_path: "/app/lib/e.ex", entity_type: :function, name: "E.run",
+          content: "", start_line: 1, end_line: 1, module_path: "E", visibility: :public,
+          parameters: [], calls: [], is_a: [], contains: [], language: :elixir}
+      ]
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chain)
+      GraphCache.rebuild_from_chunks(chain)
+
+      {:ok, stats} = Queries.get_graph_stats()
+
+      assert is_list(stats.critical_files)
+      # B, C, D sit on the only path A→E so they must have centrality > 0
+      assert length(stats.critical_files) > 0,
+             "Expected critical_files to be non-empty for a linear chain graph"
+
+      Enum.each(stats.critical_files, fn cf ->
+        assert cf.file_path != nil, "critical_files entry has nil file_path"
+        assert is_number(cf.centrality_score)
+      end)
+    end
+  end
+
+  describe "find_dead_code/1 - framework convention filter" do
+    @js_chunks [
+      %{id: "js_get", file_path: "/app/app/api/users/route.ts", entity_type: :function,
+        name: "GET", content: "export async function GET() {}", start_line: 1, end_line: 1,
+        module_path: "GET", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :javascript},
+      %{id: "js_post", file_path: "/app/app/api/users/route.ts", entity_type: :function,
+        name: "POST", content: "export async function POST() {}", start_line: 2, end_line: 2,
+        module_path: "POST", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :javascript},
+      %{id: "js_default", file_path: "/app/app/users/page.tsx", entity_type: :function,
+        name: "default", content: "export default function UsersPage() {}", start_line: 1, end_line: 1,
+        module_path: "default", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :javascript},
+      %{id: "js_real_dead", file_path: "/app/app/utils.ts", entity_type: :function,
+        name: "unusedHelper", content: "function unusedHelper() {}", start_line: 1, end_line: 1,
+        module_path: "unusedHelper", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript}
+    ]
+
+    test "filters GET/POST/default from dead code results for JS/TS files" do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@js_chunks)
+      GraphCache.rebuild_from_chunks(@js_chunks)
+
+      {:ok, result} = Queries.find_dead_code()
+
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      refute "GET" in dead_names, "GET should be filtered as framework convention"
+      refute "POST" in dead_names, "POST should be filtered as framework convention"
+      refute "default" in dead_names, "default should be filtered as framework convention"
+    end
+
+    test "still reports genuinely unused JS/TS functions as dead" do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@js_chunks)
+      GraphCache.rebuild_from_chunks(@js_chunks)
+
+      {:ok, result} = Queries.find_dead_code()
+
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      assert "unusedHelper" in dead_names
+    end
+
+    test "includes warning field for JS/TS projects" do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@js_chunks)
+      GraphCache.rebuild_from_chunks(@js_chunks)
+
+      {:ok, result} = Queries.find_dead_code()
+
+      assert is_binary(result.warning), "Expected a warning string for JS/TS project"
+      assert String.contains?(result.warning, "framework")
+    end
+
+    test "warning is nil for pure Elixir projects" do
+      {:ok, result} = Queries.find_dead_code()
+
+      assert is_nil(result.warning), "Expected no warning for Elixir-only project"
+    end
+  end
+
   describe "resolve_call - dotted name stripping" do
     test "resolves dotted call names by stripping prefix" do
       # Add a chunk with a dotted call name

@@ -1,55 +1,87 @@
-# TODO
+# TODO — Next Release (v0.3.0)
 
-## Auto-reindex on file changes
-
-- [x] File watcher that incrementally updates the index on save/delete — deleted files still appear in results until manual reindex, which makes the data untrustworthy
-- [x] At minimum, mark deleted files as stale and exclude from query results; ideally remove their chunks from Qdrant and ETS on detection
-
-## TypeScript module resolution
-
-- [x] `find_module_hierarchy` only matches exact module names (e.g. `billing`) — can't find `BillingPage`, `billing-fallback`, or `billing-plans` by component/file name
-- [x] TS projects use file-based modules — resolve both the default export name and the filename/path as module identifiers
-- [x] Handle re-exports and barrel files (`index.ts` that re-export from subdirectories)
-
-## Import graph tracking
-
-- [x] **`get_community_context` coupling direction** — returned 0 coupled files for `billing-fallback.tsx` even though landing page and billing page both import it. Only tracks outgoing call edges, not incoming imports. "Who imports this component?" is the most common question in React codebases.
-- [x] **`analyze_impact` should follow imports, not just calls** — `PLAN_DEFINITIONS` showed 0 impact despite 2 files importing it. In TS, the import graph IS the dependency graph. A constant changing shape breaks consumers even without function calls.
-- [x] **Cross-file type dependency tracking** — if `PlanId` changes from `['starter', 'professional', 'enterprise']` to add a tier, which files break? Can't answer today because we track calls, not type references.
-
-## Graph analysis features
-
-- [x] **Hot path / centrality score** — `get_graph_stats` shows top connected nodes, but add a "most critical files" ranking using betweenness centrality (everything flows through them). Tells you where a bug causes the most damage.
-- [x] **Dead code detection** — "show me all exported functions with zero callers." Proactively flag unused exports (e.g. `getFeatureAccess`, `canAddIntegration` were exported but never called).
-
-## Go language support (call graph is broken)
-
-**Root cause:** Go falls back to `GenericExtractor` which has a naive 5-line call detection that only matches nodes with a top-level `"name"` field. But Go's tree-sitter produces `call_expression` nodes where the function name is in a child node (`identifier` or `selector_expression`), so every Go call is missed. JS and Python have dedicated extractors that handle this correctly.
-
-- [x] **Create `go_extractor.ex`** — handle the three Go call patterns:
-  - Direct calls: `foo(args)` → child is `identifier` node
-  - Package calls: `fmt.Println(args)` → child is `selector_expression` (package.Function)
-  - Method calls: `obj.Method(args)` → child is `selector_expression`
-- [x] **Extract Go imports as relationships** — `import "fmt"` creates an imports edge; `import "github.com/user/pkg"` tracks external deps
-- [x] **Extract Go struct/interface contains relationships** — `func (v Value) Inspect()` → method belongs to `Value` type; `type Value struct { ... }` → struct contains fields
-- [x] **Register the extractor** — `defp get_extractor(:go), do: GoExtractor`
-- [x] **Handle Go-specific patterns:**
-  - Receiver methods: `func (v *Value) Method()` → resolve to `Value.Method`
-  - Interface satisfaction (harder, but important)
-  - Package-qualified names: `runtime.FromGo` not just `FromGo`
-
-**Impact:** This would make `find_all_callers`, `find_all_callees`, `analyze_impact`, and `get_community_context` all work for Go — currently they return empty for every query.
-
-## Dashboard
-
-- [x] Fix UTC timestamps — display dates in user's local timezone instead of raw UTC
-- [x] Add ability to delete Qdrant collections from the dashboard UI (they accumulate over time with project switching)
-
-## Testing / Robustness
-
-- [ ] Improve test coverage and robustness around project switching (switching collections, ETS reload, file watcher re-wiring)
-- [ ] Edge cases: switching while indexing is in progress, switching to a deleted collection, rapid successive switches
+Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
 ---
 
-**Core insight:** The graph engine is solid. The gaps are: (1) TypeScript idioms (imports > calls, file-based modules, type references) vs the Elixir model it was built for, and (2) languages like Go that need dedicated extractors instead of falling through to the naive generic extractor.
+## 🔴 Critical
+
+- [x] **`find_dead_code` false positives on framework codebases**
+  Framework-convention exports (Next.js `GET`/`POST` route handlers, page components, SvelteKit routes) always appear dead because the call graph has no visibility into framework-level invocation. Needs framework-aware filtering or a warning message in the tool response.
+
+- [x] **`find_all_callers` returns `file_path: null`**
+  Callers are resolved from the graph cache which doesn't always preserve file paths. Should resolve paths from `ChunkCache` as a fallback. Affects `analyze_impact` depth too.
+
+---
+
+## 🟡 Medium
+
+- [x] **`get_graph_stats` `critical_files` always `[]`**
+  High-betweenness threshold is too aggressive for smaller projects. Tune threshold to scale with project size or always return top-N regardless of threshold.
+
+- [ ] **Framework internals dominate top-connected nodes**
+  On shadcn/ui projects, `Comp` (degree 546) and `cn()` (473) flood the graph and bury real app modules. Consider filtering known utility patterns or providing a separate "app-code" ranking that excludes `node_modules`-originated names.
+
+- [ ] **Default `reindex` with no path indexes Nexus itself**
+  First-time users get Elixir results with no relation to their project and no warning. Should warn or error if no path is given and no previously-indexed project is detected.
+
+- [ ] **`serverInfo.version` hardcoded to `"1.0.0"`**
+  Should call `ElixirNexus.version()` in `MCPServer` to return the actual app version from `mix.exs`.
+
+- [ ] **Docker image still ~3.3GB**
+  Bumblebee/EXLA removed but image remains large. Investigate multi-stage build with a slim runtime image.
+
+- [ ] **Deprecated `version` key in `docker-compose.yml`**
+  Remove `version: '3.8'` — Docker warns on every command.
+
+---
+
+## 🟢 Nice-to-have
+
+- [ ] **Path alias resolution (`@/`) in `find_module_hierarchy`**
+  Imports using `@/components/ui/*`, `next/link`, etc. aren't resolved to file paths. Auto-detect `tsconfig.json` `paths` to map aliases to real file paths.
+
+- [ ] **Configurable Ollama model via env var**
+  `nomic-embed-text` is hardcoded. Expose `OLLAMA_MODEL` env var so users can swap embedding models.
+
+- [ ] **MCP tool timeout — upstream or proper config**
+  Dockerfile patches ExMCP's `message_processor.ex` via `sed` to raise timeout to 120s. Should configure via ExMCP options or upstream the change.
+
+- [ ] **Tool/server naming for non-Elixir discoverability**
+  Server named `elixir-nexus` discourages JS/TS/Go/Python users. Consider surfacing as `code-nexus` in MCP tool listings while keeping the repo name.
+
+- [ ] Improve test coverage around project switching (switching collections, ETS reload, file watcher re-wiring)
+  Edge cases: switching while indexing is in progress, switching to a deleted collection, rapid successive switches.
+
+---
+
+## 📦 OSS Prep (remaining)
+
+- [ ] **Secret audit** — run `gitleaks` or `trufflehog` on git history
+- [ ] **`.env.example`** — document `QDRANT_URL`, `OLLAMA_URL`, `MCP_HTTP_PORT`, `WORKSPACE`, `WORKSPACE_HOST`, `OLLAMA_MODEL`
+- [ ] **README.md at repo root** — GitHub-facing README (current `docs/DOCKERHUB.md` is close, needs adapting)
+- [ ] **GitHub topics** — add discoverability tags (`mcp`, `code-intelligence`, `elixir`, `tree-sitter`, `qdrant`, `semantic-search`)
+
+---
+
+## ✅ Done (v0.2.0)
+
+- [x] CI/CD — `.github/workflows/ci.yml` (test + format + Docker Hub publish)
+- [x] Makefile — `test`, `format`, `build`, `publish`, `release` targets
+- [x] `.formatter.exs` + full codebase formatted
+- [x] Version tagged `v0.2.0`, pushed to GitHub
+- [x] Docker Hub — `iksnerd/elixir-nexus:latest` + `iksnerd/elixir-nexus:v0.2.0`
+- [x] `CONTRIBUTING.md`
+- [x] GitHub issue templates (bug_report.yml, feature_request.yml)
+- [x] MIT License
+- [x] Streamable HTTP transport (SSE → Streamable HTTP)
+- [x] Ollama embeddings (Bumblebee/EXLA removed)
+- [x] TF-IDF vocabulary rebuilt from Qdrant on startup
+- [x] File watcher incremental index updates (deleted files cleaned up)
+- [x] `find_module_hierarchy` — file-based module resolution for TS
+- [x] Import graph tracking (`get_community_context`, `analyze_impact` follow imports)
+- [x] Dead code detection (`find_dead_code`)
+- [x] Graph centrality / hot path scoring in `get_graph_stats`
+- [x] Go language support — `GoExtractor` with call graph, imports, struct/interface
+- [x] Dashboard: local timezone timestamps, delete collections from UI
+- [x] Auto-reindex on queries (dirty file detection before every MCP call)
