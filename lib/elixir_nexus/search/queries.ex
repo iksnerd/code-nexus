@@ -369,12 +369,23 @@ defmodule ElixirNexus.Search.Queries do
 
     case get_all_entities_cached(2000) do
       {:ok, all_entities} ->
-        # Build reverse call index (calls only, not imports)
-        call_index =
-          Enum.reduce(all_entities, %{}, fn e, acc ->
-            Enum.reduce(e.entity["calls"] || [], acc, fn call, index ->
+        # Build reverse call index (calls only, not imports).
+        # Also build a suffix set: for dotted calls like "utils.format", store the short
+        # name "format" so qualified-name lookup is O(1) instead of O(n) per entity.
+        {call_index, call_suffix_set} =
+          Enum.reduce(all_entities, {%{}, MapSet.new()}, fn e, {index, suffixes} ->
+            Enum.reduce(e.entity["calls"] || [], {index, suffixes}, fn call, {idx, sfx} ->
               key = String.downcase(call)
-              Map.update(index, key, true, fn _ -> true end)
+              idx = Map.put(idx, key, true)
+
+              sfx =
+                case String.split(key, ".") do
+                  [_mod, short] -> MapSet.put(sfx, short)
+                  [_mod, _mid, short] -> MapSet.put(sfx, short)
+                  _ -> sfx
+                end
+
+              {idx, sfx}
             end)
           end)
 
@@ -408,12 +419,9 @@ defmodule ElixirNexus.Search.Queries do
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
-            # No entity calls this function
-            # Also check qualified name patterns
+            # No entity calls this function (exact match or qualified suffix match)
             not Map.has_key?(call_index, name_lower) and
-              not Enum.any?(Map.keys(call_index), fn k ->
-                String.ends_with?(k, "." <> name_lower)
-              end)
+              not MapSet.member?(call_suffix_set, name_lower)
           end)
           |> Enum.map(fn e ->
             %{
@@ -457,7 +465,8 @@ defmodule ElixirNexus.Search.Queries do
   end
 
   defp js_or_ts?(lang) do
-    String.contains?(lang, "javascript") or String.contains?(lang, "typescript")
+    String.contains?(lang, "javascript") or String.contains?(lang, "typescript") or
+      lang in ["tsx", "jsx"]
   end
 
   defp get_all_entities_cached(limit) do
