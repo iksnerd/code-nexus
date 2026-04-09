@@ -703,6 +703,254 @@ defmodule ElixirNexus.Search.QueriesTest do
     end
   end
 
+  describe "find_dead_code/1 - file convention filtering" do
+    @convention_chunks [
+      # PascalCase default export from a Next.js page — should NOT be dead code
+      %{id: "conv_page", file_path: "/app/app/users/page.tsx", entity_type: :function,
+        name: "UsersPage", content: "export default function UsersPage() {}", start_line: 1, end_line: 1,
+        module_path: "UsersPage", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript},
+      # PascalCase default export from a loading skeleton — should NOT be dead code
+      %{id: "conv_loading", file_path: "/app/app/users/loading.tsx", entity_type: :function,
+        name: "UsersLoading", content: "export default function UsersLoading() {}", start_line: 1, end_line: 1,
+        module_path: "UsersLoading", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript},
+      # PascalCase default export from error boundary — should NOT be dead code
+      %{id: "conv_error", file_path: "/app/app/users/error.tsx", entity_type: :function,
+        name: "UsersError", content: "export default function UsersError() {}", start_line: 1, end_line: 1,
+        module_path: "UsersError", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript},
+      # PascalCase default export from layout — should NOT be dead code
+      %{id: "conv_layout", file_path: "/app/app/users/layout.tsx", entity_type: :function,
+        name: "UsersLayout", content: "export default function UsersLayout() {}", start_line: 1, end_line: 1,
+        module_path: "UsersLayout", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript},
+      # PascalCase component in a regular (non-convention) file — SHOULD be dead code
+      %{id: "conv_widget", file_path: "/app/components/widget.tsx", entity_type: :function,
+        name: "Widget", content: "export default function Widget() {}", start_line: 1, end_line: 1,
+        module_path: "Widget", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript},
+      # Named (camelCase) export from a convention file — SHOULD be dead code if not called
+      %{id: "conv_helper", file_path: "/app/app/users/page.tsx", entity_type: :function,
+        name: "unusedHelper", content: "export function unusedHelper() {}", start_line: 5, end_line: 5,
+        module_path: "unusedHelper", visibility: :public, parameters: [], calls: [], is_a: [],
+        contains: [], language: :typescript}
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@convention_chunks)
+      GraphCache.rebuild_from_chunks(@convention_chunks)
+      :ok
+    end
+
+    test "excludes PascalCase default exports from convention files (page, loading, error, layout)" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "UsersPage" in dead_names,
+             "PascalCase component from page.tsx should not be dead code"
+
+      refute "UsersLoading" in dead_names,
+             "PascalCase component from loading.tsx should not be dead code"
+
+      refute "UsersError" in dead_names,
+             "PascalCase component from error.tsx should not be dead code"
+
+      refute "UsersLayout" in dead_names,
+             "PascalCase component from layout.tsx should not be dead code"
+    end
+
+    test "still flags PascalCase component from non-convention files as dead" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      assert "Widget" in dead_names,
+             "PascalCase component in widget.tsx (not a convention file) should be flagged as dead code"
+    end
+
+    test "still flags named exports in convention files as dead if uncalled" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      assert "unusedHelper" in dead_names,
+             "named export in page.tsx should still appear as dead if not called"
+    end
+  end
+
+  describe "get_graph_stats/0 - framework noise filtering" do
+    test "excludes known framework utility names from top_connected" do
+      noise_chunks =
+        ~w(cn clsx Comp Slot twMerge)
+        |> Enum.with_index()
+        |> Enum.map(fn {name, i} ->
+          callers =
+            1..50
+            |> Enum.map(fn j ->
+              %{
+                id: "caller_#{name}_#{j}",
+                file_path: "/app/components/c#{j}.tsx",
+                entity_type: :function,
+                name: "Component#{j}.render",
+                content: "",
+                start_line: 1,
+                end_line: 1,
+                module_path: "Component#{j}",
+                visibility: :public,
+                parameters: [],
+                calls: [name],
+                is_a: [],
+                contains: [],
+                language: :typescript
+              }
+            end)
+
+          noise_entity = %{
+            id: "noise_#{i}",
+            file_path: "/app/lib/utils.ts",
+            entity_type: :function,
+            name: name,
+            content: "",
+            start_line: i,
+            end_line: i,
+            module_path: name,
+            visibility: :public,
+            parameters: [],
+            calls: [],
+            is_a: [],
+            contains: [],
+            language: :typescript
+          }
+
+          [noise_entity | callers]
+        end)
+        |> List.flatten()
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(noise_chunks)
+      GraphCache.rebuild_from_chunks(noise_chunks)
+
+      {:ok, stats} = Queries.get_graph_stats()
+      top_names = Enum.map(stats.top_connected, & &1.name)
+
+      refute "cn" in top_names, "cn should be filtered from top_connected"
+      refute "clsx" in top_names, "clsx should be filtered from top_connected"
+      refute "Comp" in top_names, "Comp should be filtered from top_connected"
+    end
+
+    test "legitimate high-connectivity app nodes are NOT filtered" do
+      # A real app function called by many components should still appear in top_connected
+      callers =
+        1..20
+        |> Enum.map(fn j ->
+          %{
+            id: "caller_fetch_#{j}",
+            file_path: "/app/components/c#{j}.tsx",
+            entity_type: :function,
+            name: "Component#{j}.render",
+            content: "",
+            start_line: 1,
+            end_line: 1,
+            module_path: "Component#{j}",
+            visibility: :public,
+            parameters: [],
+            calls: ["fetchUsers"],
+            is_a: [],
+            contains: [],
+            language: :typescript
+          }
+        end)
+
+      fetch_entity = %{
+        id: "fetch_users",
+        file_path: "/app/lib/api.ts",
+        entity_type: :function,
+        name: "fetchUsers",
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: "fetchUsers",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many([fetch_entity | callers])
+      GraphCache.rebuild_from_chunks([fetch_entity | callers])
+
+      {:ok, stats} = Queries.get_graph_stats()
+      top_names = Enum.map(stats.top_connected, & &1.name)
+
+      assert "fetchUsers" in top_names,
+             "Legitimate high-connectivity function should appear in top_connected"
+    end
+  end
+
+  describe "find_dead_code/1 - additional convention files" do
+    test "not-found.tsx default export excluded from dead code" do
+      chunk = %{
+        id: "not_found_page",
+        file_path: "/app/app/not-found.tsx",
+        entity_type: :function,
+        name: "NotFound",
+        content: "export default function NotFound() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "NotFound",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many([chunk])
+      GraphCache.rebuild_from_chunks([chunk])
+
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      refute "NotFound" in dead_names,
+             "PascalCase component from not-found.tsx should not be dead code"
+    end
+
+    test "route.ts PascalCase default export excluded from dead code" do
+      chunk = %{
+        id: "route_handler",
+        file_path: "/app/app/api/users/route.ts",
+        entity_type: :function,
+        name: "RouteHandler",
+        content: "export default function RouteHandler() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "RouteHandler",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many([chunk])
+      GraphCache.rebuild_from_chunks([chunk])
+
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+      refute "RouteHandler" in dead_names,
+             "PascalCase default export from route.ts should not be dead code"
+    end
+  end
+
   describe "resolve_call - dotted name stripping" do
     test "resolves dotted call names by stripping prefix" do
       # Add a chunk with a dotted call name

@@ -328,6 +328,28 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     Enum.flat_map(children, &find_calls/1)
   end
 
+  # JSX self-closing elements: <Button />, <Card /> → treat as calls to the component
+  defp find_calls(%{"kind" => kind, "children" => children})
+       when kind in ["jsx_self_closing_element", "jsx_opening_element"] do
+    tag_name =
+      children
+      |> Enum.find(&(&1["kind"] == "identifier"))
+      |> then(fn
+        %{"text" => t} when is_binary(t) -> t
+        %{"name" => n} when is_binary(n) -> n
+        _ -> nil
+      end)
+
+    # Only track PascalCase components — skip intrinsic HTML elements (div, span, etc.)
+    rest = Enum.flat_map(children, &find_calls/1)
+
+    if tag_name && Regex.match?(~r/^[A-Z]/, tag_name) do
+      [tag_name | rest]
+    else
+      rest
+    end
+  end
+
   # Recurse into other nodes with children
   defp find_calls(%{"children" => children}), do: Enum.flat_map(children, &find_calls/1)
   defp find_calls(_), do: []

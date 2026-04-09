@@ -32,7 +32,7 @@ defmodule ElixirNexus.MCPServerTest do
     test "returns server info with capabilities" do
       {:ok, info, _state} = MCPServer.handle_initialize(%{}, %{})
       assert info.name == "elixir-nexus"
-      assert info.version == "0.1.0"
+      assert info.version == ElixirNexus.version()
       assert %{tools: %{}} = info.capabilities
     end
 

@@ -130,6 +130,12 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "call_expression"
         || kind == "new_expression"
         || kind == "member_expression"
+        // JSX component usage (treat renders as outgoing call edges)
+        || kind == "jsx_element"
+        || kind == "jsx_self_closing_element"
+        || kind == "jsx_opening_element"
+        // Parenthesized expressions wrap JSX returns: return (<Button />)
+        || kind == "parenthesized_expression"
         || kind == "identifier"
         || kind == "property_identifier"
         // Blocks and statements (needed to reach nested calls)

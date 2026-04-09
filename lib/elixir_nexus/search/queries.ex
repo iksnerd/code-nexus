@@ -11,6 +11,17 @@ defmodule ElixirNexus.Search.Queries do
     loader action headers links handle
   )
 
+  # Next.js / SvelteKit / Remix file-based routing conventions.
+  # Default exports from these files are called by the framework, not user code.
+  @framework_convention_files ~w(
+    page layout loading error not-found template route
+    global-error global-not-found sitemap robots manifest
+    default
+  )
+
+  # Common framework/utility names that flood graph stats on shadcn/tailwind projects.
+  @graph_noise_names ~w(cn clsx cva classnames twMerge cx Comp Slot forwardRef)
+
   @doc """
   Transitive impact analysis: given a function, find everything that would be
   affected by changing it — callers, their callers, etc. up to `depth` levels.
@@ -385,7 +396,14 @@ defmodule ElixirNexus.Search.Queries do
           |> Enum.reject(fn e ->
             lang = e.entity["language"] || ""
             name = e.entity["name"] || ""
-            js_or_ts?(lang) and name in @framework_convention_names
+            file_path = e.entity["file_path"] || ""
+            basename = file_path |> Path.basename() |> String.replace(~r/\.[^.]+$/, "")
+
+            js_or_ts?(lang) and
+              (name in @framework_convention_names or
+                 # PascalCase components in convention files are default exports called by the
+                 # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
+                 (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files))
           end)
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
@@ -554,7 +572,7 @@ defmodule ElixirNexus.Search.Queries do
       |> Map.values()
       |> Enum.reject(fn node ->
         name = node["name"] || ""
-        String.length(name) <= 2
+        String.length(name) <= 2 or name in @graph_noise_names
       end)
       |> Enum.map(fn node ->
         degree = (node["outgoing_degree"] || 0) + (node["incoming_count"] || 0)

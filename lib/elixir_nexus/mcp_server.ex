@@ -42,7 +42,7 @@ defmodule ElixirNexus.MCPServer do
     {:ok,
      %{
        name: "elixir-nexus",
-       version: "0.1.0",
+       version: ElixirNexus.version(),
        description:
          "Code intelligence server — graph-powered semantic search, call graph traversal, " <>
            "transitive impact analysis, and structural coupling for the current project. " <>
