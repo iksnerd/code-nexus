@@ -4,6 +4,8 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 
 Built on Elixir/OTP with Bumblebee for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Designed for large codebases with live incremental indexing.
 
+![Dashboard](docs/screenshots/dashboard.png)
+
 ## Quick Start
 
 ```bash
@@ -24,7 +26,7 @@ This starts three services in a single BEAM instance:
 | Service | Port | Purpose |
 |---------|------|---------|
 | Phoenix Dashboard | `localhost:4100` | Web UI for search, vectors, stats |
-| MCP HTTP Server | `localhost:3001` | MCP tools for AI agents |
+| MCP HTTP Server | `localhost:3002` | MCP tools for AI agents |
 | Qdrant | `localhost:6333` | Vector database |
 
 **Connect Claude Code** — add to your project's `.mcp.json`:
@@ -34,7 +36,7 @@ This starts three services in a single BEAM instance:
   "mcpServers": {
     "code-nexus": {
       "type": "http",
-      "url": "http://localhost:3001/mcp"
+      "url": "http://localhost:3002/mcp"
     }
   }
 }
@@ -145,12 +147,12 @@ graph TB
     subgraph Docker["Docker (docker-compose up)"]
         direction LR
         PHX_D["Phoenix :4100"]
-        MCP_D["MCP HTTP :3001"]
+        MCP_D["MCP HTTP :3002"]
         PHX_D & MCP_D --- BEAM_D["Single BEAM Instance"]
         BEAM_D --- QD_D["Qdrant :6333"]
     end
 
-    CC_D["Claude Code<br/>url: localhost:3001/mcp"] --> MCP_D
+    CC_D["Claude Code<br/>url: localhost:3002/mcp"] --> MCP_D
 ```
 
 ### Supervision Tree
@@ -260,9 +262,24 @@ Tree-sitter support requires the Rust toolchain. Without it, only Elixir files a
 
 Phoenix LiveView UI at `http://localhost:4100`:
 
-- **Dashboard** -- Indexing statistics, system health, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
-- **Search** -- Interactive hybrid search with scored results, entity badges, call/is_a tags
-- **Vectors** -- Browse, filter, inspect, and manage stored vectors
+- **Dashboard** — Indexing statistics, entity/edge counts, language distribution, top connected modules, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
+- **Search** — Interactive hybrid search with scored results, entity badges, code preview, call/is_a tags.
+- **Graph** — Interactive D3.js force-directed graph showing code relationships. Three edge types (calls, imports, contains) with distinct visual styles. Hover to highlight connected nodes and see detailed metadata.
+- **Vectors** — Browse, filter, inspect, and manage stored vectors.
+
+### Search
+
+![Search](docs/screenshots/search.png)
+
+### Graph Visualization
+
+![Graph](docs/screenshots/graph.png)
+
+The graph renders up to 500 nodes sorted by connectivity. Hover any node to highlight its neighbors and see file path, line range, calls, and imports in the detail panel. Zoom, pan, and drag nodes to explore.
+
+### Vectors
+
+![Vectors](docs/screenshots/vectors.png)
 
 ## Testing
 
