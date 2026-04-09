@@ -45,14 +45,15 @@ defmodule ElixirNexus.CodeSchema do
       {:defmodule, meta, [module_name | rest]} ->
         {start_line, end_line} = extract_lines(meta)
         # Extract module name from {:__aliases__, ..., parts}
-        module_str = 
+        module_str =
           case module_name do
             {:__aliases__, _, parts} ->
               parts |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
+
             other ->
               inspect(other)
           end
-        
+
         # Extract body from Sourceror's structure
         body = extract_module_body(rest)
 
@@ -183,9 +184,11 @@ defmodule ElixirNexus.CodeSchema do
             nil -> Keyword.get(meta, :end_line, line)
             closing -> Keyword.get(closing, :line, Keyword.get(meta, :end_line, line))
           end
+
         end_expr ->
           Keyword.get(end_expr, :line, Keyword.get(meta, :end_line, line))
       end
+
     {line, end_line}
   end
 
@@ -238,9 +241,8 @@ defmodule ElixirNexus.CodeSchema do
       other -> other
     end)
   end
-  
+
   defp extract_module_body(other) do
     other
   end
-
 end

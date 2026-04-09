@@ -155,10 +155,10 @@ defmodule ElixirNexus.SearchTest do
     end
 
     test "handles empty vector fallback" do
-      dummy_vector = List.duplicate(0.0, 384)
+      dummy_vector = List.duplicate(0.0, 768)
 
       assert is_list(dummy_vector)
-      assert length(dummy_vector) == 384
+      assert length(dummy_vector) == 768
       assert Enum.all?(dummy_vector, &(&1 == 0.0))
     end
   end

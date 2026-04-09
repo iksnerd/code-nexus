@@ -4,7 +4,7 @@ defmodule ElixirNexus.VectorsLiveTest do
 
   # Ensure the Qdrant collection exists before tests run
   setup do
-    ElixirNexus.QdrantClient.create_collection(384)
+    ElixirNexus.QdrantClient.create_collection(768)
     :ok
   end
 

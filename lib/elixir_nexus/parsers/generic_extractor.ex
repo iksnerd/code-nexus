@@ -71,16 +71,17 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     start_line = (node["start_row"] || 0) + 1
     end_line = (node["end_row"] || 0) + 1
 
-    entity_type = cond do
-      String.contains?(kind, "class") -> :class
-      String.contains?(kind, "method") -> :method
-      String.contains?(kind, "struct") -> :struct
-      String.contains?(kind, "interface") -> :interface
-      String.contains?(kind, "impl") -> :module
-      String.contains?(kind, "module") -> :module
-      String.contains?(kind, "function") -> :function
-      true -> :function
-    end
+    entity_type =
+      cond do
+        String.contains?(kind, "class") -> :class
+        String.contains?(kind, "method") -> :method
+        String.contains?(kind, "struct") -> :struct
+        String.contains?(kind, "interface") -> :interface
+        String.contains?(kind, "impl") -> :module
+        String.contains?(kind, "module") -> :module
+        String.contains?(kind, "function") -> :function
+        true -> :function
+      end
 
     if name do
       %CodeSchema{
@@ -106,17 +107,19 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     |> Enum.slice((start_line - 1)..(end_line - 1))
     |> Enum.join("\n")
   end
+
   defp extract_content(_, _, _), do: ""
 
   defp extract_params(%{"children" => children}) do
     children
-    |> Enum.filter(&(String.contains?(&1["kind"] || "", "parameter")))
+    |> Enum.filter(&String.contains?(&1["kind"] || "", "parameter"))
     |> Enum.flat_map(fn params ->
       (params["children"] || [])
       |> Enum.filter(&(&1["kind"] == "identifier"))
       |> Enum.map(&(&1["text"] || &1["name"] || ""))
     end)
   end
+
   defp extract_params(_), do: []
 
   defp extract_calls(%{"children" => children}) do
@@ -124,11 +127,13 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     |> Enum.flat_map(&find_calls/1)
     |> Enum.uniq()
   end
+
   defp extract_calls(_), do: []
 
   defp find_calls(%{"kind" => kind, "name" => name}) when is_binary(name) do
     if String.contains?(kind, "call"), do: [name], else: []
   end
+
   defp find_calls(%{"children" => children}), do: Enum.flat_map(children, &find_calls/1)
   defp find_calls(_), do: []
 
@@ -142,25 +147,37 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     |> Enum.flat_map(&find_imports/1)
     |> Enum.uniq()
   end
+
   defp extract_imports(_), do: []
 
   defp find_imports(%{"kind" => kind} = node) when kind in @import_kinds do
     extract_import_path(node)
   end
+
   defp find_imports(%{"children" => children}), do: Enum.flat_map(children, &find_imports/1)
   defp find_imports(_), do: []
 
   defp extract_import_path(%{"children" => children}) do
     children
-    |> Enum.filter(&(&1["kind"] in ["identifier", "qualified_identifier", "scoped_identifier",
-                                     "string", "string_literal", "interpreted_string_literal",
-                                     "package_identifier", "type_identifier"]))
+    |> Enum.filter(
+      &(&1["kind"] in [
+          "identifier",
+          "qualified_identifier",
+          "scoped_identifier",
+          "string",
+          "string_literal",
+          "interpreted_string_literal",
+          "package_identifier",
+          "type_identifier"
+        ])
+    )
     |> Enum.map(fn node ->
       node["text"] || node["name"] || ""
     end)
     |> Enum.reject(&(&1 == ""))
     |> Enum.map(&String.trim(&1, "\""))
   end
+
   defp extract_import_path(_), do: []
 
   defp extract_contains(%{"children" => children}) do
@@ -169,5 +186,6 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     |> Enum.map(&(&1["name"] || ""))
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_contains(_), do: []
 end

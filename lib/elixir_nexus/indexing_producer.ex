@@ -15,6 +15,7 @@ defmodule ElixirNexus.IndexingProducer do
       pid when is_pid(pid) ->
         send(pid, {:push, file_paths})
         :ok
+
       nil ->
         Logger.warning("IndexingProducer not started, dropping #{length(file_paths)} files")
         {:error, :producer_not_available}

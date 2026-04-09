@@ -19,13 +19,14 @@ defmodule ElixirNexus.Search.Queries do
         tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new())
         flat = flatten_impact_tree(tree)
 
-        {:ok, %{
-          root: entity_name,
-          depth: depth,
-          total_affected: length(flat),
-          impact: tree,
-          affected_files: flat |> Enum.map(& &1.file_path) |> Enum.uniq()
-        }}
+        {:ok,
+         %{
+           root: entity_name,
+           depth: depth,
+           total_affected: length(flat),
+           impact: tree,
+           affected_files: flat |> Enum.map(& &1.file_path) |> Enum.uniq()
+         }}
 
       error ->
         error
@@ -40,10 +41,11 @@ defmodule ElixirNexus.Search.Queries do
       calls = e.entity["calls"] || []
       imports = e.entity["is_a"] || []
 
-      acc = Enum.reduce(calls, acc, fn call, index ->
-        key = String.downcase(call)
-        Map.update(index, key, [e], fn existing -> [e | existing] end)
-      end)
+      acc =
+        Enum.reduce(calls, acc, fn call, index ->
+          key = String.downcase(call)
+          Map.update(index, key, [e], fn existing -> [e | existing] end)
+        end)
 
       Enum.reduce(imports, acc, fn imp, index ->
         key = String.downcase(imp)
@@ -110,6 +112,7 @@ defmodule ElixirNexus.Search.Queries do
         case get_all_entities_cached(2000) do
           {:ok, all_entities} ->
             caller_file = entity.entity["file_path"]
+
             resolved =
               calls
               |> Enum.take(limit)
@@ -144,11 +147,12 @@ defmodule ElixirNexus.Search.Queries do
 
       {:ok, _} ->
         # Fallback: try search with a dummy vector
-        dummy_vector = List.duplicate(0.0, 384)
+        dummy_vector = List.duplicate(0.0, 768)
 
         case ElixirNexus.QdrantClient.search_with_filter(dummy_vector, filter, 1) do
           {:ok, %{"result" => [result | _]}} ->
-            {:ok, %{id: result["id"], score: result["score"], entity: ElixirNexus.Search.format_payload(result["payload"])}}
+            {:ok,
+             %{id: result["id"], score: result["score"], entity: ElixirNexus.Search.format_payload(result["payload"])}}
 
           {:ok, _} ->
             {:error, :not_found}
@@ -170,6 +174,7 @@ defmodule ElixirNexus.Search.Queries do
     candidates =
       if candidates == [] do
         method_name = call_name |> String.split(".") |> List.last()
+
         if method_name != call_name do
           Enum.filter(all_entities, &matches_entity_name?(&1.entity["name"] || "", method_name))
         else
@@ -180,8 +185,12 @@ defmodule ElixirNexus.Search.Queries do
       end
 
     case candidates do
-      [] -> %{name: call_name, resolved: false}
-      [single] -> single
+      [] ->
+        %{name: call_name, resolved: false}
+
+      [single] ->
+        single
+
       multiple ->
         # Prefer same-file match to avoid cross-file false positives
         same_file = Enum.find(multiple, fn e -> e.entity["file_path"] == caller_file end)
@@ -215,10 +224,10 @@ defmodule ElixirNexus.Search.Queries do
     name_lower = String.downcase(entity_name)
 
     # Exact match
+    # Call is "Module.function" and entity is "function"
+    # Call is "function" and entity is "Module.function"
     call_lower == name_lower ||
-      # Call is "Module.function" and entity is "function"
       String.ends_with?(call_lower, "." <> name_lower) ||
-      # Call is "function" and entity is "Module.function"
       String.ends_with?(name_lower, "." <> call_lower)
   end
 
@@ -232,7 +241,7 @@ defmodule ElixirNexus.Search.Queries do
     case get_all_entities_cached(2000) do
       {:ok, all_entities} ->
         target_entities = Enum.filter(all_entities, &(&1.entity["file_path"] == file_path))
-        target_names = MapSet.new(target_entities, &(&1.entity["name"]))
+        target_names = MapSet.new(target_entities, & &1.entity["name"])
         # Build lowercase index for O(1) name matching
         target_names_lower = MapSet.new(target_names, &String.downcase/1)
         # Exclude internal calls (calls that resolve to same-file entities)
@@ -241,9 +250,11 @@ defmodule ElixirNexus.Search.Queries do
           |> Enum.flat_map(&(&1.entity["calls"] || []))
           |> Enum.reject(fn call ->
             call_lower = String.downcase(call)
+
             MapSet.member?(target_names_lower, call_lower) or
               Enum.any?(target_names, &matches_entity_name?(call, &1))
           end)
+
         target_calls_lower = MapSet.new(target_calls, &String.downcase/1)
 
         coupled =
@@ -260,6 +271,7 @@ defmodule ElixirNexus.Search.Queries do
               calls
               |> Enum.filter(fn c ->
                 c_lower = String.downcase(c)
+
                 MapSet.member?(target_names_lower, c_lower) or
                   Enum.any?(target_names, &matches_entity_name?(c, &1))
               end)
@@ -272,9 +284,11 @@ defmodule ElixirNexus.Search.Queries do
             incoming =
               if MapSet.member?(target_calls_lower, name_lower) or
                    Enum.any?(target_calls, &matches_entity_name?(&1, name)) do
-                caller = Enum.find(target_entities, fn te ->
-                  Enum.any?(te.entity["calls"] || [], &matches_entity_name?(&1, name))
-                end)
+                caller =
+                  Enum.find(target_entities, fn te ->
+                    Enum.any?(te.entity["calls"] || [], &matches_entity_name?(&1, name))
+                  end)
+
                 [%{from: (caller && caller.entity["name"]) || "unknown", to: name, direction: :outgoing}]
               else
                 []
@@ -316,11 +330,12 @@ defmodule ElixirNexus.Search.Queries do
           |> Enum.sort_by(& &1.coupling_score, :desc)
           |> Enum.take(limit)
 
-        {:ok, %{
-          file: file_path,
-          entities_in_file: length(target_entities),
-          coupled_files: coupled
-        }}
+        {:ok,
+         %{
+           file: file_path,
+           entities_in_file: length(target_entities),
+           coupled_files: coupled
+         }}
 
       error ->
         error
@@ -363,8 +378,8 @@ defmodule ElixirNexus.Search.Queries do
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
             # No entity calls this function
+            # Also check qualified name patterns
             not Map.has_key?(call_index, name_lower) and
-              # Also check qualified name patterns
               not Enum.any?(Map.keys(call_index), fn k ->
                 String.ends_with?(k, "." <> name_lower)
               end)
@@ -386,11 +401,12 @@ defmodule ElixirNexus.Search.Queries do
             type in ["function", "method"] and vis in ["public", nil]
           end)
 
-        {:ok, %{
-          dead_functions: dead,
-          total_public: total_public,
-          dead_count: length(dead)
-        }}
+        {:ok,
+         %{
+           dead_functions: dead,
+           total_public: total_public,
+           dead_count: length(dead)
+         }}
 
       error ->
         error
@@ -398,36 +414,39 @@ defmodule ElixirNexus.Search.Queries do
   end
 
   defp get_all_entities_cached(limit) do
-    chunks = try do
-      ElixirNexus.ChunkCache.all()
-    rescue
-      _ -> []
-    catch
-      :error, _ -> []
-    end
+    chunks =
+      try do
+        ElixirNexus.ChunkCache.all()
+      rescue
+        _ -> []
+      catch
+        :error, _ -> []
+      end
 
     if is_list(chunks) and chunks != [] do
-      entities = Enum.map(chunks, fn chunk ->
-        %{
-          id: chunk.id,
-          score: 0.0,
-          entity: %{
-            "file_path" => chunk.file_path,
-            "entity_type" => to_string(chunk.entity_type),
-            "name" => chunk.name,
-            "start_line" => chunk.start_line,
-            "end_line" => chunk.end_line,
-            "module_path" => chunk.module_path,
-            "visibility" => chunk.visibility && to_string(chunk.visibility),
-            "parameters" => chunk.parameters,
-            "calls" => chunk.calls || [],
-            "is_a" => chunk.is_a || [],
-            "contains" => chunk.contains || [],
-            "content" => chunk.content,
-            "language" => chunk[:language] && to_string(chunk[:language])
+      entities =
+        Enum.map(chunks, fn chunk ->
+          %{
+            id: chunk.id,
+            score: 0.0,
+            entity: %{
+              "file_path" => chunk.file_path,
+              "entity_type" => to_string(chunk.entity_type),
+              "name" => chunk.name,
+              "start_line" => chunk.start_line,
+              "end_line" => chunk.end_line,
+              "module_path" => chunk.module_path,
+              "visibility" => chunk.visibility && to_string(chunk.visibility),
+              "parameters" => chunk.parameters,
+              "calls" => chunk.calls || [],
+              "is_a" => chunk.is_a || [],
+              "contains" => chunk.contains || [],
+              "content" => chunk.content,
+              "language" => chunk[:language] && to_string(chunk[:language])
+            }
           }
-        }
-      end)
+        end)
+
       {:ok, Enum.take(entities, limit)}
     else
       # Fallback to Qdrant scroll — slow for large collections
@@ -517,15 +536,16 @@ defmodule ElixirNexus.Search.Queries do
 
     critical_files = compute_critical_files(graph_nodes)
 
-    {:ok, %{
-      total_nodes: map_size(graph_nodes),
-      total_chunks: length(chunks),
-      entity_types: entity_types,
-      edge_counts: %{calls: calls, imports: imports, contains: contains},
-      top_connected: top_connected,
-      languages: languages,
-      critical_files: critical_files
-    }}
+    {:ok,
+     %{
+       total_nodes: map_size(graph_nodes),
+       total_chunks: length(chunks),
+       entity_types: entity_types,
+       edge_counts: %{calls: calls, imports: imports, contains: contains},
+       top_connected: top_connected,
+       languages: languages,
+       critical_files: critical_files
+     }}
   end
 
   # Approximate betweenness centrality via sampled BFS.
@@ -584,6 +604,7 @@ defmodule ElixirNexus.Search.Queries do
     Enum.reduce(preds, scores, fn {node, _parent}, acc ->
       # Walk path from node back to source, collect intermediaries (exclude source and node)
       intermediaries = collect_intermediaries(node, preds, source)
+
       Enum.reduce(intermediaries, acc, fn mid, inner ->
         Map.update(inner, mid, 1, &(&1 + 1))
       end)
@@ -648,13 +669,14 @@ defmodule ElixirNexus.Search.Queries do
             parents = resolve_names(parent_names, all_entities)
             children = resolve_names(child_names, all_entities)
 
-            {:ok, %{
-              name: target.entity["name"],
-              entity_type: target.entity["entity_type"],
-              file_path: target.entity["file_path"],
-              parents: parents,
-              children: children
-            }}
+            {:ok,
+             %{
+               name: target.entity["name"],
+               entity_type: target.entity["entity_type"],
+               file_path: target.entity["file_path"],
+               parents: parents,
+               children: children
+             }}
         end
 
       error ->
@@ -665,20 +687,21 @@ defmodule ElixirNexus.Search.Queries do
   # Multi-strategy entity lookup: exact match, then file-path match, then substring
   defp find_entity_multi_strategy(name, entities) do
     # 1. Exact match (current behavior)
+    # 2. File-path-based: basename matches query
+    # 3. Substring: entity name contains query or vice versa
     Enum.find(entities, fn e ->
       matches_entity_name?(e.entity["name"] || "", name)
     end) ||
-    # 2. File-path-based: basename matches query
-    Enum.find(entities, fn e ->
-      file_path_matches_name?(e.entity["file_path"] || "", name)
-    end) ||
-    # 3. Substring: entity name contains query or vice versa
-    Enum.find(entities, fn e ->
-      e_name = String.downcase(e.entity["name"] || "")
-      q_name = String.downcase(name)
-      e_name != "" and q_name != "" and
-        (String.contains?(e_name, q_name) or String.contains?(q_name, e_name))
-    end)
+      Enum.find(entities, fn e ->
+        file_path_matches_name?(e.entity["file_path"] || "", name)
+      end) ||
+      Enum.find(entities, fn e ->
+        e_name = String.downcase(e.entity["name"] || "")
+        q_name = String.downcase(name)
+
+        e_name != "" and q_name != "" and
+          (String.contains?(e_name, q_name) or String.contains?(q_name, e_name))
+      end)
   end
 
   defp file_path_matches_name?(file_path, name) when file_path == "" or name == "", do: false
@@ -698,11 +721,18 @@ defmodule ElixirNexus.Search.Queries do
   defp resolve_names(names, all_entities) do
     Enum.map(names, fn name ->
       case Enum.find(all_entities, fn e ->
-        matches_entity_name?(e.entity["name"] || "", name)
-      end) do
-        nil -> %{name: name, resolved: false}
-        found -> %{name: found.entity["name"], file_path: found.entity["file_path"],
-                   entity_type: found.entity["entity_type"], resolved: true}
+             matches_entity_name?(e.entity["name"] || "", name)
+           end) do
+        nil ->
+          %{name: name, resolved: false}
+
+        found ->
+          %{
+            name: found.entity["name"],
+            file_path: found.entity["file_path"],
+            entity_type: found.entity["entity_type"],
+            resolved: true
+          }
       end
     end)
   end
@@ -716,12 +746,15 @@ defmodule ElixirNexus.Search.Queries do
 
   defp scroll_all_points(remaining, offset, acc) do
     page_size = min(remaining, 100)
+
     case ElixirNexus.QdrantClient.scroll_points(page_size, offset) do
       {:ok, %{"result" => %{"points" => points, "next_page_offset" => next_offset}}}
-          when is_list(points) and points != [] ->
-        entities = Enum.map(points, fn p ->
-          %{id: p["id"], score: 0.0, entity: ElixirNexus.Search.format_payload(p["payload"])}
-        end)
+      when is_list(points) and points != [] ->
+        entities =
+          Enum.map(points, fn p ->
+            %{id: p["id"], score: 0.0, entity: ElixirNexus.Search.format_payload(p["payload"])}
+          end)
+
         if next_offset do
           scroll_all_points(remaining - length(points), next_offset, Enum.reverse(entities) ++ acc)
         else
@@ -729,9 +762,11 @@ defmodule ElixirNexus.Search.Queries do
         end
 
       {:ok, %{"result" => %{"points" => points}}} when is_list(points) ->
-        entities = Enum.map(points, fn p ->
-          %{id: p["id"], score: 0.0, entity: ElixirNexus.Search.format_payload(p["payload"])}
-        end)
+        entities =
+          Enum.map(points, fn p ->
+            %{id: p["id"], score: 0.0, entity: ElixirNexus.Search.format_payload(p["payload"])}
+          end)
+
         {:ok, Enum.reverse(Enum.reverse(entities) ++ acc)}
 
       {:ok, _} ->

@@ -2,11 +2,11 @@ defmodule ElixirNexusWeb.CoreComponents do
   @moduledoc "Shared UI components for the ElixirNexus dashboard."
   use Phoenix.Component
 
-  attr :label, :string, required: true
-  attr :value, :any, required: true
-  attr :color, :string, default: "blue"
-  attr :subtitle, :string, default: nil
-  attr :animated, :boolean, default: false
+  attr(:label, :string, required: true)
+  attr(:value, :any, required: true)
+  attr(:color, :string, default: "blue")
+  attr(:subtitle, :string, default: nil)
+  attr(:animated, :boolean, default: false)
 
   def stat_card(assigns) do
     ~H"""
@@ -34,7 +34,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp value_color("rose"), do: "text-rose-400"
   defp value_color(_), do: "text-white"
 
-  attr :type, :string, required: true
+  attr(:type, :string, required: true)
 
   def entity_badge(assigns) do
     ~H"""
@@ -50,7 +50,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp badge_classes("struct"), do: "bg-emerald-900/60 text-emerald-300"
   defp badge_classes(_), do: "bg-slate-700 text-slate-300"
 
-  attr :status, :string, required: true
+  attr(:status, :string, required: true)
 
   def status_indicator(assigns) do
     ~H"""
@@ -71,7 +71,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp text_classes("error"), do: "text-red-400"
   defp text_classes(_), do: "text-slate-400"
 
-  attr :language, :string, required: true
+  attr(:language, :string, required: true)
 
   def language_badge(assigns) do
     ~H"""
@@ -91,7 +91,7 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp lang_classes("java"), do: "bg-red-900/50 text-red-200"
   defp lang_classes(_), do: "bg-slate-700 text-slate-300"
 
-  attr :event, :map, required: true
+  attr(:event, :map, required: true)
 
   def activity_item(assigns) do
     ~H"""
@@ -121,8 +121,8 @@ defmodule ElixirNexusWeb.CoreComponents do
   defp activity_icon_color(:file_deleted), do: "text-red-400"
   defp activity_icon_color(_), do: "text-slate-400"
 
-  attr :errors, :list, required: true
-  attr :expanded, :boolean, default: false
+  attr(:errors, :list, required: true)
+  attr(:expanded, :boolean, default: false)
 
   def error_panel(assigns) do
     ~H"""

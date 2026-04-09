@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Index do
 
   def run(args) do
     Mix.Task.run("app.start")
-    
+
     # Give services time to start
     Process.sleep(2000)
 
@@ -24,7 +24,7 @@ defmodule Mix.Tasks.Index do
 
       [path] ->
         path = Path.expand(path)
-        
+
         case File.dir?(path) do
           true ->
             IO.puts("📁 Indexing directory: #{path}")

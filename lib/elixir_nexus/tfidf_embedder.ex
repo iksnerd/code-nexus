@@ -1,6 +1,6 @@
 defmodule ElixirNexus.TFIDFEmbedder do
   @moduledoc """
-  TF-IDF based embedder with both dense (384-dim) and sparse vector support.
+  TF-IDF based embedder with both dense (768-dim) and sparse vector support.
   Dense vectors use feature hashing. Sparse vectors use Qdrant's sparse format
   for native keyword search via RRF fusion.
 
@@ -10,7 +10,7 @@ defmodule ElixirNexus.TFIDFEmbedder do
   use GenServer
   require Logger
 
-  @vector_size 384
+  @vector_size 768
   @idf_table :nexus_tfidf_idf
 
   def start_link(opts) do
@@ -50,7 +50,7 @@ defmodule ElixirNexus.TFIDFEmbedder do
 
   @impl true
   def init(_opts) do
-    Logger.info("Initializing TF-IDF embedder (384-dim dense + sparse vectors)")
+    Logger.info("Initializing TF-IDF embedder (768-dim dense + sparse vectors)")
     :ets.new(@idf_table, [:set, :public, :named_table, read_concurrency: true])
     {:ok, %{doc_count: 0, doc_freq: %{}}}
   end

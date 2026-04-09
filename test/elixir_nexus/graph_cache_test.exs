@@ -84,8 +84,15 @@ defmodule ElixirNexus.GraphCacheTest do
 
       # Update the file with new chunks
       new_chunks = [
-        %{id: nil, name: "new1", entity_type: :function, file_path: "lib/foo.ex",
-          calls: ["keep"], is_a: [], contains: []}
+        %{
+          id: nil,
+          name: "new1",
+          entity_type: :function,
+          file_path: "lib/foo.ex",
+          calls: ["keep"],
+          is_a: [],
+          contains: []
+        }
       ]
 
       GraphCache.update_file("lib/foo.ex", new_chunks)

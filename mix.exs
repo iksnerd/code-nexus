@@ -34,12 +34,6 @@ defmodule ElixirNexus.MixProject do
       {:phoenix_live_view, "~> 0.20"},
       {:plug_cowboy, "~> 2.6"},
 
-      # ML/AI
-      {:bumblebee, "~> 0.5"},
-      {:nx, "~> 0.6"},
-      {:exla, "~> 0.6"},
-      {:axon, "~> 0.6"},
-
       # Vector DB client (using HTTP directly via HTTPoison)
 
       # Code parsing

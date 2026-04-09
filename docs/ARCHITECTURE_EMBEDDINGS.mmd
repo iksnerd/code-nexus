@@ -2,14 +2,14 @@ graph LR
     subgraph Strategy["Dual Embedding Strategy"]
         direction TB
         Input["Code Chunk Text"]
-        BumblebeePath["Bumblebee Path<br/>(primary)"]
+        OllamaPath["Ollama Path<br/>(primary)"]
         TFIDFPath["TF-IDF Path<br/>(fallback + sparse)"]
     end
 
-    subgraph Bumblebee["Bumblebee (Primary Dense)"]
-        Model["all-MiniLM-L6-v2<br/>(sentence-transformers)"]
-        NxServing["Nx.Serving<br/>(batched inference)"]
-        DenseVec["384-dim Dense Vector<br/>(semantic similarity)"]
+    subgraph Ollama["Ollama (Primary Dense)"]
+        Model["nomic-embed-text<br/>(137M params, F16)"]
+        HTTPCall["HTTP POST<br/>/api/embed<br/>(batch support)"]
+        DenseVec["768-dim Dense Vector<br/>(semantic similarity)"]
     end
 
     subgraph TFIDF["TF-IDF (Fallback + Sparse)"]
@@ -17,35 +17,30 @@ graph LR
         IDFETS["IDF Table (ETS)<br/>(read_concurrency: true,<br/>concurrent reads)"]
         CalcTFIDF["Calculate TF-IDF<br/>(term freq x IDF from ETS)"]
         Normalize["L2 Normalize<br/>(unit vectors)"]
-        DenseFallback["384-dim Dense Vector<br/>(deterministic fallback)"]
+        DenseFallback["768-dim Dense Vector<br/>(deterministic fallback)"]
         SparseVec["Sparse Vector<br/>(keyword matching)"]
         VocabUpdate["GenServer<br/>(vocabulary writes only)"]
     end
 
     subgraph Qdrant["Qdrant Storage"]
-        NamedDense["Named Vector: 'semantic'<br/>(384-dim, cosine)"]
+        NamedDense["Named Vector: 'semantic'<br/>(768-dim, cosine)"]
         NamedSparse["Sparse Vector: 'keywords'<br/>(keyword index)"]
         RRF["RRF Fusion<br/>(reciprocal rank fusion)"]
         HybridResults["Hybrid Results<br/>(best of both)"]
     end
 
     subgraph Fallback["Fallback Logic"]
-        CheckBumblebee{"Bumblebee<br/>available?"}
-        CheckZero{"Zero vector<br/>returned?"}
-        UseBumblebee["Use Bumblebee dense"]
+        CheckOllama{"Ollama<br/>available?"}
+        UseOllama["Use Ollama dense"]
         UseTFIDF["Use TF-IDF dense"]
-        LogWarn["Log warning<br/>(zero-vector)"]
     end
 
-    Input --> CheckBumblebee
-    CheckBumblebee -->|yes| Model
-    CheckBumblebee -->|no| Tokenize
-    Model --> NxServing
-    NxServing --> DenseVec
-    DenseVec --> CheckZero
-    CheckZero -->|no| UseBumblebee
-    CheckZero -->|yes| LogWarn
-    LogWarn --> UseTFIDF
+    Input --> CheckOllama
+    CheckOllama -->|yes| Model
+    CheckOllama -->|no| Tokenize
+    Model --> HTTPCall
+    HTTPCall --> DenseVec
+    DenseVec --> UseOllama
 
     Tokenize --> CalcTFIDF
     IDFETS -->|concurrent read| CalcTFIDF
@@ -57,7 +52,7 @@ graph LR
 
     Input --> Tokenize
 
-    UseBumblebee --> NamedDense
+    UseOllama --> NamedDense
     UseTFIDF --> NamedDense
     SparseVec --> NamedSparse
 
@@ -66,7 +61,7 @@ graph LR
     RRF --> HybridResults
 
     style Strategy fill:#e1f5fe
-    style Bumblebee fill:#c8e6c9
+    style Ollama fill:#c8e6c9
     style TFIDF fill:#fff9c4
     style Qdrant fill:#e8f5e9
     style Fallback fill:#ffe0b2

@@ -1,9 +1,9 @@
 graph LR
     subgraph D1["Decision 1: Embeddings"]
         D1Q["How to embed<br/>code chunks?"]
-        D1A["Bumblebee (primary)<br/>all-MiniLM-L6-v2"]
+        D1A["Ollama (primary)<br/>nomic-embed-text (768-dim)"]
         D1B["TF-IDF (fallback)<br/>+ sparse vectors"]
-        D1Why["Bumblebee: high-quality semantic vectors.<br/>TF-IDF: always works + keyword matching.<br/>IDF in ETS (read_concurrency) for<br/>lock-free concurrent embeddings."]
+        D1Why["Ollama: high-quality semantic vectors<br/>via HTTP, runs on host.<br/>TF-IDF: always works + keyword matching.<br/>IDF in ETS (read_concurrency) for<br/>lock-free concurrent embeddings."]
     end
 
     subgraph D2["Decision 2: Vector DB"]

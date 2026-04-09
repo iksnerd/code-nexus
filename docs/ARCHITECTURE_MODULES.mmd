@@ -20,7 +20,7 @@ graph TB
     end
 
     subgraph Embedding["Embedding & Storage"]
-        EmbModel["EmbeddingModel<br/>(Bumblebee/Nx.Serving)"]
+        EmbModel["EmbeddingModel<br/>(Ollama HTTP client)"]
         TFIDFEmb["TFIDFEmbedder<br/>(ETS IDF, concurrent reads)"]
         QdrantClient["QdrantClient<br/>(30s timeouts, safe JSON)"]
         ChunkCache["ChunkCache (ETS)"]
@@ -106,7 +106,7 @@ graph TB
 
     %% Supervision (rest_for_one)
     Supervisor -->|manages| Indexer
-    Supervisor -->|manages| EmbModel
+    %% EmbModel is stateless HTTP client, no supervision needed
     Supervisor -->|manages| TFIDFEmb
     Supervisor -->|manages| QdrantClient
     Supervisor -->|manages| FileWatcher

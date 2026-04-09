@@ -10,6 +10,7 @@ defmodule ElixirNexus.GraphCache do
     if :ets.info(@table) == :undefined do
       :ets.new(@table, [:set, :public, :named_table, read_concurrency: true, write_concurrency: true])
     end
+
     :ok
   end
 
@@ -92,25 +93,26 @@ defmodule ElixirNexus.GraphCache do
   def rebuild_from_chunks(chunks) when is_list(chunks) do
     clear()
 
-    graph = ElixirNexus.RelationshipGraph.build_graph(
-      Enum.map(chunks, fn chunk ->
-        %{
-          id: chunk.id,
-          score: 0.0,
-          entity: %{
-            "name" => chunk.name,
-            "entity_type" => Atom.to_string(chunk.entity_type),
-            "file_path" => chunk.file_path,
-            "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls || []),
-            "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a || []),
-            "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains || []),
-            "start_line" => chunk.start_line,
-            "end_line" => chunk.end_line,
-            "content" => chunk.content
+    graph =
+      ElixirNexus.RelationshipGraph.build_graph(
+        Enum.map(chunks, fn chunk ->
+          %{
+            id: chunk.id,
+            score: 0.0,
+            entity: %{
+              "name" => chunk.name,
+              "entity_type" => Atom.to_string(chunk.entity_type),
+              "file_path" => chunk.file_path,
+              "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls || []),
+              "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a || []),
+              "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains || []),
+              "start_line" => chunk.start_line,
+              "end_line" => chunk.end_line,
+              "content" => chunk.content
+            }
           }
-        }
-      end)
-    )
+        end)
+      )
 
     Enum.each(graph, fn {id, node} -> put_node(id, node) end)
     :ok
@@ -133,6 +135,7 @@ defmodule ElixirNexus.GraphCache do
     # Insert new entries
     Enum.each(chunks, fn chunk ->
       entity_id = chunk.id || chunk.name
+
       node = %{
         "id" => entity_id,
         "name" => chunk.name,
@@ -144,6 +147,7 @@ defmodule ElixirNexus.GraphCache do
         "outgoing_degree" => length(chunk.calls || []) + length(chunk.is_a || []) + length(chunk.contains || []),
         "incoming_count" => 0
       }
+
       put_node(entity_id, node)
     end)
 

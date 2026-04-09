@@ -2,7 +2,7 @@
   "mcpServers": {
     "elixir-nexus": {
       "type": "http",
-      "url": "http://localhost:3001/mcp"
+      "url": "http://localhost:3002/mcp"
     }
   }
 }

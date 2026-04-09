@@ -5,10 +5,10 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
   # No need to start it again in setup
 
   describe "embed/1 - single text embedding" do
-    test "returns 384-dimensional vector" do
+    test "returns 768-dimensional vector" do
       {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed("hello world")
       assert is_list(embedding)
-      assert length(embedding) == 384
+      assert length(embedding) == 768
     end
 
     test "returns normalized vector for known vocabulary" do
@@ -35,10 +35,10 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
     test "different text may produce different embeddings when vocabulary exists" do
       # Update vocabulary so words are recognized
       ElixirNexus.TFIDFEmbedder.update_vocabulary(["hello world", "goodbye world"])
-      
+
       {:ok, embedding1} = ElixirNexus.TFIDFEmbedder.embed("hello world")
       {:ok, embedding2} = ElixirNexus.TFIDFEmbedder.embed("goodbye world")
-      
+
       # Different texts should produce different embeddings (usually)
       # They might be both zero if no words match, so just check they're lists
       assert is_list(embedding1)
@@ -48,10 +48,10 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
     test "same text with updated vocabulary produces consistent results" do
       # Update vocabulary first
       ElixirNexus.TFIDFEmbedder.update_vocabulary(["function definition"])
-      
+
       {:ok, emb1} = ElixirNexus.TFIDFEmbedder.embed("function definition")
       {:ok, emb2} = ElixirNexus.TFIDFEmbedder.embed("function definition")
-      
+
       # Same text should produce identical embeddings
       assert emb1 == emb2
     end
@@ -63,7 +63,7 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
       {:ok, embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
       assert is_list(embeddings)
       assert length(embeddings) == 3
-      assert Enum.all?(embeddings, &(is_list(&1) and length(&1) == 384))
+      assert Enum.all?(embeddings, &(is_list(&1) and length(&1) == 768))
     end
 
     test "empty list returns empty" do
@@ -74,12 +74,13 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
     test "batch results match individual embeddings" do
       texts = ["alpha", "beta", "gamma"]
       {:ok, batch_embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
-      
-      individual_embeddings = Enum.map(texts, fn text ->
-        {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed(text)
-        embedding
-      end)
-      
+
+      individual_embeddings =
+        Enum.map(texts, fn text ->
+          {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed(text)
+          embedding
+        end)
+
       assert batch_embeddings == individual_embeddings
     end
   end
@@ -88,20 +89,20 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
     test "builds vocabulary from texts" do
       texts = ["hello world", "test function", "code analysis"]
       ElixirNexus.TFIDFEmbedder.update_vocabulary(texts)
-      
+
       # After update, embedding should work better with these texts
       {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed("hello")
       assert is_list(embedding)
-      assert length(embedding) == 384
+      assert length(embedding) == 768
     end
 
     test "updates vocabulary multiple times" do
       texts1 = ["first batch"]
       ElixirNexus.TFIDFEmbedder.update_vocabulary(texts1)
-      
+
       texts2 = ["second batch", "added later"]
       ElixirNexus.TFIDFEmbedder.update_vocabulary(texts2)
-      
+
       {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed("batch")
       assert is_list(embedding)
     end
@@ -111,7 +112,7 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
     test "ignores special characters and punctuation" do
       # Update vocabulary with text patterns
       ElixirNexus.TFIDFEmbedder.update_vocabulary(["hello-world", "hello world"])
-      
+
       {:ok, emb1} = ElixirNexus.TFIDFEmbedder.embed("hello-world")
       {:ok, emb2} = ElixirNexus.TFIDFEmbedder.embed("hello world")
       # Both should tokenize similarly after punctuation removal
@@ -149,7 +150,7 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
 
     test "indices are within vector_size bounds" do
       sv = ElixirNexus.TFIDFEmbedder.sparse_vector("some code with many words here")
-      assert Enum.all?(sv["indices"], &(&1 >= 0 and &1 < 384))
+      assert Enum.all?(sv["indices"], &(&1 >= 0 and &1 < 768))
     end
 
     test "values are positive" do
@@ -178,10 +179,10 @@ defmodule ElixirNexus.TFIDFEmbedderTest do
   # Helper function: cosine similarity
   defp cosine_similarity(vec1, vec2) do
     dot_product = Enum.zip(vec1, vec2) |> Enum.reduce(0, fn {a, b}, acc -> a * b + acc end)
-    
+
     mag1 = :math.sqrt(Enum.reduce(vec1, 0, &(&1 * &1 + &2)))
     mag2 = :math.sqrt(Enum.reduce(vec2, 0, &(&1 * &1 + &2)))
-    
+
     if mag1 == 0 or mag2 == 0 do
       0.0
     else

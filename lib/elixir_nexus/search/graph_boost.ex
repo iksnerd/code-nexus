@@ -21,7 +21,8 @@ defmodule ElixirNexus.Search.GraphBoost do
       graph_boost =
         cond do
           # Direct seed result
-          MapSet.member?(seed_set, entity_id) -> 0.1
+          MapSet.member?(seed_set, entity_id) ->
+            0.1
 
           # Has incoming references from other results
           node && (node["incoming_count"] || 0) > 0 ->
@@ -30,15 +31,19 @@ defmodule ElixirNexus.Search.GraphBoost do
           # Calls something in the seed set
           node ->
             calls = node["calls"] || []
-            related = Enum.count(calls, fn c ->
-              Enum.any?(seed_ids, fn sid ->
-                seed_node = Map.get(graph, sid)
-                seed_node && String.downcase(seed_node["name"] || "") == String.downcase(c)
+
+            related =
+              Enum.count(calls, fn c ->
+                Enum.any?(seed_ids, fn sid ->
+                  seed_node = Map.get(graph, sid)
+                  seed_node && String.downcase(seed_node["name"] || "") == String.downcase(c)
+                end)
               end)
-            end)
+
             min(related * 0.03, 0.1)
 
-          true -> 0.0
+          true ->
+            0.0
         end
 
       %{result | score: result.score + graph_boost}

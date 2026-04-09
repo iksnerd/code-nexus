@@ -24,9 +24,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       Enum.map(declarations, fn entity ->
         cond do
           MapSet.member?(exported_names, entity.name) ->
-            %{entity |
-              visibility: :public,
-              is_a: Enum.uniq(entity.is_a ++ imports)}
+            %{entity | visibility: :public, is_a: Enum.uniq(entity.is_a ++ imports)}
 
           true ->
             %{entity | is_a: Enum.uniq(entity.is_a ++ imports)}
@@ -38,26 +36,30 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     file_entity =
       if imports != [] or exports != [] do
         basename = Path.basename(file_path, Path.extname(file_path))
-        module_name = if basename == "index" do
-          Path.dirname(file_path) |> Path.basename()
-        else
-          basename
-        end
 
-        [%CodeSchema{
-          file_path: file_path,
-          entity_type: :module,
-          name: module_name,
-          content: "",
-          start_line: 1,
-          end_line: 1,
-          parameters: [],
-          visibility: :public,
-          calls: extract_imported_names(ast),
-          is_a: imports,
-          contains: exports,
-          language: :javascript
-        }]
+        module_name =
+          if basename == "index" do
+            Path.dirname(file_path) |> Path.basename()
+          else
+            basename
+          end
+
+        [
+          %CodeSchema{
+            file_path: file_path,
+            entity_type: :module,
+            name: module_name,
+            content: "",
+            start_line: 1,
+            end_line: 1,
+            parameters: [],
+            visibility: :public,
+            calls: extract_imported_names(ast),
+            is_a: imports,
+            contains: exports,
+            language: :javascript
+          }
+        ]
       else
         []
       end
@@ -66,23 +68,41 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
   end
 
   defp walk_ast(%{"kind" => kind, "children" => children} = node, acc) do
-    acc = case kind do
-      "function_declaration" -> [node | acc]
-      "method_definition" -> [node | acc]
-      "class_declaration" -> [node | acc]
-      "export_statement" ->
-        # Collect inner declarations; skip recursing into this node's children
-        # to avoid duplicates (the inner declaration would be found again)
-        return_early = collect_export_declaration(node, acc)
-        return_early
-      "arrow_function" ->
-        if has_name_context?(node), do: [node | acc], else: acc
-      "lexical_declaration" -> [node | acc]
-      "variable_declaration" -> [node | acc]
-      "interface_declaration" -> [node | acc]
-      "type_alias_declaration" -> [node | acc]
-      _ -> acc
-    end
+    acc =
+      case kind do
+        "function_declaration" ->
+          [node | acc]
+
+        "method_definition" ->
+          [node | acc]
+
+        "class_declaration" ->
+          [node | acc]
+
+        "export_statement" ->
+          # Collect inner declarations; skip recursing into this node's children
+          # to avoid duplicates (the inner declaration would be found again)
+          return_early = collect_export_declaration(node, acc)
+          return_early
+
+        "arrow_function" ->
+          if has_name_context?(node), do: [node | acc], else: acc
+
+        "lexical_declaration" ->
+          [node | acc]
+
+        "variable_declaration" ->
+          [node | acc]
+
+        "interface_declaration" ->
+          [node | acc]
+
+        "type_alias_declaration" ->
+          [node | acc]
+
+        _ ->
+          acc
+      end
 
     # Don't recurse into export_statement children (already handled above)
     if kind == "export_statement" do
@@ -109,13 +129,17 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     children
     |> Enum.filter(fn child ->
       child["kind"] in [
-        "function_declaration", "class_declaration",
-        "lexical_declaration", "variable_declaration",
-        "interface_declaration", "type_alias_declaration"
+        "function_declaration",
+        "class_declaration",
+        "lexical_declaration",
+        "variable_declaration",
+        "interface_declaration",
+        "type_alias_declaration"
       ]
     end)
     |> Enum.reduce(acc, fn child, inner_acc -> [child | inner_acc] end)
   end
+
   defp collect_export_declaration(_, acc), do: acc
 
   # Arrow functions don't have a "name" field in tree-sitter; they get their name
@@ -131,17 +155,18 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     start_line = (node["start_row"] || 0) + 1
     end_line = (node["end_row"] || 0) + 1
 
-    {entity_type, visibility} = case kind do
-      "function_declaration" -> {:function, :public}
-      "method_definition" -> {:method, :public}
-      "class_declaration" -> {:class, :public}
-      "arrow_function" -> {:function, :private}
-      "interface_declaration" -> {:interface, :public}
-      "type_alias_declaration" -> {:struct, :public}
-      "lexical_declaration" -> classify_variable_declaration(node)
-      "variable_declaration" -> classify_variable_declaration(node)
-      _ -> {:function, nil}
-    end
+    {entity_type, visibility} =
+      case kind do
+        "function_declaration" -> {:function, :public}
+        "method_definition" -> {:method, :public}
+        "class_declaration" -> {:class, :public}
+        "arrow_function" -> {:function, :private}
+        "interface_declaration" -> {:interface, :public}
+        "type_alias_declaration" -> {:struct, :public}
+        "lexical_declaration" -> classify_variable_declaration(node)
+        "variable_declaration" -> classify_variable_declaration(node)
+        _ -> {:function, nil}
+      end
 
     if name do
       %CodeSchema{
@@ -171,7 +196,9 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       child["kind"] in ["variable_declarator", "lexical_binding"]
     end)
     |> case do
-      %{"name" => name} when is_binary(name) -> name
+      %{"name" => name} when is_binary(name) ->
+        name
+
       %{"children" => inner} ->
         inner
         |> Enum.find(&(&1["kind"] == "identifier"))
@@ -180,9 +207,12 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
           %{"name" => name} -> name
           _ -> nil
         end
-      _ -> nil
+
+      _ ->
+        nil
     end
   end
+
   defp extract_name_from_declarator(_), do: nil
 
   # Classify variable declarations by inspecting the value being assigned.
@@ -194,12 +224,15 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     case value_kind do
       k when k in ["arrow_function", "function_expression", "function"] ->
         {:function, :private}
+
       k when k in ["class_expression", "class"] ->
         {:class, :private}
+
       _ ->
         {:variable, :public}
     end
   end
+
   defp classify_variable_declaration(_), do: {:variable, :public}
 
   defp get_declarator_value_kind(%{"children" => children}) do
@@ -211,6 +244,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       _ -> nil
     end
   end
+
   defp get_declarator_value_kind(_), do: nil
 
   defp extract_content(source, start_line, end_line) when start_line > 0 and end_line > 0 do
@@ -219,6 +253,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     |> Enum.slice((start_line - 1)..(end_line - 1))
     |> Enum.join("\n")
   end
+
   defp extract_content(_, _, _), do: ""
 
   defp extract_params(%{"children" => children}) do
@@ -230,6 +265,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       |> Enum.map(&(&1["name"] || &1["text"] || ""))
     end)
   end
+
   defp extract_params(_), do: []
 
   defp extract_calls(%{"children" => children}) do
@@ -238,6 +274,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
   end
+
   defp extract_calls(_), do: []
 
   # call_expression with a name field (e.g. tree-sitter provides it directly)
@@ -301,6 +338,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     |> Enum.filter(&(&1["kind"] == "call_expression"))
     |> Enum.flat_map(&find_calls/1)
   end
+
   defp find_calls_in_callee(%{"kind" => "call_expression"} = node), do: find_calls(node)
   defp find_calls_in_callee(_), do: []
 
@@ -349,6 +387,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       |> Enum.map(&(&1["text"] || ""))
     end)
   end
+
   defp extract_extends(_), do: []
 
   defp extract_contains(%{"kind" => "class_declaration", "children" => children}) do
@@ -357,6 +396,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     |> Enum.map(&(&1["name"] || ""))
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_contains(_), do: []
 
   # --- Import extraction ---
@@ -375,17 +415,20 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     |> Enum.find(&(&1["kind"] == "string" || &1["kind"] == "string_fragment"))
     |> extract_string_value()
   end
+
   defp extract_import_source(_), do: nil
 
   # Extract text from a string node (may have string_fragment child)
   defp extract_string_value(%{"kind" => "string_fragment", "text" => text}), do: clean_string(text)
   defp extract_string_value(%{"kind" => "string", "text" => text}) when text != "", do: clean_string(text)
+
   defp extract_string_value(%{"kind" => "string", "children" => children}) do
     case Enum.find(children, &(&1["kind"] == "string_fragment")) do
       %{"text" => text} -> clean_string(text)
       _ -> nil
     end
   end
+
   defp extract_string_value(_), do: nil
 
   defp clean_string(text), do: text |> String.trim("\"") |> String.trim("'")
@@ -423,6 +466,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_import_identifiers(_), do: []
 
   defp find_identifiers(%{"children" => children}) do
@@ -443,6 +487,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       end
     end)
   end
+
   defp find_identifiers(_), do: []
 
   # --- Export extraction ---
@@ -493,6 +538,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       end
     end)
   end
+
   defp extract_export_names(_), do: []
 
   # --- AST helpers ---
@@ -501,8 +547,10 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     current = if kind == target_kind, do: [node], else: []
     current ++ Enum.flat_map(children, &find_nodes(&1, target_kind))
   end
+
   defp find_nodes(%{"kind" => kind} = node, target_kind) do
     if kind == target_kind, do: [node], else: []
   end
+
   defp find_nodes(_, _), do: []
 end

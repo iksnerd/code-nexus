@@ -55,7 +55,8 @@ defmodule ElixirNexus.RelationshipGraphTest do
           "entity" => %{
             "name" => "func_b",
             "entity_type" => "function",
-            "calls" => ["func_b"],  # Also calls itself (unusual but possible)
+            # Also calls itself (unusual but possible)
+            "calls" => ["func_b"],
             "is_a" => [],
             "contains" => []
           }
@@ -217,7 +218,7 @@ defmodule ElixirNexus.RelationshipGraphTest do
   describe "score_by_relationships/3" do
     test "scores results by closeness to seed entities" do
       seed_ids = ["seed1"]
-      
+
       results = [
         %{"id" => "seed1", "entity" => %{"name" => "target"}},
         %{"id" => "related", "entity" => %{"name" => "helper"}},
@@ -297,7 +298,7 @@ defmodule ElixirNexus.RelationshipGraphTest do
 
       assert is_list(reranked)
       assert length(reranked) == 2
-      
+
       # Each result should have combined score
       assert Enum.all?(reranked, &Map.has_key?(&1, "combined_score"))
       assert Enum.all?(reranked, &Map.has_key?(&1, "vector_score"))

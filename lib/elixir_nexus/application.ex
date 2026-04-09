@@ -3,14 +3,6 @@ defmodule ElixirNexus.Application do
 
   @impl true
   def start(_type, _args) do
-    # Load Bumblebee serving synchronously (may return nil if model unavailable)
-    bumblebee_child =
-      try do
-        ElixirNexus.EmbeddingModel.serving_child_spec()
-      rescue
-        _ -> nil
-      end
-
     children =
       [
         # PubSub for LiveView
@@ -19,11 +11,8 @@ defmodule ElixirNexus.Application do
         # File change tracker (for incremental indexing)
         {ElixirNexus.DirtyTracker, []},
 
-        # TF-IDF embedder (dense fallback + sparse vectors for keyword search)
+        # TF-IDF embedder (sparse vectors for keyword search)
         {ElixirNexus.TFIDFEmbedder, []},
-
-        # Bumblebee Nx.Serving (if model loaded successfully)
-        bumblebee_child,
 
         # Qdrant connection pool
         {ElixirNexus.QdrantClient, []},
@@ -62,7 +51,7 @@ defmodule ElixirNexus.Application do
       port = String.to_integer(mcp_http_port)
 
       Task.Supervisor.start_child(ElixirNexus.TaskSupervisor, fn ->
-        {:ok, _} = ElixirNexus.MCPServer.start_link(transport: :sse, port: port, host: "0.0.0.0")
+        {:ok, _} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0")
         IO.puts("MCP HTTP server listening on port #{port}")
       end)
     end

@@ -16,9 +16,11 @@ defmodule Mix.Tasks.Mcp do
 
   @impl true
   def run(_args) do
-    # Suppress console logging — MCP uses stdout for JSON-RPC
+    # Suppress all console logging — MCP uses stdout exclusively for JSON-RPC
     # Any log output to stdout corrupts the JSON-RPC protocol
-    Logger.configure(level: :emergency)
+    Application.put_env(:logger, :level, :none)
+    Logger.configure(level: :none)
+    Mix.shell(Mix.Shell.Quiet)
 
     # Skip auto-index on boot — MCP uses the reindex tool explicitly
     Application.put_env(:elixir_nexus, :start_mcp_server, true)

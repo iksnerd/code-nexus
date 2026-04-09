@@ -5,13 +5,14 @@ defmodule ElixirNexus.ProjectSwitcherTest do
 
   describe "switch_project/1" do
     test "handles nonexistent collection gracefully" do
-      result = try do
-        ProjectSwitcher.switch_project("nonexistent_test_collection_#{System.unique_integer()}")
-      rescue
-        _ -> :process_not_available
-      catch
-        :exit, _ -> :process_not_available
-      end
+      result =
+        try do
+          ProjectSwitcher.switch_project("nonexistent_test_collection_#{System.unique_integer()}")
+        rescue
+          _ -> :process_not_available
+        catch
+          :exit, _ -> :process_not_available
+        end
 
       # Either :ok (Qdrant accepted), {:error, _} (collection not found), or :process_not_available
       assert result in [:ok, :process_not_available] or match?({:error, _}, result)
@@ -20,13 +21,14 @@ defmodule ElixirNexus.ProjectSwitcherTest do
     test "switch to current collection succeeds" do
       current = ElixirNexus.QdrantClient.active_collection()
 
-      result = try do
-        ProjectSwitcher.switch_project(current)
-      rescue
-        _ -> :process_not_available
-      catch
-        :exit, _ -> :process_not_available
-      end
+      result =
+        try do
+          ProjectSwitcher.switch_project(current)
+        rescue
+          _ -> :process_not_available
+        catch
+          :exit, _ -> :process_not_available
+        end
 
       assert result in [:ok, :process_not_available]
     end
@@ -48,13 +50,14 @@ defmodule ElixirNexus.ProjectSwitcherTest do
 
     test "populates ETS caches when Qdrant has data" do
       # This tests the full reload path
-      result = try do
-        ProjectSwitcher.reload_from_qdrant()
-      rescue
-        _ -> :error
-      catch
-        :exit, _ -> :process_not_available
-      end
+      result =
+        try do
+          ProjectSwitcher.reload_from_qdrant()
+        rescue
+          _ -> :error
+        catch
+          :exit, _ -> :process_not_available
+        end
 
       # Regardless of result, caches should be in a valid state
       chunks = ElixirNexus.ChunkCache.all()

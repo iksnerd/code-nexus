@@ -8,6 +8,7 @@ defmodule ElixirNexus.QdrantClientTest do
       result = ElixirNexus.QdrantClient.health_check()
 
       assert is_tuple(result)
+
       case result do
         {:ok, _response} -> assert true
         {:error, _reason} -> assert true
@@ -18,9 +19,10 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "create_collection/1" do
     test "creates collection with named vectors and sparse vectors" do
-      result = ElixirNexus.QdrantClient.create_collection(384)
+      result = ElixirNexus.QdrantClient.create_collection(768)
 
       assert is_tuple(result)
+
       case result do
         {:ok, _} -> assert true
         {:error, _} -> assert true
@@ -28,7 +30,7 @@ defmodule ElixirNexus.QdrantClientTest do
     end
 
     test "handles various vector sizes" do
-      for size <- [64, 128, 256, 384, 512] do
+      for size <- [64, 128, 256, 768, 512] do
         result = ElixirNexus.QdrantClient.create_collection(size)
         assert is_tuple(result)
       end
@@ -37,7 +39,8 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "upsert_point/3" do
     test "upserts point with named vector format" do
-      vector = List.duplicate(0.5, 384)
+      vector = List.duplicate(0.5, 768)
+
       payload = %{
         "name" => "test_func",
         "entity_type" => "function"
@@ -46,6 +49,7 @@ defmodule ElixirNexus.QdrantClientTest do
       result = ElixirNexus.QdrantClient.upsert_point(1, vector, payload)
 
       assert is_tuple(result)
+
       case result do
         {:ok, _response} -> assert true
         {:error, _reason} -> assert true
@@ -53,7 +57,8 @@ defmodule ElixirNexus.QdrantClientTest do
     end
 
     test "accepts complex payloads" do
-      vector = List.duplicate(0.1, 384)
+      vector = List.duplicate(0.1, 768)
+
       payload = %{
         "name" => "process_data",
         "entity_type" => "function",
@@ -81,7 +86,7 @@ defmodule ElixirNexus.QdrantClientTest do
         %{
           "id" => 100,
           "vector" => %{
-            "semantic" => List.duplicate(0.5, 384),
+            "semantic" => List.duplicate(0.5, 768),
             "keywords" => %{"indices" => [1, 5, 10], "values" => [0.5, 0.3, 0.1]}
           },
           "payload" => %{"name" => "func1", "entity_type" => "function"}
@@ -89,7 +94,7 @@ defmodule ElixirNexus.QdrantClientTest do
         %{
           "id" => 101,
           "vector" => %{
-            "semantic" => List.duplicate(0.3, 384),
+            "semantic" => List.duplicate(0.3, 768),
             "keywords" => %{"indices" => [2, 8], "values" => [0.7, 0.2]}
           },
           "payload" => %{"name" => "func2", "entity_type" => "function"}
@@ -103,20 +108,22 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "search/2" do
     test "returns search results tuple" do
-      vector = List.duplicate(0.5, 384)
+      vector = List.duplicate(0.5, 768)
       result = ElixirNexus.QdrantClient.search(vector, 10)
 
       assert is_tuple(result)
+
       case result do
         {:ok, response} ->
           assert is_map(response)
+
         {:error, _reason} ->
           assert true
       end
     end
 
     test "handles various limit values" do
-      vector = List.duplicate(0.5, 384)
+      vector = List.duplicate(0.5, 768)
 
       for limit <- [1, 5, 10, 20, 100] do
         result = ElixirNexus.QdrantClient.search(vector, limit)
@@ -127,12 +134,13 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "hybrid_search/3" do
     test "performs RRF fusion search" do
-      embedding = List.duplicate(0.5, 384)
+      embedding = List.duplicate(0.5, 768)
       sparse = %{"indices" => [1, 5, 10], "values" => [0.5, 0.3, 0.1]}
 
       result = ElixirNexus.QdrantClient.hybrid_search(embedding, sparse, 10)
 
       assert is_tuple(result)
+
       case result do
         {:ok, response} -> assert is_map(response)
         {:error, _} -> assert true
@@ -142,7 +150,8 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "search_with_filter/3" do
     test "filters search results" do
-      vector = List.duplicate(0.5, 384)
+      vector = List.duplicate(0.5, 768)
+
       filter = %{
         "must" => [
           %{
@@ -160,14 +169,15 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "integration patterns" do
     test "workflow: create, upsert, search" do
-      vector1 = List.duplicate(0.5, 384)
+      vector1 = List.duplicate(0.5, 768)
+
       payload1 = %{
         "name" => "func1",
         "entity_type" => "function",
         "file_path" => "test.ex"
       }
 
-      _create_result = ElixirNexus.QdrantClient.create_collection(384)
+      _create_result = ElixirNexus.QdrantClient.create_collection(768)
 
       {:ok, _} = ElixirNexus.QdrantClient.upsert_point(100, vector1, payload1)
 
@@ -179,7 +189,7 @@ defmodule ElixirNexus.QdrantClientTest do
 
   describe "error handling" do
     test "handles network errors gracefully" do
-      vector = List.duplicate(0.5, 384)
+      vector = List.duplicate(0.5, 768)
       result = ElixirNexus.QdrantClient.search(vector, 10)
 
       assert is_tuple(result)

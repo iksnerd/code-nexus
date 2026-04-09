@@ -43,11 +43,12 @@ defmodule ElixirNexus.MCPServer do
      %{
        name: "elixir-nexus",
        version: "0.1.0",
-       description: "Code intelligence server — graph-powered semantic search, call graph traversal, " <>
-         "transitive impact analysis, and structural coupling for the current project. " <>
-         "Supports Elixir, JavaScript/TypeScript/TSX, Python, Go, Rust, and Java. " <>
-         "Use instead of Grep when you need to understand relationships between code. " <>
-         "Run reindex first (and after code changes). Start with get_graph_stats to orient.",
+       description:
+         "Code intelligence server — graph-powered semantic search, call graph traversal, " <>
+           "transitive impact analysis, and structural coupling for the current project. " <>
+           "Supports Elixir, JavaScript/TypeScript/TSX, Python, Go, Rust, and Java. " <>
+           "Use instead of Grep when you need to understand relationships between code. " <>
+           "Run reindex first (and after code changes). Start with get_graph_stats to orient.",
        capabilities: %{tools: %{}}
      }, Map.put(state, :project_root, project_root)}
   end
@@ -77,140 +78,174 @@ defmodule ElixirNexus.MCPServer do
 
   deftool "search_code" do
     meta do
-      name "search_code"
-      description "Hybrid semantic + keyword search ranked by TF-IDF similarity, name matching, and call-graph centrality. Requires reindex first. Better than Grep for intent-based queries (e.g. 'error handling in HTTP client'). Returns [{entity, score}] with file_path, entity_type, start_line, end_line, parameters, calls."
+      name("search_code")
+
+      description(
+        "Hybrid semantic + keyword search ranked by TF-IDF similarity, name matching, and call-graph centrality. Requires reindex first. Better than Grep for intent-based queries (e.g. 'error handling in HTTP client'). Returns [{entity, score}] with file_path, entity_type, start_line, end_line, parameters, calls."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         query: %{type: "string", description: "Natural language query or code snippet to search for"},
         limit: %{type: "integer", description: "Maximum number of results (default: 10)"}
       },
       required: ["query"]
-    }
+    })
   end
 
   deftool "find_all_callees" do
     meta do
-      name "find_all_callees"
-      description "Find all functions/modules called by a given function — understand dependencies before modifying. Name matching is case-insensitive and supports short names (e.g. 'embed_batch' matches 'ElixirNexus.EmbeddingModel.embed_batch'). Returns resolved entities (file_path, start_line, entity_type) or unresolved names for external calls."
+      name("find_all_callees")
+
+      description(
+        "Find all functions/modules called by a given function — understand dependencies before modifying. Name matching is case-insensitive and supports short names (e.g. 'embed_batch' matches 'ElixirNexus.EmbeddingModel.embed_batch'). Returns resolved entities (file_path, start_line, entity_type) or unresolved names for external calls."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         entity_name: %{type: "string", description: "Name of the function to find callees for"},
         limit: %{type: "integer", description: "Maximum number of results (default: 20)"}
       },
       required: ["entity_name"]
-    }
+    })
   end
 
   deftool "analyze_impact" do
     meta do
-      name "analyze_impact"
-      description "Transitive blast radius — walks callers-of-callers up to `depth` levels to find everything affected by a change. Use BEFORE modifying a function to understand what could break (Grep only finds direct references). Returns {root, depth, total_affected, affected_files, impact_tree}."
+      name("analyze_impact")
+
+      description(
+        "Transitive blast radius — walks callers-of-callers up to `depth` levels to find everything affected by a change. Use BEFORE modifying a function to understand what could break (Grep only finds direct references). Returns {root, depth, total_affected, affected_files, impact_tree}."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         entity_name: %{type: "string", description: "Name of the function to analyze impact for"},
         depth: %{type: "integer", description: "How many levels of transitive callers to traverse (default: 3)"}
       },
       required: ["entity_name"]
-    }
+    })
   end
 
   deftool "get_community_context" do
     meta do
-      name "get_community_context"
-      description "Find files structurally coupled to a given file via call-graph edges. Use to discover which files should be reviewed together or to understand a file's architectural role. Returns {file, coupled_files} sorted by coupling strength with connection details."
+      name("get_community_context")
+
+      description(
+        "Find files structurally coupled to a given file via call-graph edges. Use to discover which files should be reviewed together or to understand a file's architectural role. Returns {file, coupled_files} sorted by coupling strength with connection details."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         file_path: %{type: "string", description: "Path to the file to find coupled files for"},
         limit: %{type: "integer", description: "Maximum number of coupled files to return (default: 10)"}
       },
       required: ["file_path"]
-    }
+    })
   end
 
   deftool "find_all_callers" do
     meta do
-      name "find_all_callers"
-      description "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. Returns caller entities with file_path, entity_type, start_line."
+      name("find_all_callers")
+
+      description(
+        "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. Returns caller entities with file_path, entity_type, start_line."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         entity_name: %{type: "string", description: "Name of the function to find callers for"},
         limit: %{type: "integer", description: "Maximum number of results (default: 20)"}
       },
       required: ["entity_name"]
-    }
+    })
   end
 
   deftool "get_graph_stats" do
     meta do
-      name "get_graph_stats"
-      description "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, and top connected modules. No arguments needed."
+      name("get_graph_stats")
+
+      description(
+        "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, and top connected modules. No arguments needed."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{},
       required: []
-    }
+    })
   end
 
   deftool "find_module_hierarchy" do
     meta do
-      name "find_module_hierarchy"
-      description "Find a module's parents (uses/implements) and children (contained functions). Use to understand API surface and behavioural contracts (e.g. 'what callbacks does this GenServer implement?'). Returns {name, file_path, parents, children} with resolution status."
+      name("find_module_hierarchy")
+
+      description(
+        "Find a module's parents (uses/implements) and children (contained functions). Use to understand API surface and behavioural contracts (e.g. 'what callbacks does this GenServer implement?'). Returns {name, file_path, parents, children} with resolution status."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
         entity_name: %{type: "string", description: "Name of the module to find hierarchy for"}
       },
       required: ["entity_name"]
-    }
+    })
   end
 
   deftool "find_dead_code" do
     meta do
-      name "find_dead_code"
-      description "Find exported functions/methods with zero callers — proactively flag unused code. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
+      name("find_dead_code")
+
+      description(
+        "Find exported functions/methods with zero callers — proactively flag unused code. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
-        path_prefix: %{type: "string", description: "Optional file path prefix to scope the search (e.g. '/workspace/myproject/src')"}
+        path_prefix: %{
+          type: "string",
+          description: "Optional file path prefix to scope the search (e.g. '/workspace/myproject/src')"
+        }
       },
       required: []
-    }
+    })
   end
 
   deftool "reindex" do
     meta do
-      name "reindex"
-      description "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Auto-detects source dirs (lib/, src/, app/, components/, etc.). Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java. Returns {indexed_files, total_chunks}. On failure, lists available workspace projects."
+      name("reindex")
+
+      description(
+        "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Auto-detects source dirs (lib/, src/, app/, components/, etc.). Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java. Returns {indexed_files, total_chunks}. On failure, lists available workspace projects."
+      )
     end
 
-    input_schema %{
+    input_schema(%{
       type: "object",
       properties: %{
-        path: %{type: "string", description: "Project to index. Accepts: bare project name (e.g. 'claude-vision' resolves to /workspace/claude-vision), full host path (e.g. '/Users/you/Documents/project' auto-translated to container path), or container path. Omit to index /app (the CodeNexus repo itself)."}
+        path: %{
+          type: "string",
+          description:
+            "Project to index. Accepts: bare project name (e.g. 'claude-vision' resolves to /workspace/claude-vision), full host path (e.g. '/Users/you/Documents/project' auto-translated to container path), or container path. Omit to index /app (the CodeNexus repo itself)."
+        }
       },
       required: []
-    }
+    })
   end
 
   # Tool call handlers
@@ -224,8 +259,9 @@ defmodule ElixirNexus.MCPServer do
         dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(index_root)
 
         if dirs == [] do
-          {:error, "No indexable source directories found at '#{display_path}'." <>
-            workspace_hint(), state}
+          {:error,
+           "No indexable source directories found at '#{display_path}'." <>
+             workspace_hint(), state}
         else
           ensure_collection_for_project(index_root)
           Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
@@ -235,6 +271,7 @@ defmodule ElixirNexus.MCPServer do
               # File watching is best-effort — don't crash if it fails (e.g. in Docker without inotify)
               try do
                 ElixirNexus.FileWatcher.unwatch_all()
+
                 Enum.each(dirs, fn dir ->
                   case ElixirNexus.FileWatcher.watch_directory(dir) do
                     {:ok, _pid} -> :ok
@@ -251,6 +288,7 @@ defmodule ElixirNexus.MCPServer do
                 directories: dirs,
                 project_path: display_path
               }
+
               json_reply(result, Map.put(state, :indexed_dirs, dirs))
 
             {:error, reason} ->
@@ -312,6 +350,7 @@ defmodule ElixirNexus.MCPServer do
 
   def handle_tool_call("get_graph_stats", _args, state) do
     {_reindexed, state} = maybe_reindex_dirty(state)
+
     case ElixirNexus.Search.get_graph_stats() do
       {:ok, stats} -> json_reply(stats, state)
       {:error, reason} -> {:error, "Graph stats failed: #{inspect(reason)}", state}
@@ -320,10 +359,12 @@ defmodule ElixirNexus.MCPServer do
 
   def handle_tool_call("find_dead_code", args, state) do
     {_reindexed, state} = maybe_reindex_dirty(state)
-    opts = case Map.get(args, "path_prefix") do
-      nil -> []
-      prefix -> [path_prefix: prefix]
-    end
+
+    opts =
+      case Map.get(args, "path_prefix") do
+        nil -> []
+        prefix -> [path_prefix: prefix]
+      end
 
     case ElixirNexus.Search.find_dead_code(opts) do
       {:ok, result} -> json_reply(result, state)
@@ -333,6 +374,7 @@ defmodule ElixirNexus.MCPServer do
 
   def handle_tool_call("find_module_hierarchy", %{"entity_name" => name}, state) do
     {_reindexed, state} = maybe_reindex_dirty(state)
+
     case ElixirNexus.Search.find_module_hierarchy(name) do
       {:ok, result} -> json_reply(result, state)
       {:error, :not_found} -> {:error, "Module not found: #{name}", state}
@@ -411,7 +453,9 @@ defmodule ElixirNexus.MCPServer do
 
   defp find_project_root(path) do
     basename = Path.basename(path)
-    source_dirs = ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views)
+
+    source_dirs =
+      ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views)
 
     if basename in source_dirs and File.dir?(path) do
       Path.dirname(path)
@@ -504,6 +548,7 @@ defmodule ElixirNexus.MCPServer do
     case Jason.encode(data) do
       {:ok, json} ->
         {:ok, %{content: [%{type: "text", text: json}]}, state}
+
       {:error, reason} ->
         {:error, "Failed to serialize result: #{inspect(reason)}", state}
     end
@@ -517,6 +562,7 @@ defmodule ElixirNexus.MCPServer do
 
   defp compact_result(%{entity: entity} = result) when is_map(entity) do
     compact_entity = compact_entity(entity)
+
     result
     |> Map.put(:entity, compact_entity)
     |> Map.drop([:vector_score, :keyword_score])
@@ -528,12 +574,14 @@ defmodule ElixirNexus.MCPServer do
 
   # MCP args come as strings from JSON — coerce to integer for numeric params
   defp to_int(val, _default) when is_integer(val), do: val
+
   defp to_int(val, default) when is_binary(val) do
     case Integer.parse(val) do
       {n, _} -> n
       :error -> default
     end
   end
+
   defp to_int(_, default), do: default
 
   defp compact_entity(entity) when is_map(entity) do

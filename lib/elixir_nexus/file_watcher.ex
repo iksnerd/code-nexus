@@ -41,6 +41,7 @@ defmodule ElixirNexus.FileWatcher do
       Logger.info("Unwatching directory: #{path}")
       Process.exit(pid, :normal)
     end)
+
     {:reply, :ok, %{state | watchers: %{}, pending: %{}}}
   end
 
@@ -67,11 +68,13 @@ defmodule ElixirNexus.FileWatcher do
       if file_deleted?(events, path) do
         # File was deleted — clean up immediately (no debounce needed)
         Logger.info("File deleted, removing from index: #{path}")
+
         try do
           ElixirNexus.Indexer.delete_file(path)
         rescue
           e -> Logger.warning("Failed to delete #{path} from index: #{inspect(e)}")
         end
+
         {:noreply, %{state | pending: Map.delete(state.pending, path)}}
       else
         # Debounce: schedule flush, replacing any pending timer for same path

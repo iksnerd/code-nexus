@@ -55,7 +55,9 @@ defmodule ElixirNexus.Indexer do
       {:error, :timeout}
     else
       case status().status do
-        :idle -> :ok
+        :idle ->
+          :ok
+
         _ ->
           Process.sleep(100)
           do_await_idle(deadline)
@@ -109,7 +111,15 @@ defmodule ElixirNexus.Indexer do
     ChunkCache.clear()
     GraphCache.clear()
 
-    clean_state = %{state | indexed_files: MapSet.new(), total_chunks: 0, errors: [], pending_reply: nil, pending_file_count: 0, acked_file_count: 0}
+    clean_state = %{
+      state
+      | indexed_files: MapSet.new(),
+        total_chunks: 0,
+        errors: [],
+        pending_reply: nil,
+        pending_file_count: 0,
+        acked_file_count: 0
+    }
 
     case collect_files(path) do
       {:ok, files} when files != [] ->
@@ -117,13 +127,15 @@ defmodule ElixirNexus.Indexer do
         ElixirNexus.IndexingProducer.push(files)
 
         # Track completion: wait for acks from pipeline batchers
-        {:noreply, %{clean_state |
-          status: :indexing,
-          indexed_files: MapSet.new(files),
-          pending_reply: from,
-          pending_file_count: length(files),
-          acked_file_count: 0
-        }}
+        {:noreply,
+         %{
+           clean_state
+           | status: :indexing,
+             indexed_files: MapSet.new(files),
+             pending_reply: from,
+             pending_file_count: length(files),
+             acked_file_count: 0
+         }}
 
       {:ok, []} ->
         {:reply, {:ok, %{indexed_files: 0, total_chunks: 0}}, clean_state}
@@ -150,7 +162,15 @@ defmodule ElixirNexus.Indexer do
     ChunkCache.clear()
     GraphCache.clear()
 
-    clean_state = %{state | indexed_files: MapSet.new(), total_chunks: 0, errors: [], pending_reply: nil, pending_file_count: 0, acked_file_count: 0}
+    clean_state = %{
+      state
+      | indexed_files: MapSet.new(),
+        total_chunks: 0,
+        errors: [],
+        pending_reply: nil,
+        pending_file_count: 0,
+        acked_file_count: 0
+    }
 
     all_files =
       paths
@@ -169,13 +189,15 @@ defmodule ElixirNexus.Indexer do
       files ->
         ElixirNexus.IndexingProducer.push(files)
 
-        {:noreply, %{clean_state |
-          status: :indexing,
-          indexed_files: MapSet.new(files),
-          pending_reply: from,
-          pending_file_count: length(files),
-          acked_file_count: 0
-        }}
+        {:noreply,
+         %{
+           clean_state
+           | status: :indexing,
+             indexed_files: MapSet.new(files),
+             pending_reply: from,
+             pending_file_count: length(files),
+             acked_file_count: 0
+         }}
     end
   end
 
@@ -185,28 +207,29 @@ defmodule ElixirNexus.Indexer do
         Logger.info("Indexing file: #{file_path}")
         result = IndexingHelpers.process_file(file_path)
 
-        new_state = case result do
-          {:ok, chunks} ->
-            # Embed and store synchronously (fast path for single file)
-            IndexingHelpers.embed_and_store(chunks)
+        new_state =
+          case result do
+            {:ok, chunks} ->
+              # Embed and store synchronously (fast path for single file)
+              IndexingHelpers.embed_and_store(chunks)
 
-            # Update ETS caches
-            ChunkCache.delete_by_file(file_path)
-            ChunkCache.insert_many(chunks)
-            GraphCache.update_file(file_path, chunks)
+              # Update ETS caches
+              ChunkCache.delete_by_file(file_path)
+              ChunkCache.insert_many(chunks)
+              GraphCache.update_file(file_path, chunks)
 
-            # Broadcast file reindex event
-            Events.broadcast_file_reindexed(file_path)
+              # Broadcast file reindex event
+              Events.broadcast_file_reindexed(file_path)
 
-            %{
-              state
-              | indexed_files: MapSet.put(state.indexed_files, file_path),
-                total_chunks: state.total_chunks + length(chunks)
-            }
+              %{
+                state
+                | indexed_files: MapSet.put(state.indexed_files, file_path),
+                  total_chunks: state.total_chunks + length(chunks)
+              }
 
-          {:error, _} ->
-            %{state | indexed_files: MapSet.put(state.indexed_files, file_path)}
-        end
+            {:error, _} ->
+              %{state | indexed_files: MapSet.put(state.indexed_files, file_path)}
+          end
 
         {:reply, result, new_state}
 
@@ -235,11 +258,12 @@ defmodule ElixirNexus.Indexer do
   end
 
   def handle_call(:status, _from, state) do
-    chunk_count = try do
-      ChunkCache.count()
-    rescue
-      _ -> state.total_chunks
-    end
+    chunk_count =
+      try do
+        ChunkCache.count()
+      rescue
+        _ -> state.total_chunks
+      end
 
     {:reply,
      %{
@@ -282,6 +306,7 @@ defmodule ElixirNexus.Indexer do
 
     # Rebuild graph cache asynchronously to avoid blocking the Indexer GenServer
     all_chunks = ChunkCache.all()
+
     Task.start(fn ->
       try do
         GraphCache.rebuild_from_chunks(all_chunks)
@@ -294,12 +319,7 @@ defmodule ElixirNexus.Indexer do
     # Broadcast completion
     Events.broadcast_indexing_complete(%{files: file_count, chunks: chunk_count})
 
-    new_state = %{state |
-      total_chunks: chunk_count,
-      status: :idle,
-      pending_file_count: 0,
-      acked_file_count: 0
-    }
+    new_state = %{state | total_chunks: chunk_count, status: :idle, pending_file_count: 0, acked_file_count: 0}
 
     # Reply to the waiting caller if there is one
     case new_state.pending_reply do

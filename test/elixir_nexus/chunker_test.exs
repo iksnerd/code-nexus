@@ -43,7 +43,7 @@ defmodule ElixirNexus.ChunkerTest do
         |> Kernel.-(1)
 
       assert name_count >= 3,
-        "Expected name 'process_data' at least 3 times, found #{name_count}"
+             "Expected name 'process_data' at least 3 times, found #{name_count}"
     end
 
     test "includes parameters and calls" do

@@ -41,6 +41,7 @@ defmodule ElixirNexus.ProjectSwitcher do
         chunks =
           Enum.map(points, fn p ->
             payload = p["payload"] || %{}
+
             %{
               id: to_string(p["id"]),
               entity_type: safe_to_atom(payload["entity_type"], :function),
@@ -70,6 +71,7 @@ defmodule ElixirNexus.ProjectSwitcher do
   end
 
   defp safe_to_atom(nil, default), do: default
+
   defp safe_to_atom(str, default) when is_binary(str) do
     String.to_existing_atom(str)
   rescue
@@ -80,7 +82,7 @@ defmodule ElixirNexus.ProjectSwitcher do
   defp scroll_all(page_size, offset, acc) do
     case QdrantClient.scroll_points(page_size, offset) do
       {:ok, %{"result" => %{"points" => points, "next_page_offset" => next}}}
-          when is_list(points) and points != [] ->
+      when is_list(points) and points != [] ->
         new_acc = Enum.reverse(points) ++ acc
         if next, do: scroll_all(page_size, next, new_acc), else: {:ok, Enum.reverse(new_acc)}
 

@@ -23,9 +23,10 @@ defmodule ElixirNexus.SearchLive.IndexTest do
       {:ok, view, _html} = live(conn, "/search")
 
       # Submit a search
-      result = view
-      |> element("form[phx-submit=search]")
-      |> render_submit(%{"query" => "test_func"})
+      result =
+        view
+        |> element("form[phx-submit=search]")
+        |> render_submit(%{"query" => "test_func"})
 
       # Should trigger a patch (redirect within LiveView)
       assert_patch(view, "/search?query=test_func")
@@ -52,9 +53,10 @@ defmodule ElixirNexus.SearchLive.IndexTest do
     test "empty query submit does nothing", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/search")
 
-      html = view
-      |> element("form[phx-submit=search]")
-      |> render_submit(%{"query" => ""})
+      html =
+        view
+        |> element("form[phx-submit=search]")
+        |> render_submit(%{"query" => ""})
 
       # Should still show empty state
       assert html =~ "Enter a query to search"

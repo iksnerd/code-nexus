@@ -26,9 +26,10 @@ defmodule ElixirNexus.RelationshipGraph do
         "calls" => payload["calls"] || [],
         "is_a" => payload["is_a"] || [],
         "contains" => payload["contains"] || [],
-        "outgoing_degree" => length(payload["calls"] || []) +
-                             length(payload["is_a"] || []) +
-                             length(payload["contains"] || []),
+        "outgoing_degree" =>
+          length(payload["calls"] || []) +
+            length(payload["is_a"] || []) +
+            length(payload["contains"] || []),
         "incoming_count" => 0
       }
 
@@ -47,6 +48,7 @@ defmodule ElixirNexus.RelationshipGraph do
     |> Enum.filter(fn {_id, node} ->
       Enum.any?(node["calls"] || [], fn call ->
         call_lower = String.downcase(call)
+
         call_lower == name_lower or
           String.ends_with?(call_lower, "." <> name_lower) or
           String.ends_with?(name_lower, "." <> call_lower)
@@ -59,8 +61,11 @@ defmodule ElixirNexus.RelationshipGraph do
   """
   def find_callees(entity_name, graph) when is_map(graph) do
     name_index = build_name_index(graph)
+
     case find_node_by_name_indexed(entity_name, name_index, graph) do
-      nil -> []
+      nil ->
+        []
+
       node ->
         (node["calls"] || [])
         |> Enum.map(&resolve_ref_indexed(&1, name_index))
@@ -73,8 +78,11 @@ defmodule ElixirNexus.RelationshipGraph do
   """
   def find_parents(entity_name, graph) when is_map(graph) do
     name_index = build_name_index(graph)
+
     case find_node_by_name_indexed(entity_name, name_index, graph) do
-      nil -> []
+      nil ->
+        []
+
       node ->
         (node["is_a"] || [])
         |> Enum.map(&resolve_ref_indexed(&1, name_index))
@@ -87,8 +95,11 @@ defmodule ElixirNexus.RelationshipGraph do
   """
   def find_children(entity_name, graph) when is_map(graph) do
     name_index = build_name_index(graph)
+
     case find_node_by_name_indexed(entity_name, name_index, graph) do
-      nil -> []
+      nil ->
+        []
+
       node ->
         (node["contains"] || [])
         |> Enum.map(&resolve_ref_indexed(&1, name_index))
@@ -174,9 +185,12 @@ defmodule ElixirNexus.RelationshipGraph do
     Enum.reduce(graph, graph, fn {_id, node}, acc ->
       Enum.reduce(node["calls"] ++ node["is_a"] ++ node["contains"], acc, fn ref, inner_acc ->
         case resolve_ref_indexed(ref, name_index) do
-          nil -> inner_acc
+          nil ->
+            inner_acc
+
           target_id ->
             target = Map.get(inner_acc, target_id)
+
             if target do
               updated = %{target | "incoming_count" => (target["incoming_count"] || 0) + 1}
               Map.put(inner_acc, target_id, updated)
@@ -199,6 +213,7 @@ defmodule ElixirNexus.RelationshipGraph do
   # Resolve a reference using the precomputed index — exact match first, then partial
   defp resolve_ref_indexed(ref, name_index) do
     ref_lower = String.downcase(ref || "")
+
     if ref_lower == "" do
       nil
     else
@@ -209,7 +224,9 @@ defmodule ElixirNexus.RelationshipGraph do
           Enum.find_value(name_index, fn {name, id} ->
             if String.contains?(ref_lower, name) or String.contains?(name, ref_lower), do: id
           end)
-        id -> id
+
+        id ->
+          id
       end
     end
   end
@@ -225,12 +242,15 @@ defmodule ElixirNexus.RelationshipGraph do
         node ->
           name_index = build_name_index(graph)
           direct_refs = node["calls"] ++ node["is_a"] ++ node["contains"]
-          matched = Enum.count(direct_refs, fn ref ->
-            case resolve_ref_indexed(ref, name_index) do
-              nil -> false
-              node_id -> MapSet.member?(seed_set, node_id)
-            end
-          end)
+
+          matched =
+            Enum.count(direct_refs, fn ref ->
+              case resolve_ref_indexed(ref, name_index) do
+                nil -> false
+                node_id -> MapSet.member?(seed_set, node_id)
+              end
+            end)
+
           incoming = node["incoming_count"] || 0
           matched * 5.0 + incoming * 2.0
       end

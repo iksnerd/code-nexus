@@ -35,20 +35,22 @@ defmodule ElixirNexus.Parsers.GoExtractor do
       if package_name || imports != [] do
         module_name = package_name || Path.basename(file_path, ".go")
 
-        [%CodeSchema{
-          file_path: file_path,
-          entity_type: :module,
-          name: module_name,
-          content: "",
-          start_line: 1,
-          end_line: 1,
-          parameters: [],
-          visibility: :public,
-          calls: extract_imported_package_names(ast),
-          is_a: imports,
-          contains: exported_names,
-          language: :go
-        }]
+        [
+          %CodeSchema{
+            file_path: file_path,
+            entity_type: :module,
+            name: module_name,
+            content: "",
+            start_line: 1,
+            end_line: 1,
+            parameters: [],
+            visibility: :public,
+            calls: extract_imported_package_names(ast),
+            is_a: imports,
+            contains: exported_names,
+            language: :go
+          }
+        ]
       else
         []
       end
@@ -59,12 +61,13 @@ defmodule ElixirNexus.Parsers.GoExtractor do
   # --- AST walking ---
 
   defp walk_ast(%{"kind" => kind, "children" => children} = node, acc) do
-    acc = case kind do
-      "function_declaration" -> [node | acc]
-      "method_declaration" -> [node | acc]
-      "type_declaration" -> collect_type_specs(node, acc)
-      _ -> acc
-    end
+    acc =
+      case kind do
+        "function_declaration" -> [node | acc]
+        "method_declaration" -> [node | acc]
+        "type_declaration" -> collect_type_specs(node, acc)
+        _ -> acc
+      end
 
     # Don't recurse into type_declaration children (already handled)
     if kind == "type_declaration" do
@@ -90,6 +93,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.filter(&(&1["kind"] == "type_spec"))
     |> Enum.reduce(acc, fn spec, inner_acc -> [spec | inner_acc] end)
   end
+
   defp collect_type_specs(_, acc), do: acc
 
   # --- Schema conversion ---
@@ -138,10 +142,11 @@ defmodule ElixirNexus.Parsers.GoExtractor do
   defp build_entity(file_path, entity_type, name, node, source, start_line, end_line) do
     if name do
       # For methods, visibility is based on the method name (after the dot)
-      vis_name = case entity_type do
-        :method -> name |> String.split(".") |> List.last()
-        _ -> name
-      end
+      vis_name =
+        case entity_type do
+          :method -> name |> String.split(".") |> List.last()
+          _ -> name
+        end
 
       %CodeSchema{
         file_path: file_path,
@@ -165,6 +170,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
   # Extract function name from function_declaration node.
   # Try top-level "name" field first, then look for identifier child.
   defp extract_function_name(%{"name" => name}) when is_binary(name) and name != "", do: name
+
   defp extract_function_name(%{"children" => children}) do
     children
     |> Enum.find(&(&1["kind"] == "identifier"))
@@ -174,6 +180,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
       _ -> nil
     end
   end
+
   defp extract_function_name(_), do: nil
 
   # Extract receiver type and method name from method_declaration.
@@ -184,6 +191,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     method_name = extract_method_name(children)
     {receiver_type, method_name}
   end
+
   defp extract_method_info(_), do: {nil, nil}
 
   defp extract_receiver_type(children) do
@@ -193,6 +201,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> case do
       %{"children" => receiver_children} ->
         find_receiver_type_name(receiver_children)
+
       _ ->
         nil
     end
@@ -230,6 +239,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
       end
     end)
   end
+
   defp find_type_identifier_in(_), do: []
 
   defp extract_method_name(children) do
@@ -244,6 +254,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
 
   # Extract name from type_spec node
   defp extract_type_spec_name(%{"name" => name}) when is_binary(name) and name != "", do: name
+
   defp extract_type_spec_name(%{"children" => children}) do
     children
     |> Enum.find(&(&1["kind"] == "type_identifier"))
@@ -253,6 +264,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
       _ -> nil
     end
   end
+
   defp extract_type_spec_name(_), do: nil
 
   # Classify type_spec as struct, interface, or generic type
@@ -270,6 +282,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
         {:struct, []}
     end
   end
+
   defp classify_type_spec(_), do: {:struct, []}
 
   defp extract_struct_fields(%{"children" => children}) do
@@ -282,6 +295,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_struct_fields(_), do: []
 
   defp extract_interface_methods(%{"children" => children}) do
@@ -289,16 +303,21 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.filter(&(&1["kind"] in ["method_spec", "method_elem"]))
     |> Enum.flat_map(fn method ->
       case method do
-        %{"name" => name} when is_binary(name) -> [name]
+        %{"name" => name} when is_binary(name) ->
+          [name]
+
         %{"children" => method_children} ->
           method_children
           |> Enum.filter(&(&1["kind"] == "field_identifier"))
           |> Enum.map(&(&1["text"] || &1["name"] || ""))
-        _ -> []
+
+        _ ->
+          []
       end
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_interface_methods(_), do: []
 
   # --- Parameter extraction ---
@@ -311,12 +330,14 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.take(1)
     |> Enum.flat_map(&extract_param_identifiers/1)
   end
+
   defp extract_params(%{"children" => children}) do
     children
     |> Enum.filter(&(&1["kind"] == "parameter_list"))
     |> Enum.take(1)
     |> Enum.flat_map(&extract_param_identifiers/1)
   end
+
   defp extract_params(_), do: []
 
   defp extract_param_identifiers(%{"children" => children}) do
@@ -329,6 +350,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_param_identifiers(_), do: []
 
   # --- Call extraction ---
@@ -339,6 +361,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
   end
+
   defp extract_calls(_), do: []
 
   # call_expression with a top-level name (unlikely in Go tree-sitter, but handle it)
@@ -420,6 +443,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.filter(&(&1["kind"] == "call_expression"))
     |> Enum.flat_map(&find_calls/1)
   end
+
   defp find_calls_in_callee(%{"kind" => "call_expression"} = node), do: find_calls(node)
   defp find_calls_in_callee(_), do: []
 
@@ -454,6 +478,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_import_paths(_), do: []
 
   defp extract_import_spec_path(%{"children" => children}) do
@@ -465,6 +490,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     end)
     |> Enum.reject(&(&1 == ""))
   end
+
   defp extract_import_spec_path(%{"text" => text}) when is_binary(text), do: [clean_string(text)]
   defp extract_import_spec_path(_), do: []
 
@@ -502,6 +528,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     |> Enum.slice((start_line - 1)..(end_line - 1))
     |> Enum.join("\n")
   end
+
   defp extract_content(_, _, _), do: ""
 
   defp clean_string(text), do: text |> String.trim("\"") |> String.trim("'")
@@ -509,23 +536,29 @@ defmodule ElixirNexus.Parsers.GoExtractor do
   # In Go, exported identifiers start with an uppercase letter.
   # For dotted names like "Server.Handle", check the part after the dot.
   defp go_visibility(name) when is_binary(name) do
-    check_name = case String.split(name, ".") do
-      [_receiver, method] -> method
-      _ -> name
-    end
+    check_name =
+      case String.split(name, ".") do
+        [_receiver, method] -> method
+        _ -> name
+      end
 
     case String.first(check_name) do
-      nil -> :private
-      first -> if first == String.upcase(first) and first != String.downcase(first),
-                 do: :public,
-                 else: :private
+      nil ->
+        :private
+
+      first ->
+        if first == String.upcase(first) and first != String.downcase(first),
+          do: :public,
+          else: :private
     end
   end
+
   defp go_visibility(_), do: :private
 
   defp exported?(name) when is_binary(name) do
     go_visibility(name) == :public
   end
+
   defp exported?(_), do: false
 
   # --- AST helpers ---
@@ -534,8 +567,10 @@ defmodule ElixirNexus.Parsers.GoExtractor do
     current = if kind == target_kind, do: [node], else: []
     current ++ Enum.flat_map(children, &find_nodes(&1, target_kind))
   end
+
   defp find_nodes(%{"kind" => kind} = node, target_kind) do
     if kind == target_kind, do: [node], else: []
   end
+
   defp find_nodes(_, _), do: []
 end

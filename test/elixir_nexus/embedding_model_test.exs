@@ -9,24 +9,22 @@ defmodule ElixirNexus.EmbeddingModelTest do
   end
 
   describe "embed/1" do
-    test "returns 384-dim vector when model available" do
+    test "returns 768-dim vector when Ollama available" do
       case ElixirNexus.EmbeddingModel.embed("test embedding") do
         {:ok, embedding} ->
           assert is_list(embedding)
-          assert length(embedding) == 384
-          # Should not be all zeros if model is loaded
-          if ElixirNexus.EmbeddingModel.available?() do
-            refute Enum.all?(embedding, &(&1 == 0.0)),
-              "Model available but returned zero vector"
-          end
+          assert length(embedding) == 768
 
-        {:error, :model_unavailable} ->
-          refute ElixirNexus.EmbeddingModel.available?()
+          refute Enum.all?(embedding, &(&1 == 0.0)),
+                 "Ollama returned zero vector"
+
+        {:error, _reason} ->
+          # Ollama not running — acceptable in CI
+          assert true
       end
     end
 
-    test "returns error when model unavailable and serving not started" do
-      # If model is unavailable, should get clean error
+    test "returns error tuple on failure" do
       result = ElixirNexus.EmbeddingModel.embed("test")
       assert match?({:ok, _}, result) or match?({:error, _}, result)
     end
@@ -38,9 +36,9 @@ defmodule ElixirNexus.EmbeddingModelTest do
         {:ok, embeddings} ->
           assert is_list(embeddings)
           assert length(embeddings) == 2
-          assert Enum.all?(embeddings, &(is_list(&1) and length(&1) == 384))
+          assert Enum.all?(embeddings, &(is_list(&1) and length(&1) == 768))
 
-        {:error, :model_unavailable} ->
+        {:error, _reason} ->
           assert true
       end
     end

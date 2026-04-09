@@ -1,19 +1,19 @@
 defmodule Mix.Tasks.McpHttp do
   @moduledoc """
-  Starts the ElixirNexus MCP server with HTTP/SSE transport.
+  Starts the ElixirNexus MCP server with Streamable HTTP transport.
 
   ## Usage
 
       mix mcp_http
       mix mcp_http --port 3001
 
-  This starts the MCP server listening on HTTP for SSE connections,
+  This starts the MCP server listening on Streamable HTTP (POST-based JSON-RPC),
   suitable for Docker deployments where stdio transport is not available.
   """
 
   use Mix.Task
 
-  @shortdoc "Start MCP server over HTTP/SSE"
+  @shortdoc "Start MCP server over Streamable HTTP"
 
   @impl true
   def run(args) do
@@ -24,7 +24,7 @@ defmodule Mix.Tasks.McpHttp do
 
     Application.ensure_all_started(:elixir_nexus)
 
-    {:ok, _pid} = ElixirNexus.MCPServer.start_link(transport: :sse, port: port, host: "0.0.0.0")
+    {:ok, _pid} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0")
 
     IO.puts("MCP HTTP server listening on port #{port}")
 
