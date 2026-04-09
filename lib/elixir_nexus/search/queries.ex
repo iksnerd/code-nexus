@@ -475,8 +475,6 @@ defmodule ElixirNexus.Search.Queries do
         ElixirNexus.ChunkCache.all()
       rescue
         _ -> []
-      catch
-        :error, _ -> []
       end
 
     if is_list(chunks) and chunks != [] do
