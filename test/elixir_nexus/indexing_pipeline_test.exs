@@ -18,7 +18,7 @@ defmodule ElixirNexus.IndexingPipelineTest do
 
     test "ignores opts parameter" do
       msg1 = IndexingPipeline.transform("file.ex", [])
-      msg2 = IndexingPipeline.transform("file.ex", [some: :option])
+      msg2 = IndexingPipeline.transform("file.ex", some: :option)
       assert msg1.data == msg2.data
       assert msg1.acknowledger == msg2.acknowledger
     end

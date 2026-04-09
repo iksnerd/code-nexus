@@ -139,6 +139,7 @@ defmodule ElixirNexus.MultiProjectTest do
   describe "end-to-end smart detection" do
     test "detect + index works for Elixir project layout", %{base: base} do
       File.mkdir_p!(Path.join(base, "lib"))
+
       File.write!(Path.join(base, "lib/server.ex"), """
       defmodule Server do
         use GenServer

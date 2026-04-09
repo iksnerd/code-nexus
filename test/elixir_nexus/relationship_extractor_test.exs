@@ -10,10 +10,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         helper_func()
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       calls = RelationshipExtractor.extract_calls(ast)
-      
+
       assert "helper_func" in calls
     end
 
@@ -25,10 +25,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         save_data()
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       calls = RelationshipExtractor.extract_calls(ast)
-      
+
       assert "fetch_data" in calls
       assert "transform_data" in calls
       assert "save_data" in calls
@@ -40,10 +40,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         Enum.map(list, &process/1)
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       calls = RelationshipExtractor.extract_calls(ast)
-      
+
       # Should contain some calls (exact names depend on AST structure)
       assert is_list(calls)
       assert length(calls) > 0
@@ -59,10 +59,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         end
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       calls = RelationshipExtractor.extract_calls(ast)
-      
+
       # Should not contain "if", "else", etc.
       assert "if" not in calls
     end
@@ -75,10 +75,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         helper()
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       calls = RelationshipExtractor.extract_calls(ast)
-      
+
       # Should have only one "helper" despite being called 3 times
       count = Enum.count(calls, &(&1 == "helper"))
       assert count == 1
@@ -92,10 +92,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         use GenServer
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       is_a = RelationshipExtractor.extract_is_a(ast)
-      
+
       assert "GenServer" in is_a
     end
 
@@ -106,10 +106,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         import String
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       is_a = RelationshipExtractor.extract_is_a(ast)
-      
+
       assert "Enum" in is_a
       assert "String" in is_a
     end
@@ -120,10 +120,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         require Logger
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       is_a = RelationshipExtractor.extract_is_a(ast)
-      
+
       assert "Logger" in is_a
     end
 
@@ -134,10 +134,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         use GenServer
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       is_a = RelationshipExtractor.extract_is_a(ast)
-      
+
       # Should have only one GenServer despite being used twice
       count = Enum.count(is_a, &(&1 == "GenServer"))
       assert count == 1
@@ -153,17 +153,17 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         defmacro my_macro, do: :ok
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
-      
+
       case ast do
         list when is_list(list) ->
           module_ast = Enum.find(list, &match?({:defmodule, _, _}, &1))
           contains = RelationshipExtractor.extract_contains(module_ast)
-          
+
           # Should extract contained functions when proper AST format
           assert is_list(contains)
-        
+
         single when is_tuple(single) ->
           contains = RelationshipExtractor.extract_contains(single)
           assert is_list(contains)
@@ -176,17 +176,17 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         defstruct [:name, :email]
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
-      
+
       case ast do
         list when is_list(list) ->
           module_ast = Enum.find(list, &match?({:defmodule, _, _}, &1))
           contains = RelationshipExtractor.extract_contains(module_ast)
-          
+
           # Should extract something from module
           assert is_list(contains)
-        
+
         single when is_tuple(single) ->
           contains = RelationshipExtractor.extract_contains(single)
           assert is_list(contains)
@@ -195,10 +195,10 @@ defmodule ElixirNexus.RelationshipExtractorTest do
 
     test "non-module returns empty" do
       code = "def standalone_func, do: :ok"
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
       contains = RelationshipExtractor.extract_contains(ast)
-      
+
       assert contains == []
     end
   end
@@ -218,26 +218,26 @@ defmodule ElixirNexus.RelationshipExtractorTest do
         end
       end
       """
-      
+
       {:ok, ast} = Sourceror.parse_string(code)
-      
+
       case ast do
         list when is_list(list) ->
           module_ast = Enum.find(list, &match?({:defmodule, _, _}, &1))
           relationships = RelationshipExtractor.extract(module_ast)
-          
+
           assert is_struct(relationships, RelationshipExtractor)
           assert is_list(relationships.calls)
           assert is_list(relationships.is_a)
           assert is_list(relationships.contains)
-          
+
           # Should contain expected relationships
           assert "GenServer" in relationships.is_a
           assert "process" in relationships.contains
-        
+
         single when is_tuple(single) ->
           relationships = RelationshipExtractor.extract(single)
-          
+
           assert is_struct(relationships, RelationshipExtractor)
           assert is_list(relationships.calls)
           assert is_list(relationships.is_a)

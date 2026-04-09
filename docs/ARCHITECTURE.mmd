@@ -2,7 +2,7 @@ graph TB
     subgraph Overview["ElixirNexus Architecture"]
         direction LR
         Index["Indexing<br/>Polyglot parsing<br/>Entity + relationship extraction<br/>Telemetry events"]
-        Embed["Embeddings<br/>Bumblebee (dense)<br/>TF-IDF (ETS IDF, sparse)"]
+        Embed["Embeddings<br/>Ollama nomic-embed-text (768-dim dense)<br/>TF-IDF (ETS IDF, sparse)"]
         Store["Storage<br/>Qdrant (source of truth)<br/>ETS (local cache, auto-sync)"]
         Search["Search<br/>Hybrid RRF fusion<br/>Name-indexed graph ranking"]
         API["API Layer<br/>MCP (8 tools, safe JSON)<br/>REST + LiveView (auto-sync)"]
@@ -17,7 +17,7 @@ graph TB
 
     subgraph Files["Architecture Diagrams"]
         F1["ARCHITECTURE_SYSTEM.mmd<br/>System overview + cross-BEAM sync"]
-        F2["ARCHITECTURE_EMBEDDINGS.mmd<br/>Bumblebee + TF-IDF ETS strategy"]
+        F2["ARCHITECTURE_EMBEDDINGS.mmd<br/>Ollama + TF-IDF ETS strategy"]
         F3["ARCHITECTURE_GRAPH.mmd<br/>Extraction + name-indexed queries"]
         F4["ARCHITECTURE_DATAFLOW.mmd<br/>Search sequence with telemetry"]
         F5["ARCHITECTURE_MODULES.mmd<br/>Module dependencies + supervision"]

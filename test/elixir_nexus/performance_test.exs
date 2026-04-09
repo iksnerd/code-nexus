@@ -18,8 +18,10 @@ defmodule ElixirNexus.PerformanceTest do
 
   defp assert_under(ms, fun) do
     {result, elapsed_ms} = measure(fun)
+
     assert elapsed_ms < ms,
-      "Expected < #{ms}ms, got #{Float.round(elapsed_ms, 2)}ms"
+           "Expected < #{ms}ms, got #{Float.round(elapsed_ms, 2)}ms"
+
     {result, elapsed_ms}
   end
 
@@ -47,6 +49,7 @@ defmodule ElixirNexus.PerformanceTest do
   defp generate_files(dir, n) do
     Enum.map(1..n, fn i ->
       path = Path.join(dir, "module_#{i}.ex")
+
       content = """
       defmodule TestMod#{i} do
         def hello_#{i}(x), do: x + #{i}
@@ -56,6 +59,7 @@ defmodule ElixirNexus.PerformanceTest do
         end
       end
       """
+
       File.write!(path, content)
       path
     end)
@@ -82,8 +86,17 @@ defmodule ElixirNexus.PerformanceTest do
     ensure_ets_table(:nexus_graph_cache)
 
     on_exit(fn ->
-      try do ChunkCache.clear() rescue _ -> :ok end
-      try do GraphCache.clear() rescue _ -> :ok end
+      try do
+        ChunkCache.clear()
+      rescue
+        _ -> :ok
+      end
+
+      try do
+        GraphCache.clear()
+      rescue
+        _ -> :ok
+      end
     end)
 
     temp_dir = Path.join(System.tmp_dir!(), "perf_test_#{:rand.uniform(1_000_000)}")
@@ -258,8 +271,9 @@ defmodule ElixirNexus.PerformanceTest do
         {:ok, stats} ->
           ets_count = ChunkCache.count()
           IO.puts("\n  pipeline stats: #{stats.total_chunks} chunks, ETS count: #{ets_count}")
+
           assert ets_count >= stats.total_chunks,
-            "ETS has #{ets_count} chunks but pipeline reported #{stats.total_chunks}"
+                 "ETS has #{ets_count} chunks but pipeline reported #{stats.total_chunks}"
 
         {:error, reason} ->
           IO.puts("\n  Skipped (external service unavailable): #{inspect(reason)}")
@@ -332,7 +346,7 @@ defmodule ElixirNexus.PerformanceTest do
     end
     """
 
-    test "Bumblebee single embed" do
+    test "Ollama single embed" do
       if ElixirNexus.EmbeddingModel.available?() do
         # Warm-up (first call may compile/JIT)
         ElixirNexus.EmbeddingModel.embed("warmup")
@@ -341,19 +355,19 @@ defmodule ElixirNexus.PerformanceTest do
 
         case result do
           {:ok, embedding} ->
-            IO.puts("\n  Bumblebee embed: #{Float.round(elapsed, 2)}ms, dims: #{length(embedding)}")
-            assert length(embedding) == 384
-            assert elapsed < 2_000, "Bumblebee single embed took #{Float.round(elapsed, 2)}ms (> 2s)"
+            IO.puts("\n  Ollama embed: #{Float.round(elapsed, 2)}ms, dims: #{length(embedding)}")
+            assert length(embedding) == 768
+            assert elapsed < 2_000, "Ollama single embed took #{Float.round(elapsed, 2)}ms (> 2s)"
 
           {:error, reason} ->
-            IO.puts("\n  Bumblebee embed error: #{inspect(reason)}")
+            IO.puts("\n  Ollama embed error: #{inspect(reason)}")
         end
       else
-        IO.puts("\n  Bumblebee model not available, skipping")
+        IO.puts("\n  Ollama model not available, skipping")
       end
     end
 
-    test "Bumblebee batch embed (10 texts)" do
+    test "Ollama batch embed (10 texts)" do
       if ElixirNexus.EmbeddingModel.available?() do
         texts = Enum.map(1..10, fn i -> "def function_#{i}(x), do: x * #{i}" end)
 
@@ -362,19 +376,19 @@ defmodule ElixirNexus.PerformanceTest do
         case result do
           {:ok, embeddings} ->
             per_text = Float.round(elapsed / length(embeddings), 2)
-            IO.puts("\n  Bumblebee batch(10): #{Float.round(elapsed, 2)}ms total, #{per_text}ms/text")
+            IO.puts("\n  Ollama batch(10): #{Float.round(elapsed, 2)}ms total, #{per_text}ms/text")
             assert length(embeddings) == 10
-            assert elapsed < 2_000, "Bumblebee batch(10) took #{Float.round(elapsed, 2)}ms (> 2s)"
+            assert elapsed < 2_000, "Ollama batch(10) took #{Float.round(elapsed, 2)}ms (> 2s)"
 
           {:error, reason} ->
-            IO.puts("\n  Bumblebee batch error: #{inspect(reason)}")
+            IO.puts("\n  Ollama batch error: #{inspect(reason)}")
         end
       else
-        IO.puts("\n  Bumblebee model not available, skipping")
+        IO.puts("\n  Ollama model not available, skipping")
       end
     end
 
-    test "Bumblebee batch embed (32 texts — max batch size)" do
+    test "Ollama batch embed (32 texts — max batch size)" do
       if ElixirNexus.EmbeddingModel.available?() do
         texts = Enum.map(1..32, fn i -> "def function_#{i}(x), do: Enum.map(1..x, &(&1 + #{i}))" end)
 
@@ -383,15 +397,15 @@ defmodule ElixirNexus.PerformanceTest do
         case result do
           {:ok, embeddings} ->
             per_text = Float.round(elapsed / length(embeddings), 2)
-            IO.puts("\n  Bumblebee batch(32): #{Float.round(elapsed, 2)}ms total, #{per_text}ms/text")
+            IO.puts("\n  Ollama batch(32): #{Float.round(elapsed, 2)}ms total, #{per_text}ms/text")
             assert length(embeddings) == 32
-            assert elapsed < 5_000, "Bumblebee batch(32) took #{Float.round(elapsed, 2)}ms (> 5s)"
+            assert elapsed < 5_000, "Ollama batch(32) took #{Float.round(elapsed, 2)}ms (> 5s)"
 
           {:error, reason} ->
-            IO.puts("\n  Bumblebee batch error: #{inspect(reason)}")
+            IO.puts("\n  Ollama batch error: #{inspect(reason)}")
         end
       else
-        IO.puts("\n  Bumblebee model not available, skipping")
+        IO.puts("\n  Ollama model not available, skipping")
       end
     end
 
@@ -401,7 +415,7 @@ defmodule ElixirNexus.PerformanceTest do
       case result do
         {:ok, embedding} ->
           IO.puts("\n  TF-IDF embed: #{Float.round(elapsed, 2)}ms, dims: #{length(embedding)}")
-          assert length(embedding) == 384
+          assert length(embedding) == 768
           assert elapsed < 10, "TF-IDF single embed took #{Float.round(elapsed, 2)}ms (> 10ms)"
 
         {:error, reason} ->
@@ -437,16 +451,17 @@ defmodule ElixirNexus.PerformanceTest do
     end
 
     test "TF-IDF vocabulary update (500 documents)" do
-      docs = Enum.map(1..500, fn i ->
-        "defmodule Mod#{i} do\n  def func_#{i}(x), do: Enum.map(x, &(&1 + #{i}))\nend"
-      end)
+      docs =
+        Enum.map(1..500, fn i ->
+          "defmodule Mod#{i} do\n  def func_#{i}(x), do: Enum.map(x, &(&1 + #{i}))\nend"
+        end)
 
       {_result, elapsed} = measure(fn -> ElixirNexus.TFIDFEmbedder.update_vocabulary(docs) end)
       IO.puts("\n  TF-IDF vocab update(500 docs): #{Float.round(elapsed, 2)}ms")
       assert elapsed < 500, "Vocab update took #{Float.round(elapsed, 2)}ms (> 500ms)"
     end
 
-    test "Bumblebee vs TF-IDF comparison" do
+    test "Ollama vs TF-IDF comparison" do
       bumblebee_time =
         if ElixirNexus.EmbeddingModel.available?() do
           {_, elapsed} = measure(fn -> ElixirNexus.EmbeddingModel.embed(@sample_code) end)
@@ -458,15 +473,18 @@ defmodule ElixirNexus.PerformanceTest do
       {_, tfidf_time} = measure(fn -> ElixirNexus.TFIDFEmbedder.embed(@sample_code) end)
 
       IO.puts("\n  --- Embedding comparison ---")
+
       if bumblebee_time do
-        IO.puts("  Bumblebee: #{Float.round(bumblebee_time, 2)}ms")
+        IO.puts("  Ollama: #{Float.round(bumblebee_time, 2)}ms")
       else
-        IO.puts("  Bumblebee: unavailable")
+        IO.puts("  Ollama: unavailable")
       end
+
       IO.puts("  TF-IDF:    #{Float.round(tfidf_time, 2)}ms")
+
       if bumblebee_time do
         ratio = Float.round(bumblebee_time / tfidf_time, 1)
-        IO.puts("  Ratio:     Bumblebee is #{ratio}x slower than TF-IDF")
+        IO.puts("  Ratio:     Ollama is #{ratio}x slower than TF-IDF")
       end
     end
   end
@@ -485,9 +503,10 @@ defmodule ElixirNexus.PerformanceTest do
     end
 
     test "analyze_impact with cached ETS data" do
-      {result, elapsed} = assert_under(200, fn ->
-        ElixirNexus.Search.analyze_impact("function_1")
-      end)
+      {result, elapsed} =
+        assert_under(200, fn ->
+          ElixirNexus.Search.analyze_impact("function_1")
+        end)
 
       case result do
         {:ok, impact} ->
@@ -499,9 +518,10 @@ defmodule ElixirNexus.PerformanceTest do
     end
 
     test "find_callees with cached ETS data" do
-      {result, elapsed} = assert_under(100, fn ->
-        ElixirNexus.Search.find_callees("function_1")
-      end)
+      {result, elapsed} =
+        assert_under(100, fn ->
+          ElixirNexus.Search.find_callees("function_1")
+        end)
 
       case result do
         {:ok, callees} ->
@@ -513,13 +533,16 @@ defmodule ElixirNexus.PerformanceTest do
     end
 
     test "get_community_context with cached ETS data" do
-      {result, elapsed} = assert_under(200, fn ->
-        ElixirNexus.Search.get_community_context("lib/mod_1.ex")
-      end)
+      {result, elapsed} =
+        assert_under(200, fn ->
+          ElixirNexus.Search.get_community_context("lib/mod_1.ex")
+        end)
 
       case result do
         {:ok, ctx} ->
-          IO.puts("\n  get_community_context: #{Float.round(elapsed, 2)}ms, coupled_files: #{length(ctx.coupled_files)}")
+          IO.puts(
+            "\n  get_community_context: #{Float.round(elapsed, 2)}ms, coupled_files: #{length(ctx.coupled_files)}"
+          )
 
         {:error, reason} ->
           IO.puts("\n  get_community_context: #{Float.round(elapsed, 2)}ms, error: #{inspect(reason)}")
@@ -535,14 +558,16 @@ defmodule ElixirNexus.PerformanceTest do
     test "subscribe + broadcast round-trip" do
       Events.subscribe_indexing()
 
-      {_result, elapsed} = measure(fn ->
-        Events.broadcast_indexing_progress(%{file: "test.ex", progress: 50})
-        receive do
-          {:indexing_progress, _data} -> :ok
-        after
-          1_000 -> flunk("No message received within 1s")
-        end
-      end)
+      {_result, elapsed} =
+        measure(fn ->
+          Events.broadcast_indexing_progress(%{file: "test.ex", progress: 50})
+
+          receive do
+            {:indexing_progress, _data} -> :ok
+          after
+            1_000 -> flunk("No message received within 1s")
+          end
+        end)
 
       IO.puts("\n  pubsub round-trip: #{Float.round(elapsed, 2)}ms")
       assert elapsed < 5, "PubSub round-trip took #{Float.round(elapsed, 2)}ms (> 5ms)"

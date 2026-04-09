@@ -24,23 +24,40 @@ defmodule ElixirNexus.IndexingHelpers do
   def polyglot_extensions, do: @polyglot_extensions
 
   @indexable_dirs [
-    "lib",              # Elixir/Ruby
-    "src",              # Next.js/TypeScript/Java/Go/Rust
-    "app",              # Next.js App Router / Rails
-    "pages",            # Next.js Pages Router
-    "components",       # React
-    "utils",            # Common JS/TS
-    "packages",         # Monorepo
-    "services",         # Service layer
-    "infrastructure",   # Infrastructure/adapters
-    "repositories",     # Data access layer
-    "core",             # Domain core
-    "hooks",            # React hooks / Git hooks
-    "api",              # API routes
-    "modules",          # Python/generic
-    "controllers",      # MVC controllers
-    "models",           # MVC models
-    "views",            # MVC views
+    # Elixir/Ruby
+    "lib",
+    # Next.js/TypeScript/Java/Go/Rust
+    "src",
+    # Next.js App Router / Rails
+    "app",
+    # Next.js Pages Router
+    "pages",
+    # React
+    "components",
+    # Common JS/TS
+    "utils",
+    # Monorepo
+    "packages",
+    # Service layer
+    "services",
+    # Infrastructure/adapters
+    "infrastructure",
+    # Data access layer
+    "repositories",
+    # Domain core
+    "core",
+    # React hooks / Git hooks
+    "hooks",
+    # API routes
+    "api",
+    # Python/generic
+    "modules",
+    # MVC controllers
+    "controllers",
+    # MVC models
+    "models",
+    # MVC views
+    "views"
   ]
 
   @doc "Detect indexable source directories under a base path. Falls back to base path itself."
@@ -67,6 +84,7 @@ defmodule ElixirNexus.IndexingHelpers do
 
       Map.has_key?(@polyglot_extensions, ext) ->
         language = Map.get(@polyglot_extensions, ext)
+
         case parse_with_tree_sitter(normalized_path, language) do
           {:ok, chunks} -> {:ok, chunks}
           {:error, _} -> {:ok, []}
@@ -146,6 +164,7 @@ defmodule ElixirNexus.IndexingHelpers do
         case ElixirNexus.QdrantClient.upsert_points(points) do
           {:ok, _} ->
             Logger.debug("Stored batch of #{length(points)} chunks")
+
           {:error, reason} ->
             Logger.error("Failed to store batch of #{length(points)} chunks: #{inspect(reason)}")
             :telemetry.execute([:nexus, :qdrant, :upsert_error], %{batch_size: length(points)}, %{reason: reason})

@@ -275,7 +275,9 @@ defmodule ElixirNexus.DashboardLive.Index do
   end
 
   defp assign_stats(socket) do
-    indexer = safe_call(fn -> ElixirNexus.Indexer.status() end, %{indexed_files: 0, total_chunks: 0, status: :idle, errors: []})
+    indexer =
+      safe_call(fn -> ElixirNexus.Indexer.status() end, %{indexed_files: 0, total_chunks: 0, status: :idle, errors: []})
+
     graph_nodes = safe_call(fn -> ElixirNexus.GraphCache.all_nodes() end, %{})
     vocab = safe_call(fn -> ElixirNexus.TFIDFEmbedder.vocab_size() end, 0)
     bumblebee = safe_call(fn -> ElixirNexus.EmbeddingModel.available?() end, false)
@@ -399,12 +401,16 @@ defmodule ElixirNexus.DashboardLive.Index do
   # Detect when Qdrant has been updated externally (e.g. by MCP in a separate BEAM)
   # and reload local ETS caches to stay in sync.
   defp maybe_sync_from_qdrant(socket) do
-    qdrant_count = safe_call(fn ->
-      case ElixirNexus.QdrantClient.count_points() do
-        {:ok, %{"result" => %{"count" => count}}} -> count
-        _ -> nil
-      end
-    end, nil)
+    qdrant_count =
+      safe_call(
+        fn ->
+          case ElixirNexus.QdrantClient.count_points() do
+            {:ok, %{"result" => %{"count" => count}}} -> count
+            _ -> nil
+          end
+        end,
+        nil
+      )
 
     ets_count = safe_call(fn -> ElixirNexus.ChunkCache.count() end, 0)
 

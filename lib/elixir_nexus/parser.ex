@@ -49,16 +49,17 @@ defmodule ElixirNexus.Parser do
     entities
     |> Enum.flat_map(fn entity ->
       primary = ElixirNexus.CodeSchema.from_ast(file_path, entity, source_code)
-      
+
       # If it's a module, also extract functions/macros inside it
-      functions = 
+      functions =
         case entity do
           {:defmodule, _, [_ | rest]} ->
             extract_module_functions(file_path, rest, source_code)
+
           _ ->
             []
         end
-      
+
       [primary | functions]
       |> Enum.reject(&is_nil/1)
     end)
@@ -80,14 +81,16 @@ defmodule ElixirNexus.Parser do
                   {{:__block__, _, [:do]}, func} -> extract_function(file_path, func, source_code)
                   func -> extract_function(file_path, func, source_code)
                 end)
-              
+
               other ->
                 # Single function or something else
                 extract_function(file_path, other, source_code)
             end
+
           _ ->
             []
         end)
+
       _ ->
         []
     end
@@ -98,15 +101,15 @@ defmodule ElixirNexus.Parser do
       {:def, _, _} = def_node ->
         result = ElixirNexus.CodeSchema.from_ast(file_path, def_node, source_code)
         if result, do: [result], else: []
-      
+
       {:defp, _, _} = defp_node ->
         result = ElixirNexus.CodeSchema.from_ast(file_path, defp_node, source_code)
         if result, do: [result], else: []
-      
+
       {:defmacro, _, _} = defmacro_node ->
         result = ElixirNexus.CodeSchema.from_ast(file_path, defmacro_node, source_code)
         if result, do: [result], else: []
-      
+
       _ ->
         []
     end

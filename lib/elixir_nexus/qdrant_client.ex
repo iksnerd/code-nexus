@@ -3,7 +3,7 @@ defmodule ElixirNexus.QdrantClient do
   use GenServer
   require Logger
 
-  @vector_size 384
+  @vector_size 768
   @distance "Cosine"
   @http_timeout 30_000
 
@@ -129,9 +129,7 @@ defmodule ElixirNexus.QdrantClient do
         {:ok, %{url: url, collection: collection_name()}}
 
       {:error, reason} ->
-        Logger.warning(
-          "Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}"
-        )
+        Logger.warning("Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}")
         {:ok, %{url: url, collection: collection_name()}}
     end
   end
@@ -145,6 +143,7 @@ defmodule ElixirNexus.QdrantClient do
       {:error, reason} ->
         Logger.warning("Could not create collection: #{inspect(reason)}")
     end
+
     {:noreply, state}
   end
 

@@ -11,9 +11,9 @@ defmodule ElixirNexus.IgnoreFilter do
   )
 
   @type t :: %__MODULE__{
-    patterns: [String.t()],
-    dirs: MapSet.t()
-  }
+          patterns: [String.t()],
+          dirs: MapSet.t()
+        }
 
   defstruct patterns: [], dirs: MapSet.new()
 

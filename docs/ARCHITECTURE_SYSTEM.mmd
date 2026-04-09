@@ -9,7 +9,7 @@ graph TB
         GenExtractor["GenericExtractor<br/>(imports for Go, Rust, Java)"]
         RelExtractor["RelationshipExtractor<br/>(Elixir calls, is_a, contains)"]
         Chunker["Chunker<br/>(semantic chunks)"]
-        Bumblebee["Bumblebee<br/>(384-dim dense)"]
+        Ollama["Ollama<br/>(768-dim dense)"]
         TFIDFEmbed["TFIDFEmbedder<br/>(ETS IDF + sparse vectors)"]
         Telemetry["Telemetry Events<br/>(file_parsed, file_error,<br/>search_query, upsert_error)"]
     end
@@ -51,9 +51,9 @@ graph TB
     GenExtractor -->|entities| Chunker
     RelExtractor -->|entities| Chunker
 
-    Chunker --> Bumblebee
+    Chunker --> Ollama
     Chunker --> TFIDFEmbed
-    Bumblebee -->|dense vectors| Qdrant
+    Ollama -->|dense vectors| Qdrant
     TFIDFEmbed -->|dense fallback + sparse| Qdrant
     TFIDFEmbed -.->|reads IDF| TFIDF_ETS
     Chunker --> ChunkCache

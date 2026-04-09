@@ -59,8 +59,9 @@ defmodule ElixirNexus.HybridSearchTest do
       case ElixirNexus.Search.search_code("search", 10) do
         {:ok, results} when length(results) > 1 ->
           scores = Enum.map(results, & &1.score)
+
           assert scores == Enum.sort(scores, :desc),
-            "Results not sorted by score: #{inspect(scores)}"
+                 "Results not sorted by score: #{inspect(scores)}"
 
         _ ->
           :ok
@@ -70,9 +71,11 @@ defmodule ElixirNexus.HybridSearchTest do
     test "results are deduplicated by name+type" do
       case ElixirNexus.Search.search_code("handle_call", 20) do
         {:ok, results} when results != [] ->
-          keys = Enum.map(results, fn r ->
-            "#{r.entity["name"]}::#{r.entity["entity_type"]}"
-          end)
+          keys =
+            Enum.map(results, fn r ->
+              "#{r.entity["name"]}::#{r.entity["entity_type"]}"
+            end)
+
           assert keys == Enum.uniq(keys), "Duplicate results found"
 
         {:ok, []} ->

@@ -4,11 +4,13 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 
 ## Quick Start
 
+**Prerequisites:** Ollama running on the host with `nomic-embed-text` pulled (`ollama pull nomic-embed-text`).
+
 ```bash
 WORKSPACE=~/Documents docker-compose up -d
 ```
 
-This starts CodeNexus (Phoenix dashboard on `:4100`, MCP HTTP on `:3001`) and Qdrant (vector DB on `:6333`).
+This starts CodeNexus (Phoenix dashboard on `:4100`, MCP Streamable HTTP on `:3002`) and Qdrant (vector DB on `:6333`). The container reaches Ollama on the host via `host.docker.internal:11434`.
 
 ### Without docker-compose
 
@@ -16,9 +18,10 @@ This starts CodeNexus (Phoenix dashboard on `:4100`, MCP HTTP on `:3001`) and Qd
 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:latest
 
 docker run -d --name elixir_nexus \
-  -p 4100:4100 -p 3001:3001 \
+  -p 4100:4100 -p 3002:3002 \
   -e QDRANT_URL=http://host.docker.internal:6333 \
-  -e MCP_HTTP_PORT=3001 \
+  -e MCP_HTTP_PORT=3002 \
+  -e OLLAMA_URL=http://host.docker.internal:11434 \
   -e WORKSPACE_HOST="$HOME/Documents" \
   -v "$HOME/Documents:/workspace:ro" \
   iksnerd/elixir-nexus:latest
@@ -63,14 +66,14 @@ Elixir, JavaScript, TypeScript, TSX, Python, Go, Rust, Java.
 
 ## Claude Code MCP Config
 
-Add to `~/.claude/settings.json`:
+Add to your project's `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "elixir-nexus": {
-      "type": "url",
-      "url": "http://localhost:3001/mcp"
+      "type": "http",
+      "url": "http://localhost:3002/mcp"
     }
   }
 }
@@ -81,7 +84,8 @@ Add to `~/.claude/settings.json`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector DB URL |
-| `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP HTTP transport |
+| `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
 | `WORKSPACE_HOST` | _(unset)_ | Host path mounted at `/workspace` (for path translation) |
 | `WORKSPACE` | _(unset)_ | docker-compose: host dir to mount at `/workspace` |
 
@@ -89,8 +93,9 @@ Add to `~/.claude/settings.json`:
 
 - **Elixir/Phoenix** app with Broadway-based indexing pipeline
 - **Tree-sitter** (Rust NIF) for AST parsing across all supported languages
-- **TF-IDF** embeddings with ETS-backed vocabulary for lock-free concurrent search
-- **Qdrant** for vector storage and hybrid search
+- **Ollama nomic-embed-text** for 768-dim dense semantic embeddings
+- **TF-IDF** sparse vectors with ETS-backed vocabulary for hybrid search
+- **Qdrant** for vector storage and hybrid search (RRF fusion)
 - **ExMCP** for MCP protocol (stdio + Streamable HTTP)
 
 ## Source

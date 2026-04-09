@@ -8,8 +8,22 @@ defmodule ElixirNexus.CacheOwner do
 
   @impl true
   def init(_opts) do
-    :ets.new(ElixirNexus.GraphCache.table_name(), [:set, :public, :named_table, read_concurrency: true, write_concurrency: true])
-    :ets.new(ElixirNexus.ChunkCache.table_name(), [:bag, :public, :named_table, read_concurrency: true, write_concurrency: true])
+    :ets.new(ElixirNexus.GraphCache.table_name(), [
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
+    :ets.new(ElixirNexus.ChunkCache.table_name(), [
+      :bag,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
     {:ok, %{}}
   end
 end

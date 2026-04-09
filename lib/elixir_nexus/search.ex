@@ -38,6 +38,7 @@ defmodule ElixirNexus.Search do
       case ElixirNexus.QdrantClient.hybrid_search(embedding, sparse_vec, limit * 3) do
         {:ok, %{"result" => %{"points" => points}}} when is_list(points) ->
           Logger.info("Hybrid search: got #{length(points)} results from Qdrant (points key)")
+
           points
           |> Enum.map(fn point ->
             %{
@@ -50,6 +51,7 @@ defmodule ElixirNexus.Search do
 
         {:ok, %{"result" => points}} when is_list(points) ->
           Logger.info("Hybrid search: got #{length(points)} results from Qdrant (flat result)")
+
           points
           |> Enum.map(fn point ->
             %{
@@ -75,10 +77,12 @@ defmodule ElixirNexus.Search do
     # Step 5: Graph re-ranking (prefer ETS cache, fallback to building from results)
     reranked =
       if length(deduped) > 0 do
-        graph = case ElixirNexus.GraphCache.all_nodes() do
-          nodes when map_size(nodes) > 0 -> nodes
-          _ -> ElixirNexus.RelationshipGraph.build_graph(deduped)
-        end
+        graph =
+          case ElixirNexus.GraphCache.all_nodes() do
+            nodes when map_size(nodes) > 0 -> nodes
+            _ -> ElixirNexus.RelationshipGraph.build_graph(deduped)
+          end
+
         GraphBoost.apply_graph_boost(deduped, graph)
       else
         deduped
@@ -94,15 +98,20 @@ defmodule ElixirNexus.Search do
       |> Enum.sort_by(& &1.score, :desc)
       |> Enum.take(limit)
 
-    result = if final == [] do
-      Logger.info("No hybrid results, falling back to indexer keyword search")
-      keyword_search_fallback(query, limit)
-    else
-      {:ok, final}
-    end
+    result =
+      if final == [] do
+        Logger.info("No hybrid results, falling back to indexer keyword search")
+        keyword_search_fallback(query, limit)
+      else
+        {:ok, final}
+      end
 
     duration_ms = System.convert_time_unit(System.monotonic_time() - search_start, :native, :millisecond)
-    :telemetry.execute([:nexus, :search, :query], %{duration_ms: duration_ms, result_count: length(elem(result, 1))}, %{query: query})
+
+    :telemetry.execute([:nexus, :search, :query], %{duration_ms: duration_ms, result_count: length(elem(result, 1))}, %{
+      query: query
+    })
+
     result
   end
 
@@ -123,7 +132,7 @@ defmodule ElixirNexus.Search do
       {:error, _} ->
         case ElixirNexus.TFIDFEmbedder.embed(query) do
           {:ok, embedding} -> embedding
-          _ -> List.duplicate(0.0, 384)
+          _ -> List.duplicate(0.0, 768)
         end
     end
   end
@@ -177,10 +186,18 @@ defmodule ElixirNexus.Search do
 
   def format_payload(nil) do
     %{
-      "file_path" => nil, "entity_type" => "unknown", "name" => "Unknown",
-      "start_line" => 0, "end_line" => 0, "content" => "",
-      "visibility" => nil, "parameters" => [], "calls" => [],
-      "is_a" => [], "contains" => [], "language" => nil
+      "file_path" => nil,
+      "entity_type" => "unknown",
+      "name" => "Unknown",
+      "start_line" => 0,
+      "end_line" => 0,
+      "content" => "",
+      "visibility" => nil,
+      "parameters" => [],
+      "calls" => [],
+      "is_a" => [],
+      "contains" => [],
+      "language" => nil
     }
   end
 

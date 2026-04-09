@@ -10,14 +10,18 @@ defmodule ElixirNexus.ChunkCache do
     if :ets.info(@table) == :undefined do
       :ets.new(@table, [:bag, :public, :named_table, read_concurrency: true, write_concurrency: true])
     end
+
     :ok
   end
 
   def insert_many(chunks) when is_list(chunks) do
     ensure_table()
-    entries = Enum.map(chunks, fn chunk ->
-      {chunk.file_path, chunk}
-    end)
+
+    entries =
+      Enum.map(chunks, fn chunk ->
+        {chunk.file_path, chunk}
+      end)
+
     :ets.insert(@table, entries)
     :ok
   end

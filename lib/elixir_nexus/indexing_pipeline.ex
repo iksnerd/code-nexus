@@ -54,7 +54,13 @@ defmodule ElixirNexus.IndexingPipeline do
     case IndexingHelpers.process_file(file_path) do
       {:ok, chunks} ->
         duration_ms = System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)
-        :telemetry.execute([:nexus, :pipeline, :file_parsed], %{duration_ms: duration_ms, chunk_count: length(chunks)}, %{file: file_path})
+
+        :telemetry.execute(
+          [:nexus, :pipeline, :file_parsed],
+          %{duration_ms: duration_ms, chunk_count: length(chunks)},
+          %{file: file_path}
+        )
+
         ElixirNexus.DirtyTracker.mark_clean(file_path)
 
         message

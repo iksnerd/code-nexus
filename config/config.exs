@@ -21,21 +21,15 @@ config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id, :file, :line]
 
-# Bumblebee config
-config :bumblebee,
-  cache_dir: "~/.cache/bumblebee"
-
-# Embedding model config
-config :elixir_nexus, :embedding,
-  model: "sentence-transformers/all-MiniLM-L6-v2",
-  vector_size: 384,
-  fallback: :tfidf
+# Embedding model config (Ollama nomic-embed-text, 768-dim)
+config :elixir_nexus,
+  ollama_url: "http://localhost:11434"
 
 # Qdrant config
 config :elixir_nexus, :qdrant,
   url: "http://localhost:6333",
   collection: "codebase_index",
-  vector_size: 384
+  vector_size: 768
 
 if Mix.env() == :dev do
   config :elixir_nexus, ElixirNexus.Endpoint,

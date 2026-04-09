@@ -11,7 +11,10 @@ defmodule ElixirNexus.CodeSchemaTest do
         {:defmodule, [line: 1, end_line: 5],
          [
            {:__aliases__, [line: 1], [:MyApp]},
-           [{{:__block__, [line: 1], [:do]}, {:def, [line: 2, end_line: 4], [{:hello, [line: 2], [{:name, [], nil}]}, [[do: {:IO, [], [:puts]}]]]}}]
+           [
+             {{:__block__, [line: 1], [:do]},
+              {:def, [line: 2, end_line: 4], [{:hello, [line: 2], [{:name, [], nil}]}, [[do: {:IO, [], [:puts]}]]]}}
+           ]
          ]}
 
       result = CodeSchema.from_ast("lib/my_app.ex", ast, @source)
@@ -41,7 +44,10 @@ defmodule ElixirNexus.CodeSchemaTest do
   describe "from_ast/3 - def" do
     test "extracts public function" do
       source = "def greet(name) do\n  \"Hello \#{name}\"\nend"
-      ast = {:def, [line: 1, end_line: 3], [{:greet, [line: 1], [{:name, [], nil}]}, [[do: {:<<>>, [], ["Hello ", {:name, [], nil}]}]]]}
+
+      ast =
+        {:def, [line: 1, end_line: 3],
+         [{:greet, [line: 1], [{:name, [], nil}]}, [[do: {:<<>>, [], ["Hello ", {:name, [], nil}]}]]]}
 
       result = CodeSchema.from_ast("lib/greeter.ex", ast, source)
 
@@ -53,7 +59,10 @@ defmodule ElixirNexus.CodeSchemaTest do
 
     test "extracts function with multiple parameters" do
       source = "def add(a, b) do\n  a + b\nend"
-      ast = {:def, [line: 1, end_line: 3], [{:add, [line: 1], [{:a, [], nil}, {:b, [], nil}]}, [[do: {:+, [], [{:a, [], nil}, {:b, [], nil}]}]]]}
+
+      ast =
+        {:def, [line: 1, end_line: 3],
+         [{:add, [line: 1], [{:a, [], nil}, {:b, [], nil}]}, [[do: {:+, [], [{:a, [], nil}, {:b, [], nil}]}]]]}
 
       result = CodeSchema.from_ast("lib/math.ex", ast, source)
 
@@ -64,7 +73,9 @@ defmodule ElixirNexus.CodeSchemaTest do
   describe "from_ast/3 - defp" do
     test "extracts private function" do
       source = "defp internal(x) do\n  x * 2\nend"
-      ast = {:defp, [line: 1, end_line: 3], [{:internal, [line: 1], [{:x, [], nil}]}, [[do: {:*, [], [{:x, [], nil}, 2]}]]]}
+
+      ast =
+        {:defp, [line: 1, end_line: 3], [{:internal, [line: 1], [{:x, [], nil}]}, [[do: {:*, [], [{:x, [], nil}, 2]}]]]}
 
       result = CodeSchema.from_ast("lib/helper.ex", ast, source)
 
@@ -77,7 +88,10 @@ defmodule ElixirNexus.CodeSchemaTest do
   describe "from_ast/3 - defmacro" do
     test "extracts macro without guard" do
       source = "defmacro my_macro(expr) do\n  quote do: unquote(expr)\nend"
-      ast = {:defmacro, [line: 1, end_line: 3], [{:my_macro, [line: 1], [{:expr, [], nil}]}, [[do: {:quote, [], [[do: {:unquote, [], [{:expr, [], nil}]}]]}]]]}
+
+      ast =
+        {:defmacro, [line: 1, end_line: 3],
+         [{:my_macro, [line: 1], [{:expr, [], nil}]}, [[do: {:quote, [], [[do: {:unquote, [], [{:expr, [], nil}]}]]}]]]}
 
       result = CodeSchema.from_ast("lib/macros.ex", ast, source)
 
@@ -89,11 +103,11 @@ defmodule ElixirNexus.CodeSchemaTest do
 
     test "extracts macro with when guard" do
       source = "defmacro checked(val) when is_atom(val) do\n  val\nend"
+
       ast =
         {:defmacro, [line: 1, end_line: 3],
          [
-           {:when, [line: 1],
-            [{:checked, [line: 1], [{:val, [], nil}]}, {:is_atom, [line: 1], [{:val, [], nil}]}]},
+           {:when, [line: 1], [{:checked, [line: 1], [{:val, [], nil}]}, {:is_atom, [line: 1], [{:val, [], nil}]}]},
            [[do: {:val, [], nil}]]
          ]}
 
@@ -108,11 +122,11 @@ defmodule ElixirNexus.CodeSchemaTest do
   describe "from_ast/3 - def with when guard" do
     test "extracts guarded function" do
       source = "def validate(x) when is_integer(x) do\n  :ok\nend"
+
       ast =
         {:def, [line: 1, end_line: 3],
          [
-           {:when, [line: 1],
-            [{:validate, [line: 1], [{:x, [], nil}]}, {:is_integer, [line: 1], [{:x, [], nil}]}]},
+           {:when, [line: 1], [{:validate, [line: 1], [{:x, [], nil}]}, {:is_integer, [line: 1], [{:x, [], nil}]}]},
            [[do: :ok]]
          ]}
 
@@ -126,11 +140,11 @@ defmodule ElixirNexus.CodeSchemaTest do
 
     test "extracts guarded defp function as private" do
       source = "defp check(x) when is_binary(x) do\n  :ok\nend"
+
       ast =
         {:defp, [line: 1, end_line: 3],
          [
-           {:when, [line: 1],
-            [{:check, [line: 1], [{:x, [], nil}]}, {:is_binary, [line: 1], [{:x, [], nil}]}]},
+           {:when, [line: 1], [{:check, [line: 1], [{:x, [], nil}]}, {:is_binary, [line: 1], [{:x, [], nil}]}]},
            [[do: :ok]]
          ]}
 

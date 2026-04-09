@@ -386,10 +386,11 @@ defmodule ElixirNexus.VectorsLive.Index do
       {:ok, data} ->
         point = data["result"]
 
-        vector_preview = case point["vector"] do
-          v when is_list(v) -> Enum.take(v, 10)
-          _ -> []
-        end
+        vector_preview =
+          case point["vector"] do
+            v when is_list(v) -> Enum.take(v, 10)
+            _ -> []
+          end
 
         detail = %{
           "id" => point["id"],
