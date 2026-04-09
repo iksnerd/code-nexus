@@ -602,21 +602,86 @@ defmodule ElixirNexus.Search.QueriesTest do
     test "critical_files returns entries when graph has connected nodes" do
       # Build a denser graph: A → B → C → D → E, all passing through B and C
       chain = [
-        %{id: "c_a", file_path: "/app/lib/a.ex", entity_type: :function, name: "A.run",
-          content: "", start_line: 1, end_line: 1, module_path: "A", visibility: :public,
-          parameters: [], calls: ["B.run"], is_a: [], contains: [], language: :elixir},
-        %{id: "c_b", file_path: "/app/lib/b.ex", entity_type: :function, name: "B.run",
-          content: "", start_line: 1, end_line: 1, module_path: "B", visibility: :public,
-          parameters: [], calls: ["C.run"], is_a: [], contains: [], language: :elixir},
-        %{id: "c_c", file_path: "/app/lib/c.ex", entity_type: :function, name: "C.run",
-          content: "", start_line: 1, end_line: 1, module_path: "C", visibility: :public,
-          parameters: [], calls: ["D.run"], is_a: [], contains: [], language: :elixir},
-        %{id: "c_d", file_path: "/app/lib/d.ex", entity_type: :function, name: "D.run",
-          content: "", start_line: 1, end_line: 1, module_path: "D", visibility: :public,
-          parameters: [], calls: ["E.run"], is_a: [], contains: [], language: :elixir},
-        %{id: "c_e", file_path: "/app/lib/e.ex", entity_type: :function, name: "E.run",
-          content: "", start_line: 1, end_line: 1, module_path: "E", visibility: :public,
-          parameters: [], calls: [], is_a: [], contains: [], language: :elixir}
+        %{
+          id: "c_a",
+          file_path: "/app/lib/a.ex",
+          entity_type: :function,
+          name: "A.run",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "A",
+          visibility: :public,
+          parameters: [],
+          calls: ["B.run"],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        },
+        %{
+          id: "c_b",
+          file_path: "/app/lib/b.ex",
+          entity_type: :function,
+          name: "B.run",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "B",
+          visibility: :public,
+          parameters: [],
+          calls: ["C.run"],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        },
+        %{
+          id: "c_c",
+          file_path: "/app/lib/c.ex",
+          entity_type: :function,
+          name: "C.run",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "C",
+          visibility: :public,
+          parameters: [],
+          calls: ["D.run"],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        },
+        %{
+          id: "c_d",
+          file_path: "/app/lib/d.ex",
+          entity_type: :function,
+          name: "D.run",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "D",
+          visibility: :public,
+          parameters: [],
+          calls: ["E.run"],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        },
+        %{
+          id: "c_e",
+          file_path: "/app/lib/e.ex",
+          entity_type: :function,
+          name: "E.run",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "E",
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        }
       ]
 
       ChunkCache.clear()
@@ -640,22 +705,70 @@ defmodule ElixirNexus.Search.QueriesTest do
 
   describe "find_dead_code/1 - framework convention filter" do
     @js_chunks [
-      %{id: "js_get", file_path: "/app/app/api/users/route.ts", entity_type: :function,
-        name: "GET", content: "export async function GET() {}", start_line: 1, end_line: 1,
-        module_path: "GET", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :javascript},
-      %{id: "js_post", file_path: "/app/app/api/users/route.ts", entity_type: :function,
-        name: "POST", content: "export async function POST() {}", start_line: 2, end_line: 2,
-        module_path: "POST", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :javascript},
-      %{id: "js_default", file_path: "/app/app/users/page.tsx", entity_type: :function,
-        name: "default", content: "export default function UsersPage() {}", start_line: 1, end_line: 1,
-        module_path: "default", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :javascript},
-      %{id: "js_real_dead", file_path: "/app/app/utils.ts", entity_type: :function,
-        name: "unusedHelper", content: "function unusedHelper() {}", start_line: 1, end_line: 1,
-        module_path: "unusedHelper", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript}
+      %{
+        id: "js_get",
+        file_path: "/app/app/api/users/route.ts",
+        entity_type: :function,
+        name: "GET",
+        content: "export async function GET() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "GET",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      },
+      %{
+        id: "js_post",
+        file_path: "/app/app/api/users/route.ts",
+        entity_type: :function,
+        name: "POST",
+        content: "export async function POST() {}",
+        start_line: 2,
+        end_line: 2,
+        module_path: "POST",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      },
+      %{
+        id: "js_default",
+        file_path: "/app/app/users/page.tsx",
+        entity_type: :function,
+        name: "default",
+        content: "export default function UsersPage() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "default",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      },
+      %{
+        id: "js_real_dead",
+        file_path: "/app/app/utils.ts",
+        entity_type: :function,
+        name: "unusedHelper",
+        content: "function unusedHelper() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "unusedHelper",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
     ]
 
     test "filters GET/POST/default from dead code results for JS/TS files" do
@@ -706,35 +819,107 @@ defmodule ElixirNexus.Search.QueriesTest do
   describe "find_dead_code/1 - file convention filtering" do
     @convention_chunks [
       # PascalCase default export from a Next.js page — should NOT be dead code
-      %{id: "conv_page", file_path: "/app/app/users/page.tsx", entity_type: :function,
-        name: "UsersPage", content: "export default function UsersPage() {}", start_line: 1, end_line: 1,
-        module_path: "UsersPage", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript},
+      %{
+        id: "conv_page",
+        file_path: "/app/app/users/page.tsx",
+        entity_type: :function,
+        name: "UsersPage",
+        content: "export default function UsersPage() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "UsersPage",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
       # PascalCase default export from a loading skeleton — should NOT be dead code
-      %{id: "conv_loading", file_path: "/app/app/users/loading.tsx", entity_type: :function,
-        name: "UsersLoading", content: "export default function UsersLoading() {}", start_line: 1, end_line: 1,
-        module_path: "UsersLoading", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript},
+      %{
+        id: "conv_loading",
+        file_path: "/app/app/users/loading.tsx",
+        entity_type: :function,
+        name: "UsersLoading",
+        content: "export default function UsersLoading() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "UsersLoading",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
       # PascalCase default export from error boundary — should NOT be dead code
-      %{id: "conv_error", file_path: "/app/app/users/error.tsx", entity_type: :function,
-        name: "UsersError", content: "export default function UsersError() {}", start_line: 1, end_line: 1,
-        module_path: "UsersError", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript},
+      %{
+        id: "conv_error",
+        file_path: "/app/app/users/error.tsx",
+        entity_type: :function,
+        name: "UsersError",
+        content: "export default function UsersError() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "UsersError",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
       # PascalCase default export from layout — should NOT be dead code
-      %{id: "conv_layout", file_path: "/app/app/users/layout.tsx", entity_type: :function,
-        name: "UsersLayout", content: "export default function UsersLayout() {}", start_line: 1, end_line: 1,
-        module_path: "UsersLayout", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript},
+      %{
+        id: "conv_layout",
+        file_path: "/app/app/users/layout.tsx",
+        entity_type: :function,
+        name: "UsersLayout",
+        content: "export default function UsersLayout() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "UsersLayout",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
       # PascalCase component in a regular (non-convention) file — SHOULD be dead code
-      %{id: "conv_widget", file_path: "/app/components/widget.tsx", entity_type: :function,
-        name: "Widget", content: "export default function Widget() {}", start_line: 1, end_line: 1,
-        module_path: "Widget", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript},
+      %{
+        id: "conv_widget",
+        file_path: "/app/components/widget.tsx",
+        entity_type: :function,
+        name: "Widget",
+        content: "export default function Widget() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "Widget",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
       # Named (camelCase) export from a convention file — SHOULD be dead code if not called
-      %{id: "conv_helper", file_path: "/app/app/users/page.tsx", entity_type: :function,
-        name: "unusedHelper", content: "export function unusedHelper() {}", start_line: 5, end_line: 5,
-        module_path: "unusedHelper", visibility: :public, parameters: [], calls: [], is_a: [],
-        contains: [], language: :typescript}
+      %{
+        id: "conv_helper",
+        file_path: "/app/app/users/page.tsx",
+        entity_type: :function,
+        name: "unusedHelper",
+        content: "export function unusedHelper() {}",
+        start_line: 5,
+        end_line: 5,
+        module_path: "unusedHelper",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
     ]
 
     setup do
@@ -765,6 +950,7 @@ defmodule ElixirNexus.Search.QueriesTest do
     test "still flags PascalCase component from non-convention files as dead" do
       {:ok, result} = Queries.find_dead_code()
       dead_names = Enum.map(result.dead_functions, & &1.name)
+
       assert "Widget" in dead_names,
              "PascalCase component in widget.tsx (not a convention file) should be flagged as dead code"
     end
@@ -772,6 +958,7 @@ defmodule ElixirNexus.Search.QueriesTest do
     test "still flags named exports in convention files as dead if uncalled" do
       {:ok, result} = Queries.find_dead_code()
       dead_names = Enum.map(result.dead_functions, & &1.name)
+
       assert "unusedHelper" in dead_names,
              "named export in page.tsx should still appear as dead if not called"
     end
@@ -917,6 +1104,7 @@ defmodule ElixirNexus.Search.QueriesTest do
 
       {:ok, result} = Queries.find_dead_code()
       dead_names = Enum.map(result.dead_functions, & &1.name)
+
       refute "NotFound" in dead_names,
              "PascalCase component from not-found.tsx should not be dead code"
     end
@@ -946,6 +1134,7 @@ defmodule ElixirNexus.Search.QueriesTest do
 
       {:ok, result} = Queries.find_dead_code()
       dead_names = Enum.map(result.dead_functions, & &1.name)
+
       refute "RouteHandler" in dead_names,
              "PascalCase default export from route.ts should not be dead code"
     end

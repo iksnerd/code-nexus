@@ -121,13 +121,13 @@ defmodule ElixirNexus.GraphLive.Index do
 
   def handle_info(:load_graph, socket) do
     graph_data = build_d3_graph()
-    
-    socket = 
+
+    socket =
       socket
       |> assign(nodes_count: length(graph_data.nodes))
       |> assign(links_count: length(graph_data.links))
       |> push_event("graph_data", graph_data)
-      
+
     {:noreply, socket}
   end
 
