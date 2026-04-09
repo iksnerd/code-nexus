@@ -3,5 +3,6 @@ defmodule ElixirNexus do
   ElixirNexus - A high-performance code intelligence engine built with Elixir, Ollama, and Qdrant.
   """
 
-  def version, do: "0.2.0"
+  @app_version Mix.Project.config()[:version]
+  def version, do: @app_version
 end

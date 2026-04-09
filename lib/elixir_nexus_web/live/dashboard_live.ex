@@ -172,7 +172,7 @@ defmodule ElixirNexus.DashboardLive.Index do
 
     <!-- Footer -->
     <div class="border-t border-slate-700/50 pt-4 mt-4 flex items-center justify-between">
-      <span class="text-xs text-slate-600">ElixirNexus v0.2.0</span>
+      <span class="text-xs text-slate-600">ElixirNexus v<%= ElixirNexus.version() %></span>
       <span class="text-xs text-slate-600">Elixir/OTP + Ollama + Qdrant + Tree-sitter</span>
     </div>
     """
