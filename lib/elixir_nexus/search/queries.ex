@@ -3,6 +3,14 @@ defmodule ElixirNexus.Search.Queries do
 
   require Logger
 
+  # Exported names that frameworks call via file conventions, not explicit JS call sites.
+  # Filtering these prevents false positives in find_dead_code for JS/TS projects.
+  @framework_convention_names ~w(
+    GET POST PUT PATCH DELETE HEAD OPTIONS
+    default generateStaticParams generateMetadata
+    loader action headers links handle
+  )
+
   @doc """
   Transitive impact analysis: given a function, find everything that would be
   affected by changing it — callers, their callers, etc. up to `depth` levels.
@@ -374,6 +382,11 @@ defmodule ElixirNexus.Search.Queries do
               entities
             end
           end)
+          |> Enum.reject(fn e ->
+            lang = e.entity["language"] || ""
+            name = e.entity["name"] || ""
+            js_or_ts?(lang) and name in @framework_convention_names
+          end)
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
@@ -401,16 +414,32 @@ defmodule ElixirNexus.Search.Queries do
             type in ["function", "method"] and vis in ["public", nil]
           end)
 
+        has_js_ts =
+          Enum.any?(all_entities, fn e -> js_or_ts?(e.entity["language"] || "") end)
+
+        warning =
+          if has_js_ts do
+            "Results may include false positives for framework-exported functions " <>
+              "(Next.js/SvelteKit/Remix route handlers and page components are called " <>
+              "by the framework via file conventions, not explicit JS call sites). " <>
+              "Known convention names (GET, POST, default, etc.) are pre-filtered."
+          end
+
         {:ok,
          %{
            dead_functions: dead,
            total_public: total_public,
-           dead_count: length(dead)
+           dead_count: length(dead),
+           warning: warning
          }}
 
       error ->
         error
     end
+  end
+
+  defp js_or_ts?(lang) do
+    String.contains?(lang, "javascript") or String.contains?(lang, "typescript")
   end
 
   defp get_all_entities_cached(limit) do
