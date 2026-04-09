@@ -2,7 +2,7 @@
 
 Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase.
 
-Built on Elixir/OTP with Bumblebee for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Designed for large codebases with live incremental indexing.
+Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Designed for large codebases with live incremental indexing.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -92,7 +92,7 @@ graph TB
 
     subgraph Indexing["Indexing Pipeline (Broadway)"]
         CH["Chunker<br/>semantic chunks"]
-        BB["Bumblebee<br/>384-dim dense vectors"]
+        OL["Ollama nomic-embed-text<br/>768-dim dense vectors"]
         TFIDF["TF-IDF<br/>sparse keyword vectors"]
     end
 
@@ -114,8 +114,8 @@ graph TB
     OTHER --> TS --> GOE & GE
 
     RE & JSE & PYE & GOE & GE --> CH
-    CH --> BB & TFIDF
-    BB & TFIDF --> QD
+    CH --> OL & TFIDF
+    OL & TFIDF --> QD
     CH --> CC --> GC
 
     QD & GC --> MCP_HTTP & REST & PHX
@@ -125,7 +125,7 @@ graph TB
 
 ```mermaid
 graph LR
-    Q["Query"] --> DE["Dense Embedding<br/>Bumblebee"]
+    Q["Query"] --> DE["Dense Embedding<br/>Ollama"]
     Q --> SE["Sparse Vector<br/>TF-IDF"]
     DE & SE --> HQ["Qdrant Hybrid Query<br/>RRF Fusion"]
     HQ --> DD["Dedup<br/>name + type"]
@@ -133,7 +133,7 @@ graph LR
     GR --> R["Results"]
 ```
 
-1. **Dense embedding** via Bumblebee (falls back to TF-IDF)
+1. **Dense embedding** via Ollama nomic-embed-text (falls back to TF-IDF)
 2. **Sparse keyword vector** via TF-IDF feature hashing
 3. **Qdrant hybrid query** with prefetch + RRF fusion (server-side)
 4. **Deduplication** by name + entity type
@@ -163,7 +163,6 @@ graph TD
     SUP --> PS["PubSub"]
     SUP --> DT["DirtyTracker"]
     SUP --> TF["TFIDFEmbedder"]
-    SUP --> BB["Bumblebee Serving"]
     SUP --> QC["QdrantClient"]
     SUP --> REG["Registry"]
     SUP --> CO["CacheOwner<br/>(ETS tables)"]
@@ -228,6 +227,7 @@ Elixir files are parsed via Sourceror (richer metadata). Other languages use Tre
 | TypeScript | `.ts`, `.tsx` | Tree-sitter | JavaScriptExtractor |
 | Python | `.py` | Tree-sitter | PythonExtractor |
 | Go | `.go` | Tree-sitter | GoExtractor |
+| Ruby | `.rb` | Tree-sitter | GenericExtractor |
 | Rust | `.rs` | Tree-sitter | GenericExtractor |
 | Java | `.java` | Tree-sitter | GenericExtractor |
 
@@ -254,7 +254,7 @@ Tree-sitter support requires the Rust toolchain. Without it, only Elixir files a
 
 | Vector Type | Model | Purpose |
 |-------------|-------|---------|
-| Dense (384-dim) | `sentence-transformers/all-MiniLM-L6-v2` via Bumblebee | Semantic similarity |
+| Dense (768-dim) | `nomic-embed-text` via Ollama | Semantic similarity |
 | Sparse | TF-IDF feature hashing (ETS-backed IDF) | Keyword/exact match |
 | Fusion | Qdrant RRF | Combines both server-side |
 
@@ -284,7 +284,7 @@ The graph renders up to 500 nodes sorted by connectivity. Hover any node to high
 ## Testing
 
 ```bash
-mix test                        # All tests (~614)
+mix test                        # All tests (~635)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
@@ -296,17 +296,17 @@ Run with `mix test --include performance`:
 
 | Operation | Latency | Scale |
 |-----------|---------|-------|
-| ETS insert 10K chunks | 5ms | |
-| ETS search 10K chunks | 15ms | |
-| ETS 100 concurrent searches (p99) | 48ms | 10K chunks |
-| Graph rebuild | 604ms | 1K chunks |
-| Bumblebee single embed | 300ms | 384-dim |
-| TF-IDF single embed | 0.07ms | 384-dim (3237x faster) |
-| Hybrid search e2e (p50) | 307ms | |
-| analyze_impact | 0.93ms | 500 entities |
-| get_community_context | 4.2ms | 500 entities |
-| Index 20 files (Broadway) | 3.6s | |
-| PubSub 100 subscribers | 0.25ms max | |
+| ETS insert 10K chunks | 4ms | |
+| ETS search 10K chunks | 13ms | |
+| ETS 100 concurrent searches (p99) | 53ms | 10K chunks |
+| Graph rebuild | 458ms | 1K chunks |
+| Ollama single embed | 29ms | 768-dim |
+| TF-IDF single embed | 0.09ms | 768-dim (~456x faster) |
+| Hybrid search e2e (p50) | 21ms | |
+| analyze_impact | 3.5ms | 500 entities |
+| get_community_context | 1.2ms | 500 entities |
+| Index 20 files (Broadway) | 2.0s | |
+| PubSub 100 subscribers | 0.17ms max | |
 
 ## License
 

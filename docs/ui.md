@@ -8,7 +8,7 @@ The ElixirNexus web dashboard is a Phoenix LiveView application at `http://local
 
 1. **DashboardLive** — System overview
    - Indexing statistics (file count, entity count, chunk count)
-   - System health (Qdrant connection, Bumblebee status, file watcher)
+   - System health (Qdrant connection, Ollama status, file watcher)
    - Entity type breakdown and language distribution
    - Call/import/contains edge counts and top connected modules
    - Activity feed (indexing progress, completion, file reindex events)
