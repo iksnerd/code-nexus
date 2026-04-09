@@ -26,7 +26,7 @@ defmodule ElixirNexus.Search do
     search_start = System.monotonic_time()
     Logger.info("Hybrid search for: #{query}")
 
-    # Step 1: Get dense embedding from Bumblebee (falls back to TF-IDF)
+    # Step 1: Get dense embedding from Ollama (falls back to TF-IDF)
     embedding = get_embedding(query)
 
     # Step 2: Get sparse keyword vector (boost query terms for name matching)
