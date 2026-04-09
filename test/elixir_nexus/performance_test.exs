@@ -462,7 +462,7 @@ defmodule ElixirNexus.PerformanceTest do
     end
 
     test "Ollama vs TF-IDF comparison" do
-      bumblebee_time =
+      ollama_time =
         if ElixirNexus.EmbeddingModel.available?() do
           {_, elapsed} = measure(fn -> ElixirNexus.EmbeddingModel.embed(@sample_code) end)
           elapsed
@@ -474,16 +474,16 @@ defmodule ElixirNexus.PerformanceTest do
 
       IO.puts("\n  --- Embedding comparison ---")
 
-      if bumblebee_time do
-        IO.puts("  Ollama: #{Float.round(bumblebee_time, 2)}ms")
+      if ollama_time do
+        IO.puts("  Ollama: #{Float.round(ollama_time, 2)}ms")
       else
         IO.puts("  Ollama: unavailable")
       end
 
       IO.puts("  TF-IDF:    #{Float.round(tfidf_time, 2)}ms")
 
-      if bumblebee_time do
-        ratio = Float.round(bumblebee_time / tfidf_time, 1)
+      if ollama_time do
+        ratio = Float.round(ollama_time / tfidf_time, 1)
         IO.puts("  Ratio:     Ollama is #{ratio}x slower than TF-IDF")
       end
     end

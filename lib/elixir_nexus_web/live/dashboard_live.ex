@@ -16,8 +16,8 @@ defmodule ElixirNexus.DashboardLive.Index do
       </div>
       <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
         <span class="text-slate-400 text-xs">Embeddings</span>
-        <span class={"text-xs font-medium px-2 py-0.5 rounded #{if @bumblebee_available, do: "bg-emerald-900/50 text-emerald-300", else: "bg-amber-900/50 text-amber-300"}"}>
-          <%= if @bumblebee_available, do: "Bumblebee", else: "TF-IDF" %>
+        <span class={"text-xs font-medium px-2 py-0.5 rounded #{if @ollama_available, do: "bg-emerald-900/50 text-emerald-300", else: "bg-amber-900/50 text-amber-300"}"}>
+          <%= if @ollama_available, do: "Ollama", else: "TF-IDF" %>
         </span>
       </div>
       <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
@@ -280,7 +280,7 @@ defmodule ElixirNexus.DashboardLive.Index do
 
     graph_nodes = safe_call(fn -> ElixirNexus.GraphCache.all_nodes() end, %{})
     vocab = safe_call(fn -> ElixirNexus.TFIDFEmbedder.vocab_size() end, 0)
-    bumblebee = safe_call(fn -> ElixirNexus.EmbeddingModel.available?() end, false)
+    ollama = safe_call(fn -> ElixirNexus.EmbeddingModel.available?() end, false)
     watcher = safe_call(fn -> ElixirNexus.FileWatcher.status() end, %{watching: 0, pending: 0})
 
     qdrant_health =
@@ -347,7 +347,7 @@ defmodule ElixirNexus.DashboardLive.Index do
       errors: indexer.errors,
       graph_node_count: map_size(graph_nodes),
       vocab_size: vocab,
-      bumblebee_available: bumblebee,
+      ollama_available: ollama,
       watcher_watching: watcher.watching,
       watcher_pending: watcher.pending,
       qdrant_health: qdrant_health,

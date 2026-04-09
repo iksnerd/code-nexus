@@ -184,8 +184,8 @@ defmodule ElixirNexus.IndexingHelpers do
       {:ok, embeddings} ->
         embeddings
 
-      {:error, bumblebee_reason} ->
-        Logger.debug("Bumblebee embedding failed: #{inspect(bumblebee_reason)}, using TF-IDF")
+      {:error, ollama_reason} ->
+        Logger.debug("Ollama embedding failed: #{inspect(ollama_reason)}, using TF-IDF")
         {:ok, embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
         embeddings
     end
