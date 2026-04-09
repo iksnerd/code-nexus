@@ -51,8 +51,8 @@ defmodule ElixirNexus.Application do
       port = String.to_integer(mcp_http_port)
 
       Task.Supervisor.start_child(ElixirNexus.TaskSupervisor, fn ->
-        {:ok, _} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0")
-        IO.puts("MCP HTTP server listening on port #{port}")
+        {:ok, _} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0", use_sse: true)
+        IO.puts("MCP HTTP server listening on port #{port} (with SSE)")
       end)
     end
 

@@ -12,6 +12,7 @@ defmodule ElixirNexus.Layouts do
         <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
         <title><%= assigns[:page_title] || "ElixirNexus" %></title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
         <script src="/js/phoenix.min.js"></script>
         <script src="/js/phoenix_live_view.min.js"></script>
         <script defer src="/js/app.js"></script>
@@ -65,6 +66,12 @@ defmodule ElixirNexus.Layouts do
               class={"text-sm font-medium transition #{if @current_path == "/search", do: "text-white", else: "text-slate-400 hover:text-white"}"}
             >
               Search
+            </a>
+            <a
+              href="/graph"
+              class={"text-sm font-medium transition #{if @current_path == "/graph", do: "text-white", else: "text-slate-400 hover:text-white"}"}
+            >
+              Graph
             </a>
             <a
               href="/vectors"

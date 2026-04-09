@@ -24,6 +24,7 @@ defmodule ElixirNexus.Router do
       layout: {ElixirNexus.Layouts, :live} do
       live("/", DashboardLive.Index)
       live("/search", SearchLive.Index)
+      live("/graph", GraphLive.Index)
       live("/vectors", VectorsLive.Index)
     end
   end
