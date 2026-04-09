@@ -1362,7 +1362,9 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractorTest do
           ]
         )
 
-      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, "function Page() { return <div><span /></div>; }")
+      entities =
+        JavaScriptExtractor.extract_entities("page.tsx", ast, "function Page() { return <div><span /></div>; }")
+
       page = Enum.find(entities, &(&1.name == "Page"))
 
       assert page != nil

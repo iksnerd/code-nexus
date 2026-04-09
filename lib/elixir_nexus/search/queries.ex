@@ -410,10 +410,10 @@ defmodule ElixirNexus.Search.Queries do
             file_path = e.entity["file_path"] || ""
             basename = file_path |> Path.basename() |> String.replace(~r/\.[^.]+$/, "")
 
+            # PascalCase components in convention files are default exports called by the
+            # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
             js_or_ts?(lang) and
               (name in @framework_convention_names or
-                 # PascalCase components in convention files are default exports called by the
-                 # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
                  (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files))
           end)
           |> Enum.filter(fn e ->
