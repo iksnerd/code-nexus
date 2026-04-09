@@ -1263,4 +1263,150 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractorTest do
       assert iface.entity_type == :interface
     end
   end
+
+  describe "JSX component usage as callees" do
+    test "jsx_self_closing_element PascalCase tag extracted as call" do
+      # Simulates: function Page() { return <Button />; }
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "Page",
+              children: [
+                make_node("statement_block",
+                  children: [
+                    make_node("return_statement",
+                      children: [
+                        make_node("jsx_self_closing_element",
+                          children: [
+                            make_node("identifier", text: "Button")
+                          ]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, "function Page() { return <Button />; }")
+      page = Enum.find(entities, &(&1.name == "Page"))
+
+      assert page != nil
+      assert "Button" in page.calls, "Expected <Button /> to be extracted as a call"
+    end
+
+    test "jsx_opening_element PascalCase tag extracted as call" do
+      # Simulates: function Page() { return <Card>...</Card>; }
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "Page",
+              children: [
+                make_node("statement_block",
+                  children: [
+                    make_node("return_statement",
+                      children: [
+                        make_node("jsx_element",
+                          children: [
+                            make_node("jsx_opening_element",
+                              children: [
+                                make_node("identifier", text: "Card")
+                              ]
+                            )
+                          ]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, "function Page() { return <Card></Card>; }")
+      page = Enum.find(entities, &(&1.name == "Page"))
+
+      assert page != nil
+      assert "Card" in page.calls, "Expected <Card> to be extracted as a call"
+    end
+
+    test "lowercase HTML intrinsics are NOT extracted as calls" do
+      # Simulates: function Page() { return <div><span /></div>; }
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "Page",
+              children: [
+                make_node("statement_block",
+                  children: [
+                    make_node("return_statement",
+                      children: [
+                        make_node("jsx_self_closing_element",
+                          children: [make_node("identifier", text: "div")]
+                        ),
+                        make_node("jsx_self_closing_element",
+                          children: [make_node("identifier", text: "span")]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, "function Page() { return <div><span /></div>; }")
+      page = Enum.find(entities, &(&1.name == "Page"))
+
+      assert page != nil
+      refute "div" in page.calls, "HTML intrinsic <div> should not be a call"
+      refute "span" in page.calls, "HTML intrinsic <span> should not be a call"
+    end
+
+    test "multiple JSX components all extracted" do
+      # Simulates: function Dashboard() { return <><Header /><Sidebar /><Main /></>; }
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "Dashboard",
+              children: [
+                make_node("statement_block",
+                  children: [
+                    make_node("return_statement",
+                      children: [
+                        make_node("jsx_self_closing_element",
+                          children: [make_node("identifier", text: "Header")]
+                        ),
+                        make_node("jsx_self_closing_element",
+                          children: [make_node("identifier", text: "Sidebar")]
+                        ),
+                        make_node("jsx_self_closing_element",
+                          children: [make_node("identifier", text: "Main")]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities = JavaScriptExtractor.extract_entities("dashboard.tsx", ast, "")
+      dashboard = Enum.find(entities, &(&1.name == "Dashboard"))
+
+      assert dashboard != nil
+      assert "Header" in dashboard.calls
+      assert "Sidebar" in dashboard.calls
+      assert "Main" in dashboard.calls
+    end
+  end
 end
