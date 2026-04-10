@@ -12,6 +12,8 @@ defmodule ElixirNexus.QdrantBehaviour do
   @callback delete_points(list()) :: {:ok, map()} | {:error, any()}
   @callback list_collections() :: {:ok, list()} | {:error, any()}
   @callback active_collection() :: String.t()
+  @callback delete_collection() :: {:ok, map()} | {:error, any()}
+  @callback delete_collection(String.t()) :: {:ok, map()} | {:error, any()}
   @callback reset_collection() :: {:ok, map()} | {:error, any()}
   @callback switch_collection(String.t()) :: :ok | {:error, any()}
 end

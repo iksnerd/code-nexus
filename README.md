@@ -310,6 +310,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v0.7.1
+- **Qdrant test collection cleanup** — deleted 84 orphaned test collections, added `QdrantClient.delete_collection/1` by name, fixed test cleanup to prevent future accumulation
+
 ### v0.7.0
 - **Broadway error handling** — parse failures now properly use `Broadway.Message.failed/2` instead of silently swallowing errors
 - **TFIDFEmbedder ETS crash-safe** — IDF table moved to CacheOwner (survives TFIDFEmbedder crashes)
