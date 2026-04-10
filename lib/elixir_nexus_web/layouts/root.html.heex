@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title suffix=" · ElixirNexus">
-      <%= assigns[:page_title] || "ElixirNexus" %>
+    <.live_title suffix=" · CodeNexus">
+      <%= assigns[:page_title] || "CodeNexus" %>
     </.live_title>
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/js/phoenix.min.js"></script>
     <script src="/js/phoenix_live_view.min.js"></script>
