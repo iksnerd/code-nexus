@@ -1380,10 +1380,12 @@ defmodule ElixirNexus.Search.QueriesTest do
 
       # The @/components/ui/button import should resolve to the Button entity
       resolved_parents = Enum.filter(result.parents, & &1.resolved)
+
       assert resolved_parents != [],
              "Expected at least one resolved parent, got: #{inspect(result.parents)}"
 
       resolved_names = Enum.map(resolved_parents, & &1.name)
+
       assert "Button" in resolved_names,
              "Expected Button in resolved parents, got: #{inspect(resolved_names)}"
     end
