@@ -186,6 +186,7 @@ defmodule ElixirNexus.MCPServerTest do
 
       # Wait for indexing to finish so it doesn't interfere with other tests
       ElixirNexus.Indexer.await_idle()
+      cleanup_test_collection(tmp_dir)
       File.rm_rf!(tmp_dir)
     end
   end
@@ -418,6 +419,7 @@ defmodule ElixirNexus.MCPServerTest do
           :ok
       end
 
+      cleanup_test_collection(tmp_dir)
       File.rm_rf!(tmp_dir)
     end
 
@@ -457,7 +459,21 @@ defmodule ElixirNexus.MCPServerTest do
       end
 
       ElixirNexus.Indexer.await_idle()
+      cleanup_test_collection(tmp_dir)
       File.rm_rf!(tmp_dir)
     end
+  end
+
+  defp cleanup_test_collection(tmp_dir) do
+    collection =
+      tmp_dir
+      |> Path.basename()
+      |> then(&"nexus_#{&1}")
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9_]/, "_")
+      |> String.trim_leading("_")
+      |> String.slice(0..59)
+
+    ElixirNexus.QdrantClient.delete_collection(collection)
   end
 end

@@ -109,6 +109,10 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, :delete_collection, @http_timeout)
   end
 
+  def delete_collection(name) when is_binary(name) do
+    GenServer.call(__MODULE__, {:delete_collection_by_name, name}, @http_timeout)
+  end
+
   def reset_collection do
     GenServer.call(__MODULE__, :reset_collection, @http_timeout)
   end
@@ -350,6 +354,11 @@ defmodule ElixirNexus.QdrantClient do
 
   def handle_call(:delete_collection, _from, state) do
     result = http_delete("#{state.url}/collections/#{state.collection}")
+    {:reply, result, state}
+  end
+
+  def handle_call({:delete_collection_by_name, name}, _from, state) do
+    result = http_delete("#{state.url}/collections/#{name}")
     {:reply, result, state}
   end
 

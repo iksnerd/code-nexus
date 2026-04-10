@@ -51,6 +51,12 @@ Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
 ---
 
+## ✅ Done (v0.7.1 — Qdrant test collection cleanup)
+
+- [x] **Deleted 84 orphaned test collections from Qdrant** — accumulated from `mcp_server_test.exs` runs that never cleaned up
+- [x] **Added `QdrantClient.delete_collection/1`** — delete collection by name (existing `/0` only deletes active)
+- [x] **Fixed test cleanup** — 3 MCP server tests now delete their Qdrant collections alongside temp dir cleanup
+
 ## ✅ Done (v0.7.0 — skills-based review fixes)
 
 - [x] **Broadway parse errors now properly failed** — `indexing_pipeline.ex` uses `Broadway.Message.failed/2` + `handle_failed/2` with Indexer acks
