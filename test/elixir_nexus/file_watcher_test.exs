@@ -33,6 +33,7 @@ defmodule ElixirNexus.FileWatcherTest do
   end
 
   describe "watch_directory/1" do
+    @tag :file_watcher
     test "watches a valid directory" do
       dir = System.tmp_dir!() |> Path.join("fw_test_#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
@@ -48,6 +49,7 @@ defmodule ElixirNexus.FileWatcherTest do
       File.rm_rf!(dir)
     end
 
+    @tag :file_watcher
     test "returns ok tuple with watcher pid" do
       dir = System.tmp_dir!() |> Path.join("fw_test_pid_#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
@@ -61,6 +63,7 @@ defmodule ElixirNexus.FileWatcherTest do
       File.rm_rf!(dir)
     end
 
+    @tag :file_watcher
     test "can watch multiple directories" do
       dir1 = System.tmp_dir!() |> Path.join("fw_test_multi1_#{System.unique_integer([:positive])}")
       dir2 = System.tmp_dir!() |> Path.join("fw_test_multi2_#{System.unique_integer([:positive])}")
@@ -81,6 +84,7 @@ defmodule ElixirNexus.FileWatcherTest do
       File.rm_rf!(dir2)
     end
 
+    @tag :file_watcher
     test "unwatch_all after watching resets count to zero" do
       dir = System.tmp_dir!() |> Path.join("fw_test_reset_#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
@@ -134,7 +138,7 @@ defmodule ElixirNexus.FileWatcherTest do
 
     test "indexable file event adds to pending" do
       pid = Process.whereis(FileWatcher)
-      pending_before = FileWatcher.status().pending
+      _pending_before = FileWatcher.status().pending
 
       send(pid, {:file_event, self(), {"/tmp/test_watch.ex", [:modified]}})
       Process.sleep(50)

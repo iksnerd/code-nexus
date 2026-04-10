@@ -205,6 +205,41 @@ defmodule ElixirNexus.MCPServerTest do
           :ok
       end
     end
+
+    test "includes project_path from state" do
+      state = %{project_root: File.cwd!(), project_path: "/workspace/my-project"}
+
+      {:ok, %{content: [%{type: "text", text: json}]}, _state} =
+        MCPServer.handle_tool_call("get_graph_stats", %{}, state)
+
+      decoded = Jason.decode!(json)
+      assert decoded["project_path"] == "/workspace/my-project"
+    end
+
+    test "project_path is nil when not yet indexed" do
+      Application.delete_env(:elixir_nexus, :current_project_path)
+      state = %{project_root: File.cwd!()}
+
+      {:ok, %{content: [%{type: "text", text: json}]}, _state} =
+        MCPServer.handle_tool_call("get_graph_stats", %{}, state)
+
+      decoded = Jason.decode!(json)
+      assert Map.has_key?(decoded, "project_path")
+      assert decoded["project_path"] == nil
+    end
+
+    test "project_path falls back to Application env when not in state" do
+      Application.put_env(:elixir_nexus, :current_project_path, "/workspace/from-env")
+      state = %{project_root: File.cwd!()}
+
+      {:ok, %{content: [%{type: "text", text: json}]}, _state} =
+        MCPServer.handle_tool_call("get_graph_stats", %{}, state)
+
+      Application.delete_env(:elixir_nexus, :current_project_path)
+
+      decoded = Jason.decode!(json)
+      assert decoded["project_path"] == "/workspace/from-env"
+    end
   end
 
   describe "handle_tool_call find_module_hierarchy" do

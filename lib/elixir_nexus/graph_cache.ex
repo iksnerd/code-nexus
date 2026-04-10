@@ -141,6 +141,8 @@ defmodule ElixirNexus.GraphCache do
         "name" => chunk.name,
         "type" => Atom.to_string(chunk.entity_type),
         "file_path" => chunk.file_path,
+        "start_line" => chunk.start_line,
+        "end_line" => chunk.end_line,
         "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls || []),
         "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a || []),
         "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains || []),

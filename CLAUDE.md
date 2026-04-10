@@ -2,6 +2,18 @@
 
 Code intelligence MCP server — provides graph-powered semantic search, call graph traversal, and impact analysis for any codebase.
 
+## Before Pushing
+
+Always run these checks before pushing to avoid CI failures:
+
+```bash
+mix compile --warnings-as-errors   # Must compile with zero warnings
+mix format --check-formatted       # Must pass formatter check
+mix test --exclude performance --exclude multi_project  # Must pass tests
+```
+
+If formatting fails, run `mix format` to auto-fix, then re-commit.
+
 ## Building
 
 ```bash

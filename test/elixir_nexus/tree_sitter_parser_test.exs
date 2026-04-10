@@ -85,6 +85,7 @@ defmodule ElixirNexus.TreeSitterParserTest do
   describe "parse_and_extract/2 - JSX component calls (NIF integration)" do
     # These tests go through the real NIF parser to ensure the full pipeline works:
     # source → tree-sitter NIF → AST → JavaScriptExtractor → entities with calls
+    @tag :nif
     test "self-closing JSX components appear as calls" do
       source = """
       import { Button } from "@/components/ui/button";
@@ -112,6 +113,7 @@ defmodule ElixirNexus.TreeSitterParserTest do
       assert "Card" in page.calls, "Expected <Card /> to be an outgoing call"
     end
 
+    @tag :nif
     test "opening/closing JSX elements appear as calls" do
       source = """
       export default function Layout({ children }) {
@@ -135,6 +137,7 @@ defmodule ElixirNexus.TreeSitterParserTest do
       assert "SheetContent" in layout.calls, "Expected <SheetContent> to be an outgoing call"
     end
 
+    @tag :nif
     test "lowercase HTML intrinsics are NOT in calls" do
       source = """
       export function Widget() {

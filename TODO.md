@@ -1,28 +1,19 @@
-# TODO — Next Release (v0.5.0)
+# TODO — Next Release (v0.7.0)
 
 Tracking bugs, improvements, and OSS prep items from council-hub feedback.
-
----
-
-## 🔴 Critical
-
-_(none)_
 
 ---
 
 ## 🟡 Medium
 
 - [ ] **`analyze_impact` / `find_all_callers` resolve to module, not enclosing function**
-  Impact tree nodes and caller results show module-level entities (`start_line: 1, end_line: 1`) instead of the specific function that contains the call. e.g. `formatBytes` impact returned `page` module, not `TorrentsPage`. `find_all_callers("FileExplorer")` returned the `page` module instead of `TorrentDetailsPage` at line 60. Both tools share this root cause — need to resolve to the tightest containing function entity, not the module root.
+  While start_line/end_line are now correctly propagated from the graph cache (fixed in v0.6.0), callers still resolve to the module-level entity rather than the tightest enclosing function. e.g. `find_all_callers("FileExplorer")` returns `page` module instead of `TorrentDetailsPage`. Root cause: the call edge is on the module chunk, not the function chunk. Needs chunking-level fix to attribute calls to their enclosing function.
 
 - [ ] **Framework internals dominate top-connected nodes**
   On shadcn/ui projects, `Comp` (degree 546) and `cn()` (473) flood the graph and bury real app modules. Filter or deprioritize single-character names and known utility patterns in `get_graph_stats` top-connected output.
 
 - [ ] **Default `reindex` with no path indexes Nexus itself**
   First-time users get Elixir results with no relation to their project and no warning. Should warn or error if no path is given and no previously-indexed project is detected.
-
-- [ ] **Docker image still ~3.3GB**
-  Bumblebee/EXLA removed but image remains large. Investigate multi-stage build with a slim runtime image.
 
 ---
 
@@ -56,11 +47,25 @@ _(none)_
 ## 📦 OSS Prep (remaining)
 
 - [ ] **Secret audit** — run `gitleaks` or `trufflehog` on git history
-- [ ] **`.env.example`** — document `QDRANT_URL`, `OLLAMA_URL`, `MCP_HTTP_PORT`, `WORKSPACE`, `WORKSPACE_HOST`, `OLLAMA_MODEL`
-- [ ] **README.md at repo root** — GitHub-facing README (current `docs/DOCKERHUB.md` is close, needs adapting)
 - [ ] **GitHub topics** — add discoverability tags (`mcp`, `code-intelligence`, `elixir`, `tree-sitter`, `qdrant`, `semantic-search`)
 
 ---
+
+## ✅ Done (v0.6.0)
+
+- [x] **CI fixed** — tagged NIF tests with `@tag :nif`, file watcher tests with `@tag :file_watcher`, excluded from CI; fixed stale version assertion
+- [x] **`find_all_callers` start_line/end_line no longer hardcoded to 0** — now reads from graph cache node data
+- [x] **`GraphCache.update_file` preserves start_line/end_line** — incremental file updates now include line info (was missing, causing null lines after single-file reindex)
+- [x] **`get_graph_stats` includes `project_path`** — callers can detect stale/wrong index after MCP restart
+- [x] **Docker multi-stage build** — builder stage with Rust toolchain, runtime stage without. Added `.dockerignore`.
+- [x] Tests added for start_line preservation in GraphCache and Queries
+
+## ✅ Done (v0.5.0)
+
+- [x] D3 force-directed graph visualization (3 edge types, hover highlighting, glow rings, 500-node cap)
+- [x] SVG/simulation bug fixes, name resolution fix
+- [x] README overhaul: Bumblebee→Ollama, fresh benchmarks, Ruby support, dashboard screenshots
+- [x] Version bumped to 0.5.0, Docker Hub `iksnerd/elixir-nexus:v0.5.0`
 
 ## ✅ Done (v0.4.0)
 

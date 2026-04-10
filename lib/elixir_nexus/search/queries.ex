@@ -532,8 +532,8 @@ defmodule ElixirNexus.Search.Queries do
             "name" => node["name"],
             "file_path" => node["file_path"],
             "entity_type" => node["type"],
-            "start_line" => 0,
-            "end_line" => 0,
+            "start_line" => node["start_line"] || 0,
+            "end_line" => node["end_line"] || 0,
             "calls" => node["calls"] || [],
             "is_a" => node["is_a"] || [],
             "contains" => node["contains"] || []
