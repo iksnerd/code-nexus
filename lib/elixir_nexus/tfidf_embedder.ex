@@ -51,7 +51,7 @@ defmodule ElixirNexus.TFIDFEmbedder do
   @impl true
   def init(_opts) do
     Logger.info("Initializing TF-IDF embedder (768-dim dense + sparse vectors)")
-    :ets.new(@idf_table, [:set, :public, :named_table, read_concurrency: true])
+    # ETS table :nexus_tfidf_idf is created by CacheOwner (survives TFIDFEmbedder crashes)
     {:ok, %{doc_count: 0, doc_freq: %{}}}
   end
 

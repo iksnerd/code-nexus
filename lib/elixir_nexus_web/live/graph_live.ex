@@ -155,7 +155,7 @@ defmodule ElixirNexus.GraphLive.Index do
         %{
           id: id,
           name: node["name"],
-          type: node["type"] || "unknown",
+          type: node["entity_type"] || node["type"] || "unknown",
           file: node["file_path"] |> to_string() |> String.replace_leading("/app/", ""),
           val: (node["incoming_count"] || 0) + 1,
           calls_count: length(node["calls"] || []),

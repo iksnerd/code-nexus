@@ -37,7 +37,7 @@ defmodule ElixirNexus.Indexer do
   end
 
   def search_chunks(query, limit \\ 10) do
-    GenServer.call(__MODULE__, {:search_chunks, query, limit})
+    {:ok, ChunkCache.search(query, limit)}
   end
 
   @doc """
@@ -101,43 +101,12 @@ defmodule ElixirNexus.Indexer do
   def handle_call({:index_directory, path}, from, state) do
     Logger.info("Starting Broadway indexing of directory: #{path}")
 
-    case ElixirNexus.QdrantClient.reset_collection() do
-      {:ok, _} -> Logger.info("Reset Qdrant collection before reindex")
-      {:error, reason} -> Logger.warning("Failed to reset collection: #{inspect(reason)}")
-    end
-
-    # Reset dirty tracker and ETS caches
-    ElixirNexus.DirtyTracker.reset()
-    ChunkCache.clear()
-    GraphCache.clear()
-
-    clean_state = %{
-      state
-      | indexed_files: MapSet.new(),
-        total_chunks: 0,
-        errors: [],
-        pending_reply: nil,
-        pending_file_count: 0,
-        acked_file_count: 0
-    }
-
     case collect_files(path) do
       {:ok, files} when files != [] ->
-        # Push files to Broadway pipeline
-        ElixirNexus.IndexingProducer.push(files)
-
-        # Track completion: wait for acks from pipeline batchers
-        {:noreply,
-         %{
-           clean_state
-           | status: :indexing,
-             indexed_files: MapSet.new(files),
-             pending_reply: from,
-             pending_file_count: length(files),
-             acked_file_count: 0
-         }}
+        do_index_files(files, from, state)
 
       {:ok, []} ->
+        clean_state = prepare_reindex(state)
         {:reply, {:ok, %{indexed_files: 0, total_chunks: 0}}, clean_state}
 
       {:error, reason} ->
@@ -153,25 +122,6 @@ defmodule ElixirNexus.Indexer do
   def handle_call({:index_directories, paths}, from, state) do
     Logger.info("Starting Broadway indexing of directories: #{inspect(paths)}")
 
-    case ElixirNexus.QdrantClient.reset_collection() do
-      {:ok, _} -> Logger.info("Reset Qdrant collection before reindex")
-      {:error, reason} -> Logger.warning("Failed to reset collection: #{inspect(reason)}")
-    end
-
-    ElixirNexus.DirtyTracker.reset()
-    ChunkCache.clear()
-    GraphCache.clear()
-
-    clean_state = %{
-      state
-      | indexed_files: MapSet.new(),
-        total_chunks: 0,
-        errors: [],
-        pending_reply: nil,
-        pending_file_count: 0,
-        acked_file_count: 0
-    }
-
     all_files =
       paths
       |> Enum.flat_map(fn path ->
@@ -184,20 +134,11 @@ defmodule ElixirNexus.Indexer do
 
     case all_files do
       [] ->
+        clean_state = prepare_reindex(state)
         {:reply, {:ok, %{indexed_files: 0, total_chunks: 0}}, clean_state}
 
       files ->
-        ElixirNexus.IndexingProducer.push(files)
-
-        {:noreply,
-         %{
-           clean_state
-           | status: :indexing,
-             indexed_files: MapSet.new(files),
-             pending_reply: from,
-             pending_file_count: length(files),
-             acked_file_count: 0
-         }}
+        do_index_files(files, from, state)
     end
   end
 
@@ -274,12 +215,6 @@ defmodule ElixirNexus.Indexer do
      }, state}
   end
 
-  def handle_call({:search_chunks, query, limit}, _from, state) do
-    # Delegate to ETS-backed ChunkCache
-    results = ChunkCache.search(query, limit)
-    {:reply, {:ok, results}, state}
-  end
-
   @impl true
   def handle_info({:file_indexed, file_path, chunk_count}, state) do
     acked = Map.get(state, :acked_file_count, 0) + 1
@@ -297,6 +232,42 @@ defmodule ElixirNexus.Indexer do
 
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  defp prepare_reindex(state) do
+    case ElixirNexus.QdrantClient.reset_collection() do
+      {:ok, _} -> Logger.info("Reset Qdrant collection before reindex")
+      {:error, reason} -> Logger.warning("Failed to reset collection: #{inspect(reason)}")
+    end
+
+    ElixirNexus.DirtyTracker.reset()
+    ChunkCache.clear()
+    GraphCache.clear()
+
+    %{
+      state
+      | indexed_files: MapSet.new(),
+        total_chunks: 0,
+        errors: [],
+        pending_reply: nil,
+        pending_file_count: 0,
+        acked_file_count: 0
+    }
+  end
+
+  defp do_index_files(files, from, state) do
+    clean_state = prepare_reindex(state)
+    ElixirNexus.IndexingProducer.push(files)
+
+    {:noreply,
+     %{
+       clean_state
+       | status: :indexing,
+         indexed_files: MapSet.new(files),
+         pending_reply: from,
+         pending_file_count: length(files),
+         acked_file_count: 0
+     }}
   end
 
   defp finish_indexing(state) do

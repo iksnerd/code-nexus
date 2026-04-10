@@ -15,8 +15,8 @@ defmodule ElixirNexus.DirtyTracker do
   Check if a file is dirty (has changed since last index).
   Returns {is_dirty, current_checksum}
   """
-  def is_dirty?(file_path) do
-    GenServer.call(__MODULE__, {:is_dirty, file_path})
+  def dirty?(file_path) do
+    GenServer.call(__MODULE__, {:dirty, file_path})
   end
 
   @doc """
@@ -61,7 +61,7 @@ defmodule ElixirNexus.DirtyTracker do
   end
 
   @impl true
-  def handle_call({:is_dirty, file_path}, _from, state) do
+  def handle_call({:dirty, file_path}, _from, state) do
     case File.read(file_path) do
       {:ok, content} ->
         current_checksum = :crypto.hash(:sha256, content) |> Base.encode16()
@@ -90,14 +90,14 @@ defmodule ElixirNexus.DirtyTracker do
     end
   end
 
-  @indexable_extensions ~w(.ex .exs .js .jsx .ts .tsx .py .go .rs .java .rb)
-
   def handle_call({:get_dirty_files, directory}, _from, state) do
+    indexable = ElixirNexus.IndexingHelpers.all_indexable_extensions()
+
     case File.ls(directory) do
       {:ok, files} ->
         dirty_files =
           files
-          |> Enum.filter(fn f -> Path.extname(f) in @indexable_extensions end)
+          |> Enum.filter(fn f -> Path.extname(f) in indexable end)
           |> Enum.map(&Path.join(directory, &1))
           |> Enum.filter(fn path ->
             case File.read(path) do
@@ -148,6 +148,8 @@ defmodule ElixirNexus.DirtyTracker do
   @ignored_dirs ~w(node_modules .next dist build .expo .turbo coverage __generated__ .cache vendor _build deps .elixir_ls .git)
 
   defp collect_files_recursive(directory) do
+    indexable = ElixirNexus.IndexingHelpers.all_indexable_extensions()
+
     case File.ls(directory) do
       {:ok, entries} ->
         Enum.flat_map(entries, fn entry ->
@@ -158,7 +160,7 @@ defmodule ElixirNexus.DirtyTracker do
 
             cond do
               File.dir?(full_path) -> collect_files_recursive(full_path)
-              Path.extname(entry) in @indexable_extensions -> [full_path]
+              Path.extname(entry) in indexable -> [full_path]
               true -> []
             end
           end

@@ -18,25 +18,25 @@ defmodule ElixirNexus.DirtyTrackerTest do
     :ok
   end
 
-  describe "is_dirty?/1" do
+  describe "dirty?/1" do
     test "first-seen file is always dirty" do
       path = Path.join(@test_dir, "new_file.ex")
       File.write!(path, "defmodule Foo do\nend\n")
 
-      assert {true, _checksum} = DirtyTracker.is_dirty?(path)
+      assert {true, _checksum} = DirtyTracker.dirty?(path)
     end
 
     test "file is still dirty if not marked clean" do
       path = Path.join(@test_dir, "unmarked.ex")
       File.write!(path, "defmodule Bar do\nend\n")
 
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
       # Checking again without marking clean — still dirty (no stored checksum)
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
     end
 
     test "returns error for nonexistent file" do
-      assert {:error, :enoent} = DirtyTracker.is_dirty?("/tmp/nonexistent_#{System.unique_integer()}.ex")
+      assert {:error, :enoent} = DirtyTracker.dirty?("/tmp/nonexistent_#{System.unique_integer()}.ex")
     end
   end
 
@@ -45,9 +45,9 @@ defmodule ElixirNexus.DirtyTrackerTest do
       path = Path.join(@test_dir, "clean.ex")
       File.write!(path, "defmodule Clean do\nend\n")
 
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
       assert {:ok, _checksum} = DirtyTracker.mark_clean(path)
-      assert {false, _} = DirtyTracker.is_dirty?(path)
+      assert {false, _} = DirtyTracker.dirty?(path)
     end
 
     test "modified file becomes dirty again" do
@@ -55,11 +55,11 @@ defmodule ElixirNexus.DirtyTrackerTest do
       File.write!(path, "defmodule V1 do\nend\n")
 
       DirtyTracker.mark_clean(path)
-      assert {false, _} = DirtyTracker.is_dirty?(path)
+      assert {false, _} = DirtyTracker.dirty?(path)
 
       # Modify the file
       File.write!(path, "defmodule V2 do\nend\n")
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
     end
   end
 
@@ -69,10 +69,10 @@ defmodule ElixirNexus.DirtyTrackerTest do
       File.write!(path, "defmodule Reset do\nend\n")
 
       DirtyTracker.mark_clean(path)
-      assert {false, _} = DirtyTracker.is_dirty?(path)
+      assert {false, _} = DirtyTracker.dirty?(path)
 
       assert :ok = DirtyTracker.reset()
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
     end
   end
 
@@ -117,11 +117,11 @@ defmodule ElixirNexus.DirtyTrackerTest do
 
       # Mark clean first
       DirtyTracker.mark_clean(path)
-      assert {false, _} = DirtyTracker.is_dirty?(path)
+      assert {false, _} = DirtyTracker.dirty?(path)
 
       # Forget the file — should make it dirty again (no stored checksum)
       assert :ok = DirtyTracker.forget(path)
-      assert {true, _} = DirtyTracker.is_dirty?(path)
+      assert {true, _} = DirtyTracker.dirty?(path)
     end
 
     test "forget on unknown file is a no-op" do

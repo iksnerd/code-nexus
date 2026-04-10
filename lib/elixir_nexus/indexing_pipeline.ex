@@ -71,10 +71,19 @@ defmodule ElixirNexus.IndexingPipeline do
         :telemetry.execute([:nexus, :pipeline, :file_error], %{}, %{file: file_path, reason: reason})
         Logger.warning("Pipeline: failed to process #{file_path}: #{inspect(reason)}")
 
-        message
-        |> Broadway.Message.put_data({file_path, []})
-        |> Broadway.Message.put_batcher(:embed_and_store)
+        Broadway.Message.failed(message, reason)
     end
+  end
+
+  @impl true
+  def handle_failed(messages, _context) do
+    # Send acks for failed files so Indexer completion tracking isn't stuck
+    Enum.each(messages, fn msg ->
+      file_path = msg.data
+      send(ElixirNexus.Indexer, {:file_indexed, file_path, 0})
+    end)
+
+    messages
   end
 
   @impl true

@@ -51,6 +51,17 @@ Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
 ---
 
+## ✅ Done (v0.7.0 — skills-based review fixes)
+
+- [x] **Broadway parse errors now properly failed** — `indexing_pipeline.ex` uses `Broadway.Message.failed/2` + `handle_failed/2` with Indexer acks
+- [x] **TFIDFEmbedder ETS table moved to CacheOwner** — survives crashes, concurrent readers safe
+- [x] **Deduplicated `index_directory`/`index_directories`** — extracted `prepare_reindex/1` + `do_index_files/3`
+- [x] **Renamed `is_dirty?/1` → `dirty?/1`** — all callers + tests updated
+- [x] **Consolidated `@indexable_extensions`** — `DirtyTracker` now delegates to `IndexingHelpers.all_indexable_extensions/0`
+- [x] **Removed `search_chunks/2` GenServer bottleneck** — calls ChunkCache ETS directly
+- [x] **Fixed O(n) `length/1` in ChunkCache.search** — `{count, results}` tuple accumulator
+- [x] **Fixed node structure inconsistency** — `update_file/2` now uses `"entity_type"` (was `"type"`), all 4 consumers updated
+
 ## ✅ Done (v0.6.0)
 
 - [x] **CI fixed** — tagged NIF tests with `@tag :nif`, file watcher tests with `@tag :file_watcher`, excluded from CI; fixed stale version assertion

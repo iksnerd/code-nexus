@@ -139,7 +139,7 @@ defmodule ElixirNexus.GraphCache do
       node = %{
         "id" => entity_id,
         "name" => chunk.name,
-        "type" => Atom.to_string(chunk.entity_type),
+        "entity_type" => Atom.to_string(chunk.entity_type),
         "file_path" => chunk.file_path,
         "start_line" => chunk.start_line,
         "end_line" => chunk.end_line,

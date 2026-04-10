@@ -293,7 +293,7 @@ defmodule ElixirNexus.DashboardLive.Index do
     entity_breakdown =
       graph_nodes
       |> Map.values()
-      |> Enum.group_by(fn node -> node["type"] || node["entity_type"] || "unknown" end)
+      |> Enum.group_by(fn node -> node["entity_type"] || node["type"] || "unknown" end)
       |> Enum.map(fn {type, nodes} -> {type, length(nodes)} end)
       |> Enum.sort_by(fn {_, count} -> -count end)
 
