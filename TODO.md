@@ -1,4 +1,4 @@
-# TODO — Next Release (v0.7.0)
+# TODO — Next Release (v0.8.0)
 
 Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 

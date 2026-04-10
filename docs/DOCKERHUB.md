@@ -102,6 +102,16 @@ Add to your project's `.mcp.json`:
 
 The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-only).
 
+## Tags
+
+- `latest` — current release (v0.7.0)
+- `v0.7.0` — skills-based review fixes, Broadway error handling, ETS crash safety, performance improvements
+- `v0.6.0` — CI fixes, callers line info, project_path tracking, Docker multi-stage build (588MB)
+- `v0.5.0` — D3 graph visualization, README overhaul
+- `v0.4.0` — JSX call edges, dead code convention filter, graph noise filter
+- `v0.3.0` — file_path resolution, centrality scoring, dead code conventions
+- `v0.2.0` — CI/CD, Streamable HTTP, Ollama embeddings, Go support
+
 ## Source
 
 [github.com/iksnerd/elixir-nexus](https://github.com/iksnerd/elixir-nexus)
