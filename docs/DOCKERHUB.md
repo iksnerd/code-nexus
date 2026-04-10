@@ -58,7 +58,7 @@ If a project isn't found, the error lists all available projects in `/workspace`
 | `get_community_context` | Find structurally coupled files via call graph and import edges |
 | `find_module_hierarchy` | Module parents (uses/implements) and children |
 | `find_dead_code` | Find exported functions with zero callers |
-| `get_graph_stats` | Structural overview with critical files (betweenness centrality) |
+| `get_graph_stats` | Structural overview with critical files (betweenness centrality) and current `project_path` |
 
 ## Supported Languages
 
@@ -97,6 +97,10 @@ Add to your project's `.mcp.json`:
 - **TF-IDF** sparse vectors with ETS-backed vocabulary for hybrid search
 - **Qdrant** for vector storage and hybrid search (RRF fusion)
 - **ExMCP** for MCP protocol (stdio + Streamable HTTP)
+
+## Image Size
+
+The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-only).
 
 ## Source
 
