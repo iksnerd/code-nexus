@@ -10,7 +10,8 @@ defmodule ElixirNexus.Layouts do
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
-        <title><%= assigns[:page_title] || "ElixirNexus" %></title>
+        <title><%= assigns[:page_title] || "CodeNexus" %></title>
+        <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://d3js.org/d3.v7.min.js"></script>
         <script src="/js/phoenix.min.js"></script>
@@ -42,7 +43,10 @@ defmodule ElixirNexus.Layouts do
       <header class="border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
           <div class="flex items-center gap-4">
-            <a href="/" class="text-xl font-bold text-white tracking-tight">ElixirNexus</a>
+            <a href="/" class="flex items-center gap-2 text-xl font-bold text-white tracking-tight">
+              <img src="/images/logo.svg" alt="CodeNexus" class="h-7 w-7" />
+              CodeNexus
+            </a>
             <form phx-change="switch_collection" class="flex items-center">
               <select
                 name="collection"

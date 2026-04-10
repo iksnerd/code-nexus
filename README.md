@@ -1,6 +1,14 @@
-# CodeNexus
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="code-nexus.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo-dark.svg" />
+    <img src="docs/logo-dark.svg" width="80" alt="CodeNexus logo" />
+  </picture>
+</p>
 
-Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase.
+<h1 align="center">CodeNexus</h1>
+
+<p align="center">Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase.</p>
 
 Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Designed for large codebases with live incremental indexing.
 
