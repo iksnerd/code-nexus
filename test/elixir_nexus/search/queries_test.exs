@@ -598,6 +598,21 @@ defmodule ElixirNexus.Search.QueriesTest do
     end
   end
 
+  describe "find_callers/2 - start_line and end_line preserved" do
+    test "callers have non-zero start_line from graph cache" do
+      {:ok, results} = Queries.find_callers("handle_call")
+
+      assert results != []
+
+      # At least one caller should have a non-zero start_line
+      # (graph nodes built via rebuild_from_chunks include line info)
+      lines = Enum.map(results, fn r -> r.entity["start_line"] end)
+
+      assert Enum.any?(lines, &(&1 != nil and &1 > 0)),
+             "Expected at least one caller with start_line > 0, got: #{inspect(lines)}"
+    end
+  end
+
   describe "get_graph_stats/0 - critical_files with connected graph" do
     test "critical_files returns entries when graph has connected nodes" do
       # Build a denser graph: A → B → C → D → E, all passing through B and C

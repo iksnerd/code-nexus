@@ -289,7 +289,12 @@ defmodule ElixirNexus.MCPServer do
                 project_path: display_path
               }
 
-              json_reply(result, Map.put(state, :indexed_dirs, dirs))
+              Application.put_env(:elixir_nexus, :current_project_path, display_path)
+
+              json_reply(
+                result,
+                state |> Map.put(:indexed_dirs, dirs) |> Map.put(:project_path, display_path)
+              )
 
             {:error, reason} ->
               {:error, "Reindex failed: #{inspect(reason)}", state}
@@ -352,8 +357,15 @@ defmodule ElixirNexus.MCPServer do
     {_reindexed, state} = maybe_reindex_dirty(state)
 
     case ElixirNexus.Search.get_graph_stats() do
-      {:ok, stats} -> json_reply(stats, state)
-      {:error, reason} -> {:error, "Graph stats failed: #{inspect(reason)}", state}
+      {:ok, stats} ->
+        project_path =
+          Map.get(state, :project_path) ||
+            Application.get_env(:elixir_nexus, :current_project_path)
+
+        json_reply(Map.put(stats, :project_path, project_path), state)
+
+      {:error, reason} ->
+        {:error, "Graph stats failed: #{inspect(reason)}", state}
     end
   end
 

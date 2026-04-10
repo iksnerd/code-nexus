@@ -89,6 +89,8 @@ defmodule ElixirNexus.GraphCacheTest do
           name: "new1",
           entity_type: :function,
           file_path: "lib/foo.ex",
+          start_line: 10,
+          end_line: 25,
           calls: ["keep"],
           is_a: [],
           contains: []
@@ -102,6 +104,28 @@ defmodule ElixirNexus.GraphCacheTest do
       assert map_size(nodes) == 2
       assert nodes["keep"] != nil
       assert nodes["new1"] != nil
+    end
+
+    test "preserves start_line and end_line from chunks" do
+      chunks = [
+        %{
+          id: nil,
+          name: "my_func",
+          entity_type: :function,
+          file_path: "lib/test.ex",
+          start_line: 42,
+          end_line: 60,
+          calls: [],
+          is_a: [],
+          contains: []
+        }
+      ]
+
+      GraphCache.update_file("lib/test.ex", chunks)
+
+      node = GraphCache.all_nodes()["my_func"]
+      assert node["start_line"] == 42
+      assert node["end_line"] == 60
     end
   end
 
