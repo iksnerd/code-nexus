@@ -308,6 +308,36 @@ Run with `mix test --include performance`:
 | Index 20 files (Broadway) | 2.0s | |
 | PubSub 100 subscribers | 0.17ms max | |
 
+## Changelog
+
+### v0.6.0
+- **CI fixed** — NIF and file watcher tests now correctly excluded in CI; version assertion no longer hardcoded
+- **`find_all_callers` line numbers** — `start_line`/`end_line` now populated with real function positions (was always 0)
+- **`get_graph_stats` includes `project_path`** — survives MCP server restarts so callers can detect stale index
+- **Docker image 588MB** (was 3.28GB) — multi-stage build drops Rust toolchain from runtime; added `.dockerignore`
+- 12 new tests (633 total)
+
+### v0.5.0
+- D3 force-directed graph at `/graph` — 3 edge types, hover highlighting, glow rings, 500-node cap
+- README overhaul with fresh benchmarks and dashboard screenshots
+
+### v0.4.0
+- JSX component renders tracked as call edges in `find_all_callees`
+- `find_dead_code` filters framework conventions (Next.js pages, layouts, route handlers, loading)
+- Framework utility noise (`cn`, `Comp`, `Slot`) filtered from `get_graph_stats` top-connected
+- `serverInfo.version` now reads from `mix.exs`
+
+### v0.3.0
+- `file_path` no longer null in `find_all_callers` results
+- `critical_files` betweenness centrality working for all graph sizes
+- Dead code convention filter for JS/TS (GET, POST, generateStaticParams, etc.)
+
+### v0.2.0
+- CI/CD, Makefile, Docker Hub publishing
+- Streamable HTTP transport (replaces SSE)
+- Ollama embeddings (replaces Bumblebee/EXLA)
+- Go language support, dead code detection, import graph tracking
+
 ## License
 
 MIT
