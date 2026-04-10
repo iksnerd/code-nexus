@@ -31,21 +31,22 @@ defmodule ElixirNexus.ChunkCache do
 
     # Use :ets.foldl to avoid copying the entire table into the process heap.
     # Collect up to `limit` matching chunks in a single traversal.
-    matches =
+    # Use {count, results} accumulator for O(1) limit check per row.
+    {_count, matches} =
       :ets.foldl(
-        fn {_key, chunk}, acc ->
-          if length(acc) >= limit do
-            acc
+        fn {_key, chunk}, {count, acc} ->
+          if count >= limit do
+            {count, acc}
           else
             if String.contains?(String.downcase(chunk.name), query_lower) ||
                  String.contains?(String.downcase(chunk.content), query_lower) do
-              [chunk | acc]
+              {count + 1, [chunk | acc]}
             else
-              acc
+              {count, acc}
             end
           end
         end,
-        [],
+        {0, []},
         @table
       )
 

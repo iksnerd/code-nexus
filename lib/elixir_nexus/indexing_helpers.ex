@@ -22,6 +22,7 @@ defmodule ElixirNexus.IndexingHelpers do
 
   def elixir_extensions, do: @elixir_extensions
   def polyglot_extensions, do: @polyglot_extensions
+  def all_indexable_extensions, do: @elixir_extensions ++ Map.keys(@polyglot_extensions)
 
   @indexable_dirs [
     # Elixir/Ruby

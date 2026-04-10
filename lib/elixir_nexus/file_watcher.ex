@@ -102,7 +102,7 @@ defmodule ElixirNexus.FileWatcher do
   end
 
   defp reindex_if_dirty(path) do
-    case ElixirNexus.DirtyTracker.is_dirty?(path) do
+    case ElixirNexus.DirtyTracker.dirty?(path) do
       {true, _checksum} ->
         Logger.info("File changed, re-indexing: #{path}")
 

@@ -1,5 +1,5 @@
 defmodule ElixirNexus.CacheOwner do
-  @moduledoc "GenServer that owns ETS tables for GraphCache and ChunkCache."
+  @moduledoc "GenServer that owns ETS tables for GraphCache, ChunkCache, and TF-IDF."
   use GenServer
 
   def start_link(opts) do
@@ -22,6 +22,13 @@ defmodule ElixirNexus.CacheOwner do
       :named_table,
       read_concurrency: true,
       write_concurrency: true
+    ])
+
+    :ets.new(:nexus_tfidf_idf, [
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true
     ])
 
     {:ok, %{}}

@@ -156,14 +156,9 @@ defmodule ElixirNexus.Search do
   end
 
   defp keyword_search_fallback(query, limit) do
-    try do
-      case ElixirNexus.Indexer.search_chunks(query, limit) do
-        {:ok, results} -> {:ok, results}
-        {:error, _} -> {:ok, []}
-      end
-    rescue
-      _ -> {:ok, []}
-    end
+    ElixirNexus.Indexer.search_chunks(query, limit)
+  rescue
+    _ -> {:ok, []}
   end
 
   @doc false

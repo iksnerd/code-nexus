@@ -531,7 +531,7 @@ defmodule ElixirNexus.Search.Queries do
           entity: %{
             "name" => node["name"],
             "file_path" => node["file_path"],
-            "entity_type" => node["type"],
+            "entity_type" => node["entity_type"] || node["type"],
             "start_line" => node["start_line"] || 0,
             "end_line" => node["end_line"] || 0,
             "calls" => node["calls"] || [],
@@ -555,7 +555,7 @@ defmodule ElixirNexus.Search.Queries do
     entity_types =
       graph_nodes
       |> Map.values()
-      |> Enum.group_by(fn node -> node["type"] || node["entity_type"] || "unknown" end)
+      |> Enum.group_by(fn node -> node["entity_type"] || node["type"] || "unknown" end)
       |> Enum.map(fn {type, nodes} -> %{type: type, count: length(nodes)} end)
       |> Enum.sort_by(& &1.count, :desc)
 
