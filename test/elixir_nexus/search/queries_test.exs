@@ -1201,4 +1201,200 @@ defmodule ElixirNexus.Search.QueriesTest do
       assert "Adapter.connect" in affected_names
     end
   end
+
+  # ── New tests for v0.8.0 changes ──────────────────────────────────────────
+
+  describe "find_callees/2 - fuzzy name matching via multi-strategy" do
+    setup do
+      chunks = [
+        %{
+          id: "fuzzy_target",
+          file_path: "/app/lib/service.ex",
+          entity_type: :function,
+          name: "MyService.run",
+          content: "def run, do: :ok",
+          start_line: 1,
+          end_line: 5,
+          module_path: "MyService",
+          visibility: :public,
+          parameters: [],
+          calls: ["Logger.info", "Helper.format"],
+          is_a: [],
+          contains: [],
+          language: :elixir
+        }
+      ]
+
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+      :ok
+    end
+
+    test "finds entity by lowercase name (case-insensitive)" do
+      # "myservice.run" should match "MyService.run" via multi-strategy
+      {:ok, results} = Queries.find_callees("myservice.run")
+      assert is_list(results)
+      assert results != []
+    end
+
+    test "finds entity by short name (substring match)" do
+      # "run" alone should match "MyService.run" via substring strategy
+      {:ok, results} = Queries.find_callees("run")
+      assert is_list(results)
+      assert results != []
+    end
+
+    test "returns :not_found for completely unknown entity" do
+      assert {:error, :not_found} = Queries.find_callees("TotallyNonexistentXYZ999")
+    end
+  end
+
+  describe "find_callers/2 - refinement to enclosing function" do
+    setup do
+      # Module chunk covering lines 1-100, calls "TargetFunc"
+      module_chunk = %{
+        id: "refine_module",
+        file_path: "/app/lib/page.ex",
+        entity_type: :module,
+        name: "PageModule",
+        content: "defmodule PageModule do\nend",
+        start_line: 1,
+        end_line: 100,
+        module_path: "PageModule",
+        visibility: :public,
+        parameters: [],
+        calls: ["TargetFunc"],
+        is_a: [],
+        contains: ["PageModule.render_page"],
+        language: :elixir
+      }
+
+      # Function chunk at lines 50-70, also calls "TargetFunc" — should be preferred
+      function_chunk = %{
+        id: "refine_function",
+        file_path: "/app/lib/page.ex",
+        entity_type: :function,
+        name: "PageModule.render_page",
+        content: "def render_page, do: TargetFunc.call()",
+        start_line: 50,
+        end_line: 70,
+        module_path: "PageModule",
+        visibility: :public,
+        parameters: [],
+        calls: ["TargetFunc"],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      # The target entity being searched for
+      target_chunk = %{
+        id: "target_func",
+        file_path: "/app/lib/target.ex",
+        entity_type: :function,
+        name: "TargetFunc",
+        content: "def call, do: :ok",
+        start_line: 1,
+        end_line: 5,
+        module_path: "TargetFunc",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      ChunkCache.insert_many([module_chunk, function_chunk, target_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+      :ok
+    end
+
+    test "returns function entity instead of module when a tighter match exists" do
+      {:ok, results} = Queries.find_callers("TargetFunc")
+      assert results != []
+
+      names = Enum.map(results, fn r -> r.entity["name"] end)
+      # The enclosing function should be preferred over the module
+      assert "PageModule.render_page" in names,
+             "Expected render_page in callers, got: #{inspect(names)}"
+    end
+
+    test "refined result has proper line numbers (not line 0)" do
+      {:ok, results} = Queries.find_callers("TargetFunc")
+      assert results != []
+
+      render_result = Enum.find(results, fn r -> r.entity["name"] == "PageModule.render_page" end)
+
+      if render_result do
+        assert render_result.entity["start_line"] == 50
+        assert render_result.entity["end_line"] == 70
+      end
+    end
+  end
+
+  describe "find_module_hierarchy/1 - @/ path alias resolution" do
+    setup do
+      button_chunk = %{
+        id: "button_chunk",
+        file_path: "/app/src/components/ui/button.tsx",
+        entity_type: :function,
+        name: "Button",
+        content: "export function Button() {}",
+        start_line: 1,
+        end_line: 10,
+        module_path: "Button",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      page_chunk = %{
+        id: "page_chunk",
+        file_path: "/app/src/app/page.tsx",
+        entity_type: :function,
+        name: "HomePage",
+        content: "import { Button } from '@/components/ui/button';\nexport function HomePage() {}",
+        start_line: 1,
+        end_line: 20,
+        module_path: "HomePage",
+        visibility: :public,
+        parameters: [],
+        calls: ["Button"],
+        is_a: ["@/components/ui/button"],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.insert_many([button_chunk, page_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+      :ok
+    end
+
+    test "resolves @/ prefixed import to entity file path" do
+      {:ok, result} = Queries.find_module_hierarchy("HomePage")
+      assert result.name == "HomePage"
+
+      # The @/components/ui/button import should resolve to the Button entity
+      resolved_parents = Enum.filter(result.parents, & &1.resolved)
+      assert resolved_parents != [],
+             "Expected at least one resolved parent, got: #{inspect(result.parents)}"
+
+      resolved_names = Enum.map(resolved_parents, & &1.name)
+      assert "Button" in resolved_names,
+             "Expected Button in resolved parents, got: #{inspect(resolved_names)}"
+    end
+
+    test "resolved parent includes file_path" do
+      {:ok, result} = Queries.find_module_hierarchy("HomePage")
+      button_parent = Enum.find(result.parents, fn p -> p[:name] == "Button" end)
+
+      if button_parent && button_parent.resolved do
+        assert button_parent.file_path == "/app/src/components/ui/button.tsx"
+      end
+    end
+  end
 end
