@@ -55,16 +55,18 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 6 — Build and push Docker image
+## 6 — Build and push Docker image (multi-arch)
 
 ```bash
-docker buildx build --platform linux/amd64 \
+docker buildx build --platform linux/amd64,linux/arm64 \
   -t iksnerd/elixir-nexus:vX.Y.Z \
   -t iksnerd/elixir-nexus:latest \
   --push .
 ```
 
-The multi-stage Dockerfile handles NIF compilation automatically. Expected image size: ~588MB.
+**Important:** Always build for both `linux/amd64` and `linux/arm64`. Single-arch amd64 images crash under Rosetta on Apple Silicon Macs (telemetry NIF fails). Multi-arch ensures native execution on both Intel and ARM hosts.
+
+The multi-stage Dockerfile handles NIF compilation automatically for each platform. Expected image size: ~588MB per arch.
 
 After push, verify on Docker Hub: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
 
