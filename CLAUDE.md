@@ -49,7 +49,7 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 ## Testing
 
 ```bash
-mix test                    # All tests (~211, 0 compile warnings)
+mix test                    # All tests (~640, 0 compile warnings)
 mix test --trace            # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests

@@ -284,7 +284,7 @@ The graph renders up to 500 nodes sorted by connectivity. Hover any node to high
 ## Testing
 
 ```bash
-mix test                        # All tests (~635)
+mix test                        # All tests (~640)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
@@ -309,6 +309,18 @@ Run with `mix test --include performance`:
 | PubSub 100 subscribers | 0.17ms max | |
 
 ## Changelog
+
+### v0.7.0
+- **Broadway error handling** — parse failures now properly use `Broadway.Message.failed/2` instead of silently swallowing errors
+- **TFIDFEmbedder ETS crash-safe** — IDF table moved to CacheOwner (survives TFIDFEmbedder crashes)
+- **Deduplicated indexing handlers** — extracted `prepare_reindex/1` and `do_index_files/3`
+- **`is_dirty?/1` → `dirty?/1`** — renamed to follow Elixir naming convention
+- **Single source of truth for extensions** — `DirtyTracker` now delegates to `IndexingHelpers.all_indexable_extensions/0`
+- **`search_chunks/2` optimization** — removed GenServer bottleneck, calls ETS directly
+- **ChunkCache.search performance** — replaced O(n) `length/1` with O(1) counter accumulator in foldl
+- **Node structure consistency** — `update_file/2` now uses `"entity_type"` matching `rebuild_from_chunks/1`
+- **15 Agent Skills** — `.agents/skills/` with 10 general Elixir/OTP/Phoenix skills + 5 project-specific skills (agentskills.io standard)
+- 640 tests (7 new)
 
 ### v0.6.0
 - **CI fixed** — NIF and file watcher tests now correctly excluded in CI; version assertion no longer hardcoded
