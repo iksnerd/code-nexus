@@ -31,9 +31,113 @@ defmodule ElixirNexus.QdrantClient do
     |> then(&"nexus_#{&1}")
   end
 
+  # Store url + collection in Application env so reads bypass the GenServer mailbox.
+  defp store_runtime_state(url, collection) do
+    Application.put_env(:elixir_nexus, :qdrant_runtime, %{url: url, collection: collection})
+  end
+
+  # Read current connection state without calling the GenServer.
+  # Checks process dictionary first — set per-tool-call via Process.put(:nexus_collection, ...)
+  # to isolate concurrent tool invocations from mid-flight collection switches.
+  defp qdrant_state do
+    base =
+      Application.get_env(:elixir_nexus, :qdrant_runtime, %{
+        url: qdrant_url(),
+        collection: collection_name()
+      })
+
+    collection = Process.get(:nexus_collection) || base.collection
+    %{base | collection: collection}
+  end
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
+
+  # ── Read-only operations — bypass GenServer, run concurrently in caller's process ──
+
+  @doc "Returns the currently active Qdrant collection name."
+  def active_collection do
+    qdrant_state().collection
+  end
+
+  def search(vector, limit \\ 10) do
+    %{url: url, collection: coll} = qdrant_state()
+
+    body = %{
+      "vector" => %{"name" => "semantic", "vector" => vector},
+      "limit" => limit,
+      "with_payload" => true
+    }
+
+    http_post("#{url}/collections/#{coll}/points/search", body)
+  end
+
+  def search_with_filter(vector, filter, limit \\ 10) do
+    %{url: url, collection: coll} = qdrant_state()
+
+    body = %{
+      "vector" => %{"name" => "semantic", "vector" => vector},
+      "filter" => filter,
+      "limit" => limit,
+      "with_payload" => true
+    }
+
+    http_post("#{url}/collections/#{coll}/points/search", body)
+  end
+
+  @doc """
+  Hybrid search using Qdrant's query API with prefetch + RRF fusion.
+  Combines dense semantic vector search with sparse keyword vector search.
+  """
+  def hybrid_search(embedding, sparse_vector, limit \\ 10) do
+    %{url: url, collection: coll} = qdrant_state()
+    start_time = System.monotonic_time()
+
+    body = %{
+      "prefetch" => [
+        %{"query" => embedding, "using" => "semantic", "limit" => limit * 3},
+        %{"query" => sparse_vector, "using" => "keywords", "limit" => limit * 3}
+      ],
+      "query" => %{"fusion" => "rrf"},
+      "limit" => limit,
+      "with_payload" => true
+    }
+
+    result = http_post("#{url}/collections/#{coll}/points/query", body)
+    duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+    :telemetry.execute([:nexus, :qdrant, :hybrid_search], %{duration_ms: duration_ms, limit: limit}, %{})
+    result
+  end
+
+  def collection_info do
+    %{url: url, collection: coll} = qdrant_state()
+    http_get("#{url}/collections/#{coll}")
+  end
+
+  def scroll_points(limit \\ 20, offset \\ nil, filter \\ nil) do
+    %{url: url, collection: coll} = qdrant_state()
+
+    body =
+      %{"limit" => limit, "with_payload" => true}
+      |> then(fn b -> if offset, do: Map.put(b, "offset", offset), else: b end)
+      |> then(fn b -> if filter, do: Map.put(b, "filter", filter), else: b end)
+
+    http_post("#{url}/collections/#{coll}/points/scroll", body)
+  end
+
+  def get_point(id) do
+    %{url: url, collection: coll} = qdrant_state()
+    http_get("#{url}/collections/#{coll}/points/#{id}")
+  end
+
+  def count_points(filter \\ nil) do
+    %{url: url, collection: coll} = qdrant_state()
+    body = if filter, do: %{"filter" => filter, "exact" => true}, else: %{"exact" => true}
+    http_post("#{url}/collections/#{coll}/points/count", body)
+  end
+
+  # ── Write / state-mutation operations — remain as GenServer calls ──
 
   def health_check do
     GenServer.call(__MODULE__, :health_check, @http_timeout)
@@ -50,34 +154,6 @@ defmodule ElixirNexus.QdrantClient do
   @doc "Batch upsert multiple points in a single HTTP call."
   def upsert_points(points) when is_list(points) do
     GenServer.call(__MODULE__, {:upsert_points, points}, 120_000)
-  end
-
-  def search(vector, limit \\ 10) do
-    GenServer.call(__MODULE__, {:search, vector, limit}, @http_timeout)
-  end
-
-  def search_with_filter(vector, filter, limit \\ 10) do
-    GenServer.call(__MODULE__, {:search_with_filter, vector, filter, limit}, @http_timeout)
-  end
-
-  @doc """
-  Hybrid search using Qdrant's query API with prefetch + RRF fusion.
-  Combines dense semantic vector search with sparse keyword vector search.
-  """
-  def hybrid_search(embedding, sparse_vector, limit \\ 10) do
-    GenServer.call(__MODULE__, {:hybrid_search, embedding, sparse_vector, limit}, @http_timeout)
-  end
-
-  def collection_info do
-    GenServer.call(__MODULE__, :collection_info, @http_timeout)
-  end
-
-  def scroll_points(limit \\ 20, offset \\ nil, filter \\ nil) do
-    GenServer.call(__MODULE__, {:scroll, limit, offset, filter}, @http_timeout)
-  end
-
-  def get_point(id) do
-    GenServer.call(__MODULE__, {:get_point, id}, @http_timeout)
   end
 
   def delete_points(ids) when is_list(ids) do
@@ -101,8 +177,9 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, {:switch_collection, name}, @http_timeout)
   end
 
-  def active_collection do
-    GenServer.call(__MODULE__, :active_collection)
+  @doc "Switch collection without validating its existence in Qdrant."
+  def switch_collection_force(name) do
+    GenServer.call(__MODULE__, {:switch_collection_force, name}, @http_timeout)
   end
 
   def delete_collection do
@@ -117,24 +194,22 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, :reset_collection, @http_timeout)
   end
 
-  def count_points(filter \\ nil) do
-    GenServer.call(__MODULE__, {:count_points, filter}, @http_timeout)
-  end
-
   @impl true
   def init(_opts) do
     url = qdrant_url()
+    coll = collection_name()
+    store_runtime_state(url, coll)
     Logger.info("Initializing Qdrant client pointing to #{url}")
 
     case http_get("#{url}/") do
       {:ok, _} ->
         Logger.info("Qdrant is healthy")
         Process.send_after(self(), :ensure_collection, 1000)
-        {:ok, %{url: url, collection: collection_name()}}
+        {:ok, %{url: url, collection: coll}}
 
       {:error, reason} ->
         Logger.warning("Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}")
-        {:ok, %{url: url, collection: collection_name()}}
+        {:ok, %{url: url, collection: coll}}
     end
   end
 
@@ -234,63 +309,6 @@ defmodule ElixirNexus.QdrantClient do
     {:reply, result, state}
   end
 
-  def handle_call({:search, vector, limit}, _from, state) do
-    body = %{
-      "vector" => %{"name" => "semantic", "vector" => vector},
-      "limit" => limit,
-      "with_payload" => true
-    }
-
-    result =
-      http_post("#{state.url}/collections/#{state.collection}/points/search", body)
-
-    {:reply, result, state}
-  end
-
-  def handle_call({:search_with_filter, vector, filter, limit}, _from, state) do
-    body = %{
-      "vector" => %{"name" => "semantic", "vector" => vector},
-      "filter" => filter,
-      "limit" => limit,
-      "with_payload" => true
-    }
-
-    result =
-      http_post("#{state.url}/collections/#{state.collection}/points/search", body)
-
-    {:reply, result, state}
-  end
-
-  def handle_call({:hybrid_search, embedding, sparse_vector, limit}, _from, state) do
-    start_time = System.monotonic_time()
-
-    body = %{
-      "prefetch" => [
-        %{
-          "query" => embedding,
-          "using" => "semantic",
-          "limit" => limit * 3
-        },
-        %{
-          "query" => sparse_vector,
-          "using" => "keywords",
-          "limit" => limit * 3
-        }
-      ],
-      "query" => %{"fusion" => "rrf"},
-      "limit" => limit,
-      "with_payload" => true
-    }
-
-    result =
-      http_post("#{state.url}/collections/#{state.collection}/points/query", body)
-
-    duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    :telemetry.execute([:nexus, :qdrant, :hybrid_search], %{duration_ms: duration_ms, limit: limit}, %{})
-
-    {:reply, result, state}
-  end
-
   def handle_call(:list_collections, _from, state) do
     case http_get("#{state.url}/collections") do
       {:ok, data} ->
@@ -305,6 +323,7 @@ defmodule ElixirNexus.QdrantClient do
   def handle_call({:switch_collection, name}, _from, state) do
     case http_get("#{state.url}/collections/#{name}") do
       {:ok, _} ->
+        store_runtime_state(state.url, name)
         {:reply, :ok, %{state | collection: name}}
 
       {:error, reason} ->
@@ -312,32 +331,9 @@ defmodule ElixirNexus.QdrantClient do
     end
   end
 
-  def handle_call(:active_collection, _from, state) do
-    {:reply, state.collection, state}
-  end
-
   def handle_call({:switch_collection_force, name}, _from, state) do
+    store_runtime_state(state.url, name)
     {:reply, :ok, %{state | collection: name}}
-  end
-
-  def handle_call(:collection_info, _from, state) do
-    result = http_get("#{state.url}/collections/#{state.collection}")
-    {:reply, result, state}
-  end
-
-  def handle_call({:scroll, limit, offset, filter}, _from, state) do
-    body =
-      %{"limit" => limit, "with_payload" => true}
-      |> then(fn b -> if offset, do: Map.put(b, "offset", offset), else: b end)
-      |> then(fn b -> if filter, do: Map.put(b, "filter", filter), else: b end)
-
-    result = http_post("#{state.url}/collections/#{state.collection}/points/scroll", body)
-    {:reply, result, state}
-  end
-
-  def handle_call({:get_point, id}, _from, state) do
-    result = http_get("#{state.url}/collections/#{state.collection}/points/#{id}")
-    {:reply, result, state}
   end
 
   def handle_call({:delete_points, ids}, _from, state) do
@@ -367,12 +363,6 @@ defmodule ElixirNexus.QdrantClient do
 
     result = http_put("#{state.url}/collections/#{state.collection}", collection_schema())
 
-    {:reply, result, state}
-  end
-
-  def handle_call({:count_points, filter}, _from, state) do
-    body = if filter, do: %{"filter" => filter, "exact" => true}, else: %{"exact" => true}
-    result = http_post("#{state.url}/collections/#{state.collection}/points/count", body)
     {:reply, result, state}
   end
 

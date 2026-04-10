@@ -35,7 +35,7 @@ defmodule ElixirNexus.Search.Queries do
         # Build reverse edge index once: name_lower -> [referencing_entities]
         # Includes both calls and imports so import-only dependencies are tracked
         edge_index = build_reverse_edge_index(all_entities)
-        tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new())
+        tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new(), all_entities)
         flat = flatten_impact_tree(tree)
 
         {:ok,
@@ -73,9 +73,9 @@ defmodule ElixirNexus.Search.Queries do
     end)
   end
 
-  defp build_impact_tree(_name, _call_index, 0, _visited), do: []
+  defp build_impact_tree(_name, _call_index, 0, _visited, _all_entities), do: []
 
-  defp build_impact_tree(name, call_index, depth, visited) do
+  defp build_impact_tree(name, call_index, depth, visited, all_entities) do
     name_lower = String.downcase(name)
 
     # Find callers via index: exact match + partial matches (Module.func -> func)
@@ -95,6 +95,7 @@ defmodule ElixirNexus.Search.Queries do
         entity_name = e.entity["name"] || ""
         MapSet.member?(visited, entity_name)
       end)
+      |> refine_entities_to_functions(name_lower, all_entities)
 
     Enum.map(callers, fn caller ->
       caller_name = caller.entity["name"]
@@ -106,7 +107,7 @@ defmodule ElixirNexus.Search.Queries do
         entity_type: caller.entity["entity_type"],
         start_line: caller.entity["start_line"],
         end_line: caller.entity["end_line"],
-        affected_by: build_impact_tree(caller_name, call_index, depth - 1, new_visited)
+        affected_by: build_impact_tree(caller_name, call_index, depth - 1, new_visited, all_entities)
       }
     end)
   end
@@ -123,31 +124,45 @@ defmodule ElixirNexus.Search.Queries do
   def find_callees(entity_name, limit \\ 20) do
     Logger.info("Finding callees of: #{entity_name}")
 
-    case get_definition(entity_name) do
-      {:ok, entity} ->
-        calls = entity.entity["calls"] || []
+    case get_all_entities_cached(2000) do
+      {:ok, [_ | _] = all_entities} ->
+        # Try multi-strategy resolution first (exact, file-path, substring) —
+        # same as find_module_hierarchy. Falls back to Qdrant exact match.
+        entity =
+          find_entity_multi_strategy(entity_name, all_entities) ||
+            case get_definition(entity_name) do
+              {:ok, e} -> e
+              _ -> nil
+            end
 
-        # Resolve each call to its entity definition where possible
-        case get_all_entities_cached(2000) do
-          {:ok, all_entities} ->
-            caller_file = entity.entity["file_path"]
-
-            resolved =
-              calls
-              |> Enum.take(limit)
-              |> Enum.map(fn call_name ->
-                resolve_call(call_name, all_entities, caller_file)
-              end)
-
-            {:ok, resolved}
-
-          _ ->
-            {:ok, Enum.map(Enum.take(calls, limit), &%{name: &1, resolved: false})}
+        case entity do
+          nil -> {:error, :not_found}
+          e -> resolve_callees(e, all_entities, limit)
         end
 
-      error ->
-        error
+      _ ->
+        # Cache empty — fall back to Qdrant exact match only
+        case get_definition(entity_name) do
+          {:ok, entity} ->
+            calls = entity.entity["calls"] || []
+            {:ok, Enum.map(Enum.take(calls, limit), &%{name: &1, resolved: false})}
+
+          error ->
+            error
+        end
     end
+  end
+
+  defp resolve_callees(entity, all_entities, limit) do
+    calls = entity.entity["calls"] || []
+    caller_file = entity.entity["file_path"]
+
+    resolved =
+      calls
+      |> Enum.take(limit)
+      |> Enum.map(&resolve_call(&1, all_entities, caller_file))
+
+    {:ok, resolved}
   end
 
   defp get_definition(entity_name) do
@@ -541,7 +556,17 @@ defmodule ElixirNexus.Search.Queries do
         }
       end)
 
-    {:ok, results}
+    # Refine module-level callers to their enclosing function entity where possible
+    refined =
+      case get_all_entities_cached(2000) do
+        {:ok, all_entities} ->
+          refine_entities_to_functions(results, entity_name, all_entities)
+
+        _ ->
+          results
+      end
+
+    {:ok, refined}
   end
 
   @doc """
@@ -778,7 +803,7 @@ defmodule ElixirNexus.Search.Queries do
              matches_entity_name?(e.entity["name"] || "", name)
            end) do
         nil ->
-          %{name: name, resolved: false}
+          resolve_by_path_alias(name, all_entities) || %{name: name, resolved: false}
 
         found ->
           %{
@@ -789,6 +814,118 @@ defmodule ElixirNexus.Search.Queries do
           }
       end
     end)
+  end
+
+  # Attempt to resolve path-aliased imports (e.g. @/components/ui/button) to
+  # local entities by stripping the alias prefix and matching against file paths.
+  defp resolve_by_path_alias(name, all_entities) do
+    alias_prefixed? =
+      (String.starts_with?(name, "@") or String.starts_with?(name, "~")) and
+        String.contains?(name, "/")
+
+    relative_prefixed? =
+      String.starts_with?(name, "./") or String.starts_with?(name, "../")
+
+    if alias_prefixed? or relative_prefixed? do
+      case Enum.find(all_entities, fn e ->
+             import_matches_file?(name, e.entity["file_path"] || "")
+           end) do
+        nil ->
+          # Fallback: match by basename only (e.g. "button" from "@/components/ui/button")
+          basename = name |> String.split("/") |> List.last()
+
+          Enum.find(all_entities, fn e ->
+            file_path_matches_name?(e.entity["file_path"] || "", basename)
+          end)
+          |> build_resolved_entry()
+
+        found ->
+          build_resolved_entry(found)
+      end
+    else
+      nil
+    end
+  end
+
+  defp build_resolved_entry(nil), do: nil
+
+  defp build_resolved_entry(entity_result) do
+    %{
+      name: entity_result.entity["name"],
+      file_path: entity_result.entity["file_path"],
+      entity_type: entity_result.entity["entity_type"],
+      resolved: true
+    }
+  end
+
+  # Refine a list of caller entities: for any module-level caller, try to find
+  # a tighter function-level entity in the same file that explicitly calls the target.
+  # This resolves "find_callers returns page module at line 0" to the actual
+  # enclosing function (e.g. TorrentDetailsPage at line 60).
+  defp refine_entities_to_functions(entities, target_name, all_entities) do
+    function_index = build_function_index(all_entities)
+    target_lower = String.downcase(target_name)
+
+    Enum.map(entities, fn result ->
+      entity_type = result.entity["entity_type"] || ""
+      file = result.entity["file_path"]
+
+      if entity_type not in ["function", "method"] and is_binary(file) do
+        find_enclosing_function(target_lower, result, function_index, file) || result
+      else
+        result
+      end
+    end)
+  end
+
+  # Group function/method entities by file path for O(1) lookup per file.
+  defp build_function_index(all_entities) do
+    all_entities
+    |> Enum.filter(fn e -> e.entity["entity_type"] in ["function", "method"] end)
+    |> Enum.group_by(fn e -> e.entity["file_path"] end)
+  end
+
+  # Given a module-level caller result, find the tightest function in the same file
+  # that also calls the target entity. If line range info is available, prefers the
+  # function whose range is contained within the module's range.
+  defp find_enclosing_function(target_lower, module_result, function_index, file) do
+    mod_start = module_result.entity["start_line"] || 0
+    mod_end = module_result.entity["end_line"] || 0
+    functions = Map.get(function_index, file, [])
+
+    # Functions in this file that also call the target
+    matching =
+      Enum.filter(functions, fn func ->
+        Enum.any?(func.entity["calls"] || [], fn c ->
+          c_lower = String.downcase(c)
+
+          c_lower == target_lower or
+            String.ends_with?(c_lower, "." <> target_lower) or
+            String.ends_with?(target_lower, "." <> c_lower)
+        end)
+      end)
+
+    case matching do
+      [] ->
+        nil
+
+      candidates ->
+        if mod_end > mod_start do
+          # Prefer the tightest function contained within the module's line range
+          contained =
+            Enum.filter(candidates, fn func ->
+              f_start = func.entity["start_line"] || 0
+              f_end = func.entity["end_line"] || 0
+              f_start >= mod_start and f_end <= mod_end
+            end)
+
+          (contained ++ candidates)
+          |> List.first()
+        else
+          # No line range info — return any function in the file calling the target
+          List.first(candidates)
+        end
+    end
   end
 
   defp get_all_entities(limit) do

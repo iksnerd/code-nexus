@@ -307,6 +307,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("search_code", %{"query" => query} = args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 10)
     {:ok, results} = ElixirNexus.Search.search_code(query, limit)
@@ -314,6 +315,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_all_callees", %{"entity_name" => name} = args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 20)
 
@@ -324,6 +326,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("analyze_impact", %{"entity_name" => name} = args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
     depth = to_int(Map.get(args, "depth"), 3)
 
@@ -334,6 +337,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("get_community_context", %{"file_path" => path} = args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 10)
 
@@ -344,6 +348,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_all_callers", %{"entity_name" => name} = args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
     limit = to_int(Map.get(args, "limit"), 20)
 
@@ -354,6 +359,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
 
     case ElixirNexus.Search.get_graph_stats() do
@@ -370,6 +376,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_dead_code", args, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
 
     opts =
@@ -385,6 +392,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_module_hierarchy", %{"entity_name" => name}, state) do
+    capture_collection()
     {_reindexed, state} = maybe_reindex_dirty(state)
 
     case ElixirNexus.Search.find_module_hierarchy(name) do
@@ -404,7 +412,20 @@ defmodule ElixirNexus.MCPServer do
   #   "/workspace/foo"           → passthrough (already container path)
   #   "/Users/x/Documents/foo"   → translate via WORKSPACE_HOST → /workspace/foo
   #   "foo" (bare name)          → /workspace/foo if it exists, else error with suggestions
-  defp resolve_path(nil, project_root), do: {:ok, project_root, project_root}
+  defp resolve_path(nil, project_root) do
+    # When workspace projects are available, require an explicit path.
+    # Omitting it would silently index the ElixirNexus repo itself (/app),
+    # which is almost never what users want.
+    case list_workspace_projects() do
+      [] ->
+        {:ok, project_root, project_root}
+
+      projects ->
+        {:error,
+         "No project path specified. Omitting 'path' would index the ElixirNexus repo itself, not your project. " <>
+           "Specify a project name or path. Available workspace projects: #{Enum.join(projects, ", ")}"}
+    end
+  end
 
   defp resolve_path(path, _project_root) when is_binary(path) do
     cond do
@@ -491,7 +512,7 @@ defmodule ElixirNexus.MCPServer do
 
     if collection != current do
       Logger.info("Switching Qdrant collection: #{current} -> #{collection}")
-      GenServer.call(ElixirNexus.QdrantClient, {:switch_collection_force, collection}, 30_000)
+      ElixirNexus.QdrantClient.switch_collection_force(collection)
       ElixirNexus.Events.broadcast_collection_changed(collection)
     end
   end
@@ -553,6 +574,13 @@ defmodule ElixirNexus.MCPServer do
     end)
 
     length(deleted_paths)
+  end
+
+  # Pin the active Qdrant collection into the process dictionary at the start of each
+  # tool call. QdrantClient.qdrant_state/0 checks this first, so concurrent reindex
+  # operations cannot swap the collection out from under an in-flight query.
+  defp capture_collection do
+    Process.put(:nexus_collection, ElixirNexus.QdrantClient.active_collection())
   end
 
   # Safe JSON encoding — returns error text instead of crashing on non-serializable values
