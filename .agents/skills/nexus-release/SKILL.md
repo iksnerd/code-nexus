@@ -88,6 +88,7 @@ After push, verify on Docker Hub: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
 
 | Version | Key changes |
 |---------|-------------|
+| v0.9.0  | MCP resources (4 resources + load_resources fallback tool), dynamic codebase knowledge from ETS |
 | v0.8.0  | Concurrent QdrantClient reads, cross-project isolation, caller refinement to enclosing function, fuzzy callees, @/ alias resolution, reindex warning |
 | v0.7.1  | Qdrant test collection cleanup, `delete_collection/1` added |
 | v0.7.0  | 8 OTP/code quality fixes, Broadway error handling, ETS ownership, 15 agent skills |

@@ -318,6 +318,18 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v0.9.0
+- **MCP Resources** — expose codebase knowledge as MCP resources (`nexus://guide/tools`, `nexus://project/overview`, `nexus://project/architecture`, `nexus://project/hotspots`) for resource-aware clients
+- **`load_resources` fallback tool** — list or read resources from clients that only support tools (follows MCP creator's recommended pattern)
+- Dynamic resources generated from ETS caches (ChunkCache, GraphCache) — no Qdrant calls needed
+
+### v0.8.0
+- **Concurrent QdrantClient reads** — cross-project isolation, process dictionary collection pinning
+- **Caller refinement** — callers now resolve to enclosing function, not module
+- **Fuzzy callees** — short name matching for `find_all_callees`
+- **`@/` path alias resolution** — JS/TS `@/components/...` imports resolved to actual entities
+- **Reindex warning** — omitting `path` when workspace projects exist now returns an error instead of silently indexing `/app`
+
 ### v0.7.1
 - **Qdrant test collection cleanup** — deleted 84 orphaned test collections, added `QdrantClient.delete_collection/1` by name, fixed test cleanup to prevent future accumulation
 
