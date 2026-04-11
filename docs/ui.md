@@ -4,7 +4,7 @@ The ElixirNexus web dashboard is a Phoenix LiveView application at `http://local
 
 ## Current Implementation
 
-### Three LiveView Pages
+### Four LiveView Pages
 
 1. **DashboardLive** — System overview
    - Indexing statistics (file count, entity count, chunk count)
@@ -62,9 +62,17 @@ The ElixirNexus web dashboard is a Phoenix LiveView application at `http://local
   4. Rebuilds GraphCache from chunks
   5. Broadcasts `:collection_changed` via PubSub
 
+4. **GraphLive** — Interactive code relationship graph
+   - D3.js force-directed graph via `CodeGraph` LiveView hook
+   - Three edge types: calls (solid), imports (dashed amber), contains (dotted indigo)
+   - 500-node cap sorted by degree to prevent browser overload
+   - Hover highlighting with connected node/link emphasis
+   - Detail panel showing file path, line range, calls, and imports
+   - Zoom, pan, and drag controls
+   - Auto-refreshes on indexing events via PubSub
+
 ## Future Ideas
 
-- **Graph visualization**: vis-network or D3.js for call graph rendering via LiveView hooks
 - **Code preview overlays**: hover to see function definitions inline
 - **Impact radius view**: visual blast radius from `analyze_impact` results
 - **Chunk boundary view**: show exactly what text gets embedded per chunk

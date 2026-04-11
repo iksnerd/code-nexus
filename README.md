@@ -292,7 +292,7 @@ The graph renders up to 500 nodes sorted by connectivity. Hover any node to high
 ## Testing
 
 ```bash
-mix test                        # All tests (~640)
+mix test                        # All tests (~707)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
@@ -317,6 +317,16 @@ Run with `mix test --include performance`:
 | PubSub 100 subscribers | 0.17ms max | |
 
 ## Changelog
+
+### v1.0.4
+- **Fix dashboard broken LiveView** — vendor JS files (`phoenix.min.js`, `phoenix_live_view.min.js`) were not tracked in git, so Docker builds excluded them. All LiveView interactivity (buttons, graph, search) was broken in Docker mode.
+- **Static asset tests** — new `static_assets_test.exs` verifies vendor JS and image files are served with 200
+- **Graph page tests** — new `graph_live_test.exs` covers mount, refresh, collection switch, and event handling
+- **Test collection cleanup** — `ExUnit.after_suite` now deletes the test Qdrant collection after each test run
+- 707 tests total
+
+### v1.0.3
+- Rename container name `elixir_nexus` → `code_nexus` in docker-compose and Makefile
 
 ### v1.0.2
 - **Fix `load_resources` entity types showing as `"unknown"`** — `nexus://project/overview`, `nexus://project/architecture`, and `nexus://project/hotspots` now correctly read `node["entity_type"] || node["type"]`, matching the key used by `RelationshipGraph.build_graph/1`
