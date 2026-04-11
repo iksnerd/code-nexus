@@ -107,6 +107,8 @@ MCP HTTP server listening on port 3002
 
 Then do a minimal MCP round-trip: reindex a workspace project and run `search_code` or `get_graph_stats`. Only proceed to post-release once at least one reindex + search succeeds.
 
+**Also verify the dashboard UI works:** open `http://localhost:4100` in a browser and check that LiveView connects (buttons should be interactive, not dead). If LiveView fails to connect, check the browser console for `LiveView is not defined` — this means vendor JS files are missing from the image. See the `priv/static/js/` row in the key files table below.
+
 ## 9 — Clean up old local images
 
 Remove images from previous releases to reclaim disk space. Keep only `latest` and the new version tag (they share the same digest):
@@ -136,6 +138,9 @@ docker rmi iksnerd/elixir-nexus:vOLD1 iksnerd/elixir-nexus:vOLD2
 | `lib/elixir_nexus/qdrant_client.ex` | No hardcoded collection names or URLs |
 | `docker-compose.yml` | Port, env vars, and image reference current |
 | `.github/workflows/ci.yml` | Excluded tags (`@tag :nif`, `@tag :file_watcher`) still valid |
+| `priv/static/js/` | Vendor JS (`phoenix.min.js`, `phoenix_live_view.min.js`) must be git-tracked (`git ls-files priv/static/`) — they're in `.gitignore` so won't auto-stage |
+| `README.md` | Changelog entry for new version, test count accurate |
+| `docs/DOCKERHUB.md` | Tags section updated with new version |
 
 ## Version history reference
 

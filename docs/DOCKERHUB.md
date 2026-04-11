@@ -105,7 +105,11 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.0.0)
+- `latest` — current release (v1.0.4)
+- `v1.0.4` — fix dashboard broken LiveView (missing vendor JS in Docker), static asset tests, graph page tests, test collection cleanup
+- `v1.0.3` — rename container `elixir_nexus` → `code_nexus`
+- `v1.0.2` — fix `load_resources` entity type display, 13 new resource tests
+- `v1.0.1` — internal refactor: split large source/test files into focused modules
 - `v1.0.0` — server renamed to `code-nexus`, directive metadata, tsconfig alias resolution, `OLLAMA_MODEL` env var, graph noise filter extended
 - `v0.9.0` — MCP resources, `load_resources` fallback tool, dynamic codebase knowledge
 - `v0.8.0` — concurrent reads, caller refinement, fuzzy callees, `@/` alias resolution
