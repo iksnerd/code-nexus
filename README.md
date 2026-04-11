@@ -318,6 +318,12 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.0.1
+- **Internal refactor** — split 4 large source files (`search/queries.ex`, `mcp_server.ex`, `javascript_extractor.ex`, `go_extractor.ex`) into focused domain sub-modules; all public APIs unchanged
+- **Test reorganisation** — 5 large test files split into 23 focused test files, matching source module boundaries
+- **Direct unit tests for `EntityResolution` and `PathResolution`** — `matches_entity_name?/2`, `import_matches_file?/2`, `find_entity_multi_strategy/2`, and `PathResolution` pure functions now have dedicated test coverage
+- 714 tests total, 0 failures
+
 ### v1.0.0
 - **Server renamed to `code-nexus`** — MCP server name updated for discoverability by JS/TS/Go/Python users
 - **`"use client"` / `"use server"` directive indexing** — Next.js directives tagged as `directive:use-client` / `directive:use-server` metadata on file-level entities; improves search precision on full-stack codebases

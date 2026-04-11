@@ -33,10 +33,12 @@ defmodule ElixirNexus.MCPServer do
 
   require Logger
 
+  alias ElixirNexus.MCPServer.{IndexManagement, PathResolution, Resources, ResponseFormat}
+
   @impl true
   def handle_initialize(params, state) do
     # Extract client workspace root from MCP roots (first file:// URI)
-    project_root = extract_project_root(params)
+    project_root = PathResolution.extract_project_root(params)
     Logger.info("MCP initialized with project root: #{project_root}")
 
     {:ok,
@@ -52,27 +54,6 @@ defmodule ElixirNexus.MCPServer do
        capabilities: %{tools: %{}, resources: %{}}
      }, Map.put(state, :project_root, project_root)}
   end
-
-  defp extract_project_root(params) do
-    Logger.info("MCP initialize params: #{inspect(Map.keys(params))}")
-
-    # Try roots from initialize params (MCP spec)
-    with nil <- extract_root_from_list(params["roots"]),
-         # Try roots nested under capabilities
-         nil <- extract_root_from_list(get_in(params, ["capabilities", "roots"])) do
-      File.cwd!()
-    end
-  end
-
-  defp extract_root_from_list(roots) when is_list(roots) do
-    Enum.find_value(roots, fn
-      %{"uri" => "file://" <> path} -> path
-      %{"uri" => path} -> path
-      _ -> nil
-    end)
-  end
-
-  defp extract_root_from_list(_), do: nil
 
   # Tool definitions
 
@@ -324,16 +305,16 @@ defmodule ElixirNexus.MCPServer do
     project_root = Map.get(state, :project_root, File.cwd!())
     path_arg = Map.get(args, "path")
 
-    case resolve_path(path_arg, project_root) do
+    case PathResolution.resolve_path(path_arg, project_root) do
       {:ok, index_root, display_path} ->
         dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(index_root)
 
         if dirs == [] do
           {:error,
            "No indexable source directories found at '#{display_path}'." <>
-             workspace_hint(), state}
+             PathResolution.workspace_hint(), state}
         else
-          ensure_collection_for_project(index_root)
+          IndexManagement.ensure_collection_for_project(index_root)
           Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
 
           case ElixirNexus.Indexer.index_directories(dirs) do
@@ -359,11 +340,11 @@ defmodule ElixirNexus.MCPServer do
                   directories: dirs,
                   project_path: display_path
                 }
-                |> maybe_add_default_path_warning(path_arg, display_path, state)
+                |> PathResolution.maybe_add_default_path_warning(path_arg, display_path, state)
 
               Application.put_env(:elixir_nexus, :current_project_path, display_path)
 
-              json_reply(
+              ResponseFormat.json_reply(
                 result,
                 state |> Map.put(:indexed_dirs, dirs) |> Map.put(:project_path, display_path)
               )
@@ -379,60 +360,60 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("search_code", %{"query" => query} = args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
-    limit = to_int(Map.get(args, "limit"), 10)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
+    limit = ResponseFormat.to_int(Map.get(args, "limit"), 10)
     {:ok, results} = ElixirNexus.Search.search_code(query, limit)
-    json_reply(compact_results(results), state)
+    ResponseFormat.json_reply(ResponseFormat.compact_results(results), state)
   end
 
   def handle_tool_call("find_all_callees", %{"entity_name" => name} = args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
-    limit = to_int(Map.get(args, "limit"), 20)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
+    limit = ResponseFormat.to_int(Map.get(args, "limit"), 20)
 
     case ElixirNexus.Search.find_callees(name, limit) do
-      {:ok, results} -> json_reply(compact_results(results), state)
+      {:ok, results} -> ResponseFormat.json_reply(ResponseFormat.compact_results(results), state)
       {:error, reason} -> {:error, "Callee search failed: #{inspect(reason)}", state}
     end
   end
 
   def handle_tool_call("analyze_impact", %{"entity_name" => name} = args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
-    depth = to_int(Map.get(args, "depth"), 3)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
+    depth = ResponseFormat.to_int(Map.get(args, "depth"), 3)
 
     case ElixirNexus.Search.analyze_impact(name, depth) do
-      {:ok, result} -> json_reply(result, state)
+      {:ok, result} -> ResponseFormat.json_reply(result, state)
       {:error, reason} -> {:error, "Impact analysis failed: #{inspect(reason)}", state}
     end
   end
 
   def handle_tool_call("get_community_context", %{"file_path" => path} = args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
-    limit = to_int(Map.get(args, "limit"), 10)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
+    limit = ResponseFormat.to_int(Map.get(args, "limit"), 10)
 
     case ElixirNexus.Search.get_community_context(path, limit) do
-      {:ok, result} -> json_reply(result, state)
+      {:ok, result} -> ResponseFormat.json_reply(result, state)
       {:error, reason} -> {:error, "Community context failed: #{inspect(reason)}", state}
     end
   end
 
   def handle_tool_call("find_all_callers", %{"entity_name" => name} = args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
-    limit = to_int(Map.get(args, "limit"), 20)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
+    limit = ResponseFormat.to_int(Map.get(args, "limit"), 20)
 
     case ElixirNexus.Search.find_callers(name, limit) do
-      {:ok, results} -> json_reply(compact_results(results), state)
+      {:ok, results} -> ResponseFormat.json_reply(ResponseFormat.compact_results(results), state)
       {:error, reason} -> {:error, "Caller search failed: #{inspect(reason)}", state}
     end
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
 
     case ElixirNexus.Search.get_graph_stats() do
       {:ok, stats} ->
@@ -440,7 +421,7 @@ defmodule ElixirNexus.MCPServer do
           Map.get(state, :project_path) ||
             Application.get_env(:elixir_nexus, :current_project_path)
 
-        json_reply(Map.put(stats, :project_path, project_path), state)
+        ResponseFormat.json_reply(Map.put(stats, :project_path, project_path), state)
 
       {:error, reason} ->
         {:error, "Graph stats failed: #{inspect(reason)}", state}
@@ -448,8 +429,8 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("find_dead_code", args, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
 
     opts =
       case Map.get(args, "path_prefix") do
@@ -458,17 +439,17 @@ defmodule ElixirNexus.MCPServer do
       end
 
     case ElixirNexus.Search.find_dead_code(opts) do
-      {:ok, result} -> json_reply(result, state)
+      {:ok, result} -> ResponseFormat.json_reply(result, state)
       {:error, reason} -> {:error, "Dead code detection failed: #{inspect(reason)}", state}
     end
   end
 
   def handle_tool_call("find_module_hierarchy", %{"entity_name" => name}, state) do
-    capture_collection()
-    {_reindexed, state} = maybe_reindex_dirty(state)
+    IndexManagement.capture_collection()
+    {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
 
     case ElixirNexus.Search.find_module_hierarchy(name) do
-      {:ok, result} -> json_reply(result, state)
+      {:ok, result} -> ResponseFormat.json_reply(result, state)
       {:error, :not_found} -> {:error, "Module not found: #{name}", state}
       {:error, reason} -> {:error, "Module hierarchy failed: #{inspect(reason)}", state}
     end
@@ -500,10 +481,10 @@ defmodule ElixirNexus.MCPServer do
           }
         ]
 
-        json_reply(%{resources: resources}, state)
+        ResponseFormat.json_reply(%{resources: resources}, state)
 
       uri ->
-        case read_resource_content(uri) do
+        case Resources.read_resource_content(uri) do
           {:ok, content} -> {:ok, %{content: [%{type: "text", text: content}]}, state}
           {:error, reason} -> {:error, reason, state}
         end
@@ -518,530 +499,9 @@ defmodule ElixirNexus.MCPServer do
 
   @impl true
   def handle_resource_read(uri, _full_uri, state) do
-    case read_resource_content(uri) do
+    case Resources.read_resource_content(uri) do
       {:ok, content} -> {:ok, [text(content)], state}
       {:error, reason} -> {:error, reason, state}
-    end
-  end
-
-  # Resolve path argument to a container-local directory.
-  # Resolution order:
-  #   nil                        → /app (default, project_root)
-  #   "/workspace/foo"           → passthrough (already container path)
-  #   "/Users/x/Documents/foo"   → translate via WORKSPACE_HOST → /workspace/foo
-  #   "foo" (bare name)          → /workspace/foo if it exists, else error with suggestions
-  defp resolve_path(nil, project_root) do
-    # When workspace projects are available, require an explicit path.
-    # Omitting it would silently index the ElixirNexus repo itself (/app),
-    # which is almost never what users want.
-    case list_workspace_projects() do
-      [] ->
-        {:ok, project_root, project_root}
-
-      projects ->
-        {:error,
-         "No project path specified. Omitting 'path' would index the ElixirNexus repo itself, not your project. " <>
-           "Specify a project name or path. Available workspace projects: #{Enum.join(projects, ", ")}"}
-    end
-  end
-
-  defp resolve_path(path, _project_root) when is_binary(path) do
-    cond do
-      # Absolute path — translate host paths, then validate
-      String.starts_with?(path, "/") ->
-        container_path = translate_host_path(path)
-        root = find_project_root(container_path)
-
-        if File.dir?(root) do
-          {:ok, root, path}
-        else
-          {:error, "Path '#{path}' not found (resolved to '#{root}')." <> workspace_hint()}
-        end
-
-      # Bare project name — resolve against /workspace
-      true ->
-        workspace_path = "/workspace/#{path}"
-
-        if File.dir?(workspace_path) do
-          {:ok, workspace_path, path}
-        else
-          {:error, "Project '#{path}' not found in workspace." <> workspace_hint()}
-        end
-    end
-  end
-
-  defp list_workspace_projects do
-    case File.ls("/workspace") do
-      {:ok, entries} ->
-        entries
-        |> Enum.filter(&File.dir?(Path.join("/workspace", &1)))
-        |> Enum.sort()
-
-      {:error, _} ->
-        []
-    end
-  end
-
-  defp workspace_hint do
-    case list_workspace_projects() do
-      [] -> ""
-      projects -> " Available projects: #{Enum.join(projects, ", ")}"
-    end
-  end
-
-  # Adds a warning key to the reindex result when no path was given and no project
-  # was previously indexed. Prevents silent "why am I seeing Elixir results?" confusion.
-  defp maybe_add_default_path_warning(result, path_arg, display_path, state) do
-    if is_nil(path_arg) and not Map.has_key?(state, :indexed_dirs) do
-      Map.put(
-        result,
-        :warning,
-        "No 'path' argument given — indexed '#{display_path}' (the CodeNexus repo itself). " <>
-          "Pass a 'path' to index your own project instead."
-      )
-    else
-      result
-    end
-  end
-
-  # Translate host filesystem paths to container paths.
-  # When running in Docker, WORKSPACE_HOST tells us what host path is mounted at /workspace.
-  defp translate_host_path(path) do
-    host_prefix = System.get_env("WORKSPACE_HOST", "")
-
-    if host_prefix != "" and String.starts_with?(path, host_prefix) do
-      relative = String.trim_leading(path, host_prefix)
-      "/workspace" <> relative
-    else
-      path
-    end
-  end
-
-  defp find_project_root(path) do
-    basename = Path.basename(path)
-
-    source_dirs =
-      ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views)
-
-    if basename in source_dirs and File.dir?(path) do
-      Path.dirname(path)
-    else
-      path
-    end
-  end
-
-  # Switch Qdrant collection to match the project being indexed
-  defp ensure_collection_for_project(project_root) do
-    collection =
-      project_root
-      |> Path.basename()
-      |> then(&"nexus_#{&1}")
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9_]/, "_")
-      |> String.trim_leading("_")
-      |> String.slice(0..59)
-
-    current = ElixirNexus.QdrantClient.active_collection()
-
-    if collection != current do
-      Logger.info("Switching Qdrant collection: #{current} -> #{collection}")
-      ElixirNexus.QdrantClient.switch_collection_force(collection)
-      ElixirNexus.Events.broadcast_collection_changed(collection)
-    end
-  end
-
-  # Auto-reindex dirty files before queries to avoid stale results.
-  # Only runs if directories have been indexed (state has :indexed_dirs).
-  # Returns {reindexed_count, state} — state unchanged since dirs don't change.
-  defp maybe_reindex_dirty(state) do
-    dirs = Map.get(state, :indexed_dirs, [])
-
-    if dirs == [] do
-      {0, state}
-    else
-      case ElixirNexus.DirtyTracker.get_dirty_files_recursive(dirs) do
-        {:ok, []} ->
-          {0, state}
-
-        {:ok, dirty_files} ->
-          count = length(dirty_files)
-          if count > 0, do: Logger.info("Auto-reindexing #{count} dirty file(s) before query")
-
-          Enum.each(dirty_files, fn path ->
-            case ElixirNexus.Indexer.index_file(path) do
-              {:ok, _chunks} ->
-                ElixirNexus.DirtyTracker.mark_clean(path)
-
-              {:error, reason} ->
-                Logger.warning("Auto-reindex failed for #{path}: #{inspect(reason)}")
-            end
-          end)
-
-          # Clean up files that exist in cache but have been deleted from disk
-          deleted_count = cleanup_deleted_files()
-
-          {count + deleted_count, state}
-
-        {:error, _} ->
-          {0, state}
-      end
-    end
-  end
-
-  # Remove cached chunks for files that no longer exist on disk.
-  # Catches deletions that happened while the server was down.
-  defp cleanup_deleted_files do
-    deleted_paths =
-      try do
-        ElixirNexus.ChunkCache.all()
-        |> Enum.map(& &1.file_path)
-        |> Enum.uniq()
-        |> Enum.reject(&File.exists?/1)
-      rescue
-        _ -> []
-      end
-
-    Enum.each(deleted_paths, fn path ->
-      Logger.info("Cleaning up deleted file from index: #{path}")
-      ElixirNexus.Indexer.delete_file(path)
-    end)
-
-    length(deleted_paths)
-  end
-
-  # Pin the active Qdrant collection into the process dictionary at the start of each
-  # tool call. QdrantClient.qdrant_state/0 checks this first, so concurrent reindex
-  # operations cannot swap the collection out from under an in-flight query.
-  defp capture_collection do
-    Process.put(:nexus_collection, ElixirNexus.QdrantClient.active_collection())
-  end
-
-  # Safe JSON encoding — returns error text instead of crashing on non-serializable values
-  defp json_reply(data, state) do
-    case Jason.encode(data) do
-      {:ok, json} ->
-        {:ok, %{content: [%{type: "text", text: json}]}, state}
-
-      {:error, reason} ->
-        {:error, "Failed to serialize result: #{inspect(reason)}", state}
-    end
-  end
-
-  # Compact formatting — strips full source content to save tokens
-
-  defp compact_results(results) when is_list(results) do
-    Enum.map(results, &compact_result/1)
-  end
-
-  defp compact_result(%{entity: entity} = result) when is_map(entity) do
-    compact_entity = compact_entity(entity)
-
-    result
-    |> Map.put(:entity, compact_entity)
-    |> Map.drop([:vector_score, :keyword_score])
-  end
-
-  defp compact_result(%{name: _, resolved: false} = unresolved), do: unresolved
-
-  defp compact_result(other), do: other
-
-  # MCP args come as strings from JSON — coerce to integer for numeric params
-  defp to_int(val, _default) when is_integer(val), do: val
-
-  defp to_int(val, default) when is_binary(val) do
-    case Integer.parse(val) do
-      {n, _} -> n
-      :error -> default
-    end
-  end
-
-  defp to_int(_, default), do: default
-
-  defp compact_entity(entity) when is_map(entity) do
-    calls = entity["calls"] || []
-
-    %{
-      "name" => entity["name"],
-      "file_path" => entity["file_path"],
-      "entity_type" => entity["entity_type"],
-      "start_line" => entity["start_line"],
-      "end_line" => entity["end_line"],
-      "visibility" => entity["visibility"],
-      "parameters" => entity["parameters"] || [],
-      "calls" => Enum.take(calls, 10)
-    }
-  end
-
-  # --- Resource content generation ---
-
-  defp read_resource_content("nexus://guide/tools"), do: {:ok, generate_tool_guide()}
-  defp read_resource_content("nexus://project/overview"), do: {:ok, generate_overview()}
-  defp read_resource_content("nexus://project/architecture"), do: {:ok, generate_architecture()}
-  defp read_resource_content("nexus://project/hotspots"), do: {:ok, generate_hotspots()}
-  defp read_resource_content(uri), do: {:error, "Unknown resource: #{uri}"}
-
-  defp indexed? do
-    ElixirNexus.ChunkCache.count() > 0
-  end
-
-  defp not_indexed_message do
-    """
-    # No Project Indexed Yet
-
-    Run the `reindex` tool first to build the code index and call graph, then read this resource again.
-
-    **Quick start:**
-    1. Call `reindex` with your project path
-    2. Call `load_resources` or read `nexus://guide/tools` for usage tips
-    3. Call `get_graph_stats` to see what was indexed
-    """
-    |> String.trim()
-  end
-
-  defp generate_tool_guide do
-    """
-    # CodeNexus Tool Guide
-
-    ## Recommended Workflow
-
-    1. **`reindex`** — Always run first. Parses source files, builds the call graph and search index. Run again after code changes.
-    2. **`get_graph_stats`** — Orient yourself. See language breakdown, entity counts, top connected modules.
-    3. **Targeted queries** — Use the right tool for your question (see below).
-
-    ## When to Use Each Tool
-
-    | Question | Tool |
-    |----------|------|
-    | "What does X do?" / "Find code related to Y" | `search_code` |
-    | "What does this function call?" | `find_all_callees` |
-    | "Who calls this function?" | `find_all_callers` |
-    | "What breaks if I change this?" | `analyze_impact` |
-    | "What files are related to this file?" | `get_community_context` |
-    | "What's the module structure?" | `find_module_hierarchy` |
-    | "Any unused public functions?" | `find_dead_code` |
-    | "Codebase overview" | `get_graph_stats` |
-
-    ## Query Tips
-
-    - **`search_code`**: Use natural language ("error handling in HTTP client") or exact names. Hybrid semantic + keyword ranking.
-    - **`find_all_callers` / `find_all_callees`**: Use exact function names. Case-insensitive, supports short names (e.g. `embed_batch` matches `ElixirNexus.EmbeddingModel.embed_batch`).
-    - **`analyze_impact`**: Set `depth` (default 3) to control how many levels of transitive callers to traverse. Higher depth = wider blast radius.
-    - **`get_community_context`**: Pass a file path to find structurally coupled files — great for understanding what else to review.
-
-    ## Common Patterns
-
-    - **Before refactoring a function**: `analyze_impact` → `find_all_callers` → review each caller
-    - **Understanding a new module**: `find_module_hierarchy` → `get_community_context` on its file → `search_code` for usage patterns
-    - **Finding dead code to clean up**: `find_dead_code` with optional `path_prefix` to scope
-    - **Exploring unfamiliar code**: `get_graph_stats` → `search_code` with intent-based queries → drill into results with `find_all_callees`
-    """
-    |> String.trim()
-  end
-
-  defp generate_overview do
-    if not indexed?() do
-      not_indexed_message()
-    else
-      chunks = ElixirNexus.ChunkCache.all()
-      nodes = ElixirNexus.GraphCache.all_nodes()
-
-      file_count = chunks |> Enum.map(& &1.file_path) |> Enum.uniq() |> length()
-
-      lang_counts =
-        chunks
-        |> Enum.group_by(& &1.language)
-        |> Enum.map(fn {lang, items} -> {lang || "unknown", length(items)} end)
-        |> Enum.sort_by(fn {_lang, count} -> -count end)
-
-      entity_types =
-        nodes
-        |> Map.values()
-        |> Enum.group_by(fn node -> node["entity_type"] || "unknown" end)
-        |> Enum.map(fn {type, items} -> {type, length(items)} end)
-        |> Enum.sort_by(fn {_type, count} -> -count end)
-
-      project_path =
-        Application.get_env(:elixir_nexus, :current_project_path) || "(unknown)"
-
-      lang_table =
-        lang_counts
-        |> Enum.map(fn {lang, count} -> "| #{lang} | #{count} |" end)
-        |> Enum.join("\n")
-
-      entity_table =
-        entity_types
-        |> Enum.map(fn {type, count} -> "| #{type} | #{count} |" end)
-        |> Enum.join("\n")
-
-      """
-      # Project Overview
-
-      **Project:** #{project_path}
-      **Files indexed:** #{file_count}
-      **Total chunks:** #{length(chunks)}
-      **Graph nodes:** #{map_size(nodes)}
-
-      ## Language Breakdown
-
-      | Language | Chunks |
-      |----------|--------|
-      #{lang_table}
-
-      ## Entity Types
-
-      | Type | Count |
-      |------|-------|
-      #{entity_table}
-      """
-      |> String.trim()
-    end
-  end
-
-  defp generate_architecture do
-    if not indexed?() do
-      not_indexed_message()
-    else
-      nodes = ElixirNexus.GraphCache.all_nodes()
-      node_list = Map.values(nodes)
-
-      modules =
-        node_list
-        |> Enum.filter(fn n -> n["entity_type"] == "module" end)
-        |> Enum.map(fn mod ->
-          calls_out = length(mod["calls"] || [])
-          children = length(mod["contains"] || [])
-          parents = length(mod["is_a"] || [])
-          %{name: mod["name"], file: mod["file_path"], calls_out: calls_out, children: children, parents: parents}
-        end)
-        |> Enum.sort_by(fn m -> -(m.calls_out + m.children) end)
-
-      total_modules = length(modules)
-      shown = Enum.take(modules, 20)
-
-      module_table =
-        shown
-        |> Enum.map(fn m ->
-          "| #{m.name} | #{m.children} | #{m.calls_out} | #{m.file} |"
-        end)
-        |> Enum.join("\n")
-
-      truncation_note =
-        if total_modules > 20,
-          do: "\n\n*Showing top 20 of #{total_modules} modules (sorted by connectivity).*",
-          else: ""
-
-      # Top connected non-module entities (functions/classes)
-      top_connected =
-        node_list
-        |> Enum.reject(fn n -> n["entity_type"] == "module" end)
-        |> Enum.map(fn n ->
-          %{name: n["name"], type: n["entity_type"], calls: length(n["calls"] || []), file: n["file_path"]}
-        end)
-        |> Enum.sort_by(fn n -> -n.calls end)
-        |> Enum.take(10)
-
-      connected_table =
-        top_connected
-        |> Enum.map(fn n -> "| #{n.name} | #{n.type} | #{n.calls} | #{n.file} |" end)
-        |> Enum.join("\n")
-
-      """
-      # Project Architecture
-
-      **Total modules:** #{total_modules}
-      **Total graph nodes:** #{map_size(nodes)}
-
-      ## Key Modules
-
-      | Module | Children | Outgoing Calls | File |
-      |--------|----------|----------------|------|
-      #{module_table}#{truncation_note}
-
-      ## Most Connected Functions
-
-      | Name | Type | Outgoing Calls | File |
-      |------|------|----------------|------|
-      #{connected_table}
-      """
-      |> String.trim()
-    end
-  end
-
-  defp generate_hotspots do
-    if not indexed?() do
-      not_indexed_message()
-    else
-      nodes = ElixirNexus.GraphCache.all_nodes()
-      node_list = Map.values(nodes)
-
-      # Fan-out: entities with the most outgoing calls
-      top_fan_out =
-        node_list
-        |> Enum.map(fn n ->
-          %{name: n["name"], type: n["entity_type"], fan_out: length(n["calls"] || []), file: n["file_path"]}
-        end)
-        |> Enum.sort_by(fn n -> -n.fan_out end)
-        |> Enum.take(15)
-
-      # Fan-in: count how many times each name appears as a callee
-      callee_counts =
-        node_list
-        |> Enum.flat_map(fn n -> n["calls"] || [] end)
-        |> Enum.frequencies()
-
-      top_fan_in =
-        callee_counts
-        |> Enum.sort_by(fn {_name, count} -> -count end)
-        |> Enum.take(15)
-
-      # Dead code count
-      public_nodes =
-        node_list
-        |> Enum.filter(fn n ->
-          n["visibility"] == "public" and n["entity_type"] != "module"
-        end)
-
-      called_names = MapSet.new(Map.keys(callee_counts))
-
-      dead_count =
-        public_nodes
-        |> Enum.reject(fn n ->
-          name = n["name"] || ""
-          short = name |> String.split(".") |> List.last() || ""
-          MapSet.member?(called_names, name) or MapSet.member?(called_names, short)
-        end)
-        |> length()
-
-      fan_out_table =
-        top_fan_out
-        |> Enum.map(fn n -> "| #{n.name} | #{n.type} | #{n.fan_out} | #{n.file} |" end)
-        |> Enum.join("\n")
-
-      fan_in_table =
-        top_fan_in
-        |> Enum.map(fn {name, count} -> "| #{name} | #{count} |" end)
-        |> Enum.join("\n")
-
-      """
-      # Complexity Hotspots
-
-      ## Highest Fan-Out (most outgoing calls)
-
-      | Name | Type | Calls Out | File |
-      |------|------|-----------|------|
-      #{fan_out_table}
-
-      ## Highest Fan-In (most callers)
-
-      | Name | Caller Count |
-      |------|-------------|
-      #{fan_in_table}
-
-      ## Dead Code Summary
-
-      **Public functions with zero callers:** #{dead_count} of #{length(public_nodes)} public entities
-      """
-      |> String.trim()
     end
   end
 end

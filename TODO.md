@@ -11,6 +11,57 @@ Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
 ---
 
+## 🔵 Refactoring
+
+- [x] **Split `mcp_server.ex` (1047 lines) into focused sub-modules**
+  - `MCPServer.PathResolution`, `MCPServer.IndexManagement`, `MCPServer.ResponseFormat`, `MCPServer.Resources`
+  - Main `MCPServer` keeps tool DSL + `handle_tool_call/3` dispatch
+
+- [x] **Split `search/queries.ex` (1047 lines) into domain modules**
+  - `Search.DataFetching`, `Search.EntityResolution`, `Search.ImpactAnalysis`, `Search.CalleeFinder`, `Search.CallerFinder`, `Search.CommunityContext`, `Search.DeadCodeDetection`, `Search.GraphStats`, `Search.ModuleHierarchy`
+  - `Search.Queries` kept as thin delegating facade
+
+- [x] **Split `javascript_extractor.ex` (600 lines) by extraction concern**
+  - `Parsers.JavaScript.{Entities, Calls, ImportsExports}` — thin facade in `JavaScriptExtractor`
+
+- [x] **Split `go_extractor.ex` (576 lines) by extraction concern**
+  - `Parsers.Go.{Entities, Calls, ImportsPackage}` — thin facade in `GoExtractor`
+
+- [ ] **Extract LiveComponents from `vectors_live.ex` (664 lines)**
+  Render is one large template blob. Proposed LiveComponents: StatsComponent, ActionsPanel, FilterBar, PointsTable, DetailModal. Private `DataLoader` + `Formatters` helper modules.
+
+- [ ] **Extract LiveComponents from `dashboard_live.ex` (448 lines)**
+  Same pattern as vectors_live. Proposed LiveComponents: StatusBar, StatsGrid, EntityBreakdown, LanguageDistribution, RelationshipOverview, ActivityFeed, ErrorPanel, McpToolsGrid. Private `StatsComputer` to hold stats aggregation logic.
+
+- [ ] **Refactor `qdrant_client.ex` (455 lines) internal organisation**
+  Mix of collection management, hybrid search, and upsert operations. At minimum extract private helpers per domain into clearly-separated sections; consider a `QdrantClient.Collections` sub-module for create/delete/info.
+
+- [x] **Split `test/.../javascript_extractor_test.exs` (1414 lines) by extraction concern**
+  - `javascript_entities_test.exs`, `javascript_calls_test.exs`, `javascript_imports_exports_test.exs`
+
+- [x] **Split `test/.../search/queries_test.exs` (1402 lines) by query domain**
+  - `impact_analysis_test.exs`, `callee_finder_test.exs`, `caller_finder_test.exs`, `community_context_test.exs`, `dead_code_detection_test.exs`, `graph_stats_test.exs`, `module_hierarchy_test.exs`
+
+- [x] **Split `test/.../go_extractor_test.exs` (1372 lines) by extraction concern**
+  - `go_entities_test.exs`, `go_calls_test.exs`, `go_types_test.exs`
+
+- [x] **Split `test/.../python_extractor_test.exs` (1064 lines) by extraction concern**
+  - `python_entities_test.exs`, `python_calls_test.exs`, `python_imports_test.exs`
+
+- [x] **Split `test/.../performance_test.exs` (659 lines) by subsystem**
+  - `cache_performance_test.exs`, `indexing_performance_test.exs`, `search_performance_test.exs`, `graph_performance_test.exs`, `pubsub_performance_test.exs`
+
+- [ ] **Split `test/.../mcp_server_test.exs` (479 lines) by concern**
+  Split alongside source splits: tool routing + init, path resolution, response formatting, resource generation.
+
+- [ ] **Split `test/.../relationship_graph_test.exs` (474 lines) by concern**
+  Split into graph construction, traversal, and scoring/reranking test files.
+
+- [ ] **Split `test/.../indexer_test.exs` (415 lines) by concern**
+  Split into single-file indexing, directory indexing, deletion handling, and search test files.
+
+---
+
 ## 🟢 Nice-to-have
 
 - [ ] **`find_module_hierarchy` — populate `children` for function entities**
