@@ -17,7 +17,7 @@ This starts CodeNexus (Phoenix dashboard on `:4100`, MCP Streamable HTTP on `:30
 ```bash
 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:latest
 
-docker run -d --name elixir_nexus \
+docker run -d --name code_nexus \
   -p 4100:4100 -p 3002:3002 \
   -e QDRANT_URL=http://host.docker.internal:6333 \
   -e MCP_HTTP_PORT=3002 \
