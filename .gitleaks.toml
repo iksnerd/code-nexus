@@ -1,0 +1,7 @@
+[allowlist]
+description = "Allowlisted false positives"
+
+# Phoenix dev/test secret_key_base placeholder — not a real secret.
+# Value is a clearly fake low-entropy string labeled "dev+test" with a repeating pattern.
+# Production secret is loaded from the SECRET_KEY_BASE environment variable.
+commits = ["0e5a796b7688f8bd16b4eab47bf97029bb09c5b8"]

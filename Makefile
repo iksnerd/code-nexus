@@ -1,6 +1,6 @@
 .PHONY: build test format lint publish run stop clean
 
-IMAGE := iksnerd/elixir-nexus
+IMAGE := iksnerd/code-nexus
 TAG := $(shell git describe --tags --always 2>/dev/null || echo "dev")
 
 ## Development

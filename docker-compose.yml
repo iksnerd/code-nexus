@@ -16,7 +16,7 @@ services:
       - nexus
 
   elixir_nexus:
-    image: iksnerd/elixir-nexus:latest
+    image: iksnerd/code-nexus:latest
     build: .
     container_name: elixir_nexus
     ports:
