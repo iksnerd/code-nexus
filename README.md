@@ -318,6 +318,16 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.0.0
+- **Server renamed to `code-nexus`** — MCP server name updated for discoverability by JS/TS/Go/Python users
+- **`"use client"` / `"use server"` directive indexing** — Next.js directives tagged as `directive:use-client` / `directive:use-server` metadata on file-level entities; improves search precision on full-stack codebases
+- **tsconfig path alias resolution** — `find_module_hierarchy` now reads `tsconfig.json` `compilerOptions.paths` to resolve `@/*` → `src/*` style aliases accurately
+- **`OLLAMA_MODEL` env var** — embedding model is now configurable via `OLLAMA_MODEL` (default: `nomic-embed-text`)
+- **Reindex default-path warning** — when no `path` is given in local/no-workspace mode and no project has been indexed yet, result includes a `warning` key
+- **Extended graph noise filter** — `get_graph_stats` top-connected now filters short PascalCase wrapper names (`Comp`, `Box`, `Row`, etc.) and common React utility names (`createContext`, `memo`, `Fragment`, etc.)
+- **GitHub topics** — `mcp`, `code-intelligence`, `elixir`, `tree-sitter`, `qdrant`, `semantic-search`
+- **3 new project-switching tests** — nonexistent collection, rapid successive switches, switch-while-idle
+
 ### v0.9.0
 - **MCP Resources** — expose codebase knowledge as MCP resources (`nexus://guide/tools`, `nexus://project/overview`, `nexus://project/architecture`, `nexus://project/hotspots`) for resource-aware clients
 - **`load_resources` fallback tool** — list or read resources from clients that only support tools (follows MCP creator's recommended pattern)

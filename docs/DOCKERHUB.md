@@ -86,6 +86,7 @@ Add to your project's `.mcp.json`:
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector DB URL |
 | `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
+| `OLLAMA_MODEL` | `nomic-embed-text` | Ollama embedding model name |
 | `WORKSPACE_HOST` | _(unset)_ | Host path mounted at `/workspace` (for path translation) |
 | `WORKSPACE` | _(unset)_ | docker-compose: host dir to mount at `/workspace` |
 
@@ -104,8 +105,12 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v0.7.0)
-- `v0.7.0` — skills-based review fixes, Broadway error handling, ETS crash safety, performance improvements
+- `latest` — current release (v1.0.0)
+- `v1.0.0` — server renamed to `code-nexus`, directive metadata, tsconfig alias resolution, `OLLAMA_MODEL` env var, graph noise filter extended
+- `v0.9.0` — MCP resources, `load_resources` fallback tool, dynamic codebase knowledge
+- `v0.8.0` — concurrent reads, caller refinement, fuzzy callees, `@/` alias resolution
+- `v0.7.1` — Qdrant test collection cleanup
+- `v0.7.0` — skills-based review fixes, Broadway error handling, ETS crash safety
 - `v0.6.0` — CI fixes, callers line info, project_path tracking, Docker multi-stage build (588MB)
 - `v0.5.0` — D3 graph visualization, README overhaul
 - `v0.4.0` — JSX call edges, dead code convention filter, graph noise filter
@@ -114,4 +119,4 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Source
 
-[github.com/iksnerd/elixir-nexus](https://github.com/iksnerd/elixir-nexus)
+[github.com/iksnerd/code-nexus](https://github.com/iksnerd/code-nexus)

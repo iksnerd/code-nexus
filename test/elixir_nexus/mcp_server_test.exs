@@ -7,7 +7,7 @@ defmodule ElixirNexus.MCPServerTest do
     test "extracts project root from roots param" do
       params = %{"roots" => [%{"uri" => "file:///home/user/project"}]}
       {:ok, info, state} = MCPServer.handle_initialize(params, %{})
-      assert info.name == "elixir-nexus"
+      assert info.name == "code-nexus"
       assert state.project_root == "/home/user/project"
     end
 
@@ -31,7 +31,7 @@ defmodule ElixirNexus.MCPServerTest do
 
     test "returns server info with capabilities" do
       {:ok, info, _state} = MCPServer.handle_initialize(%{}, %{})
-      assert info.name == "elixir-nexus"
+      assert info.name == "code-nexus"
       assert info.version == ElixirNexus.version()
       assert %{tools: %{}} = info.capabilities
     end
