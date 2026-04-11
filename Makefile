@@ -26,7 +26,7 @@ format.check:
 ## Docker
 
 build:
-	docker-compose build elixir_nexus
+	docker-compose build code_nexus
 
 run:
 	WORKSPACE=~/www docker-compose up -d
@@ -35,7 +35,7 @@ stop:
 	docker-compose down
 
 logs:
-	docker logs -f elixir_nexus
+	docker logs -f code_nexus
 
 ## Publish to Docker Hub
 
