@@ -6,6 +6,9 @@ Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
 ## 🟡 Medium
 
+- [x] **`load_resources` project overview — entity types all show as `"unknown"`**
+  `nexus://project/overview` entity type breakdown table shows `unknown` for all 792 entries instead of `function`, `module`, etc. Root cause: the overview resource reads from Qdrant payloads where `entity_type` is stored as an atom (`:function`) but the resource renderer expects the string key `"entity_type"`. Needs key normalisation in `MCPServer.Resources.generate_overview/0`.
+
 - [ ] **`analyze_impact` / `find_all_callers` resolve to module, not enclosing function**
   While start_line/end_line are now correctly propagated from the graph cache (fixed in v0.6.0), callers still resolve to the module-level entity rather than the tightest enclosing function. e.g. `find_all_callers("FileExplorer")` returns `page` module instead of `TorrentDetailsPage`. Root cause: the call edge is on the module chunk, not the function chunk. Needs chunking-level fix to attribute calls to their enclosing function.
 

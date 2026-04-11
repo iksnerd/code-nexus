@@ -84,7 +84,7 @@ defmodule ElixirNexus.MCPServer.Resources do
       entity_types =
         nodes
         |> Map.values()
-        |> Enum.group_by(fn node -> node["entity_type"] || "unknown" end)
+        |> Enum.group_by(fn node -> node["entity_type"] || node["type"] || "unknown" end)
         |> Enum.map(fn {type, items} -> {type, length(items)} end)
         |> Enum.sort_by(fn {_type, count} -> -count end)
 
@@ -134,7 +134,7 @@ defmodule ElixirNexus.MCPServer.Resources do
 
       modules =
         node_list
-        |> Enum.filter(fn n -> n["entity_type"] == "module" end)
+        |> Enum.filter(fn n -> (n["entity_type"] || n["type"]) == "module" end)
         |> Enum.map(fn mod ->
           calls_out = length(mod["calls"] || [])
           children = length(mod["contains"] || [])
@@ -161,9 +161,9 @@ defmodule ElixirNexus.MCPServer.Resources do
       # Top connected non-module entities (functions/classes)
       top_connected =
         node_list
-        |> Enum.reject(fn n -> n["entity_type"] == "module" end)
+        |> Enum.reject(fn n -> (n["entity_type"] || n["type"]) == "module" end)
         |> Enum.map(fn n ->
-          %{name: n["name"], type: n["entity_type"], calls: length(n["calls"] || []), file: n["file_path"]}
+          %{name: n["name"], type: n["entity_type"] || n["type"], calls: length(n["calls"] || []), file: n["file_path"]}
         end)
         |> Enum.sort_by(fn n -> -n.calls end)
         |> Enum.take(10)
@@ -206,7 +206,12 @@ defmodule ElixirNexus.MCPServer.Resources do
       top_fan_out =
         node_list
         |> Enum.map(fn n ->
-          %{name: n["name"], type: n["entity_type"], fan_out: length(n["calls"] || []), file: n["file_path"]}
+          %{
+            name: n["name"],
+            type: n["entity_type"] || n["type"],
+            fan_out: length(n["calls"] || []),
+            file: n["file_path"]
+          }
         end)
         |> Enum.sort_by(fn n -> -n.fan_out end)
         |> Enum.take(15)
@@ -226,7 +231,7 @@ defmodule ElixirNexus.MCPServer.Resources do
       public_nodes =
         node_list
         |> Enum.filter(fn n ->
-          n["visibility"] == "public" and n["entity_type"] != "module"
+          n["visibility"] == "public" and (n["entity_type"] || n["type"]) != "module"
         end)
 
       called_names = MapSet.new(Map.keys(callee_counts))
