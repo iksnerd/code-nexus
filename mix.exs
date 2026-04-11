@@ -6,10 +6,24 @@ defmodule ElixirNexus.MixProject do
       app: :elixir_nexus,
       version: "1.0.4",
       elixir: "~> 1.14",
+      description: "Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase",
+      source_url: "https://github.com/iksnerd/code-nexus",
+      homepage_url: "https://github.com/iksnerd/code-nexus",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      test_coverage: [tool: ExCoveralls]
+      test_coverage: [tool: ExCoveralls],
+      package: package()
+    ]
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/iksnerd/code-nexus",
+        "Docker Hub" => "https://hub.docker.com/r/iksnerd/code-nexus"
+      }
     ]
   end
 
