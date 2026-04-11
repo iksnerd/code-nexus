@@ -15,10 +15,10 @@ services:
     networks:
       - nexus
 
-  elixir_nexus:
+  code_nexus:
     image: iksnerd/code-nexus:latest
     build: .
-    container_name: elixir_nexus
+    container_name: code_nexus
     ports:
       - "4100:4100"
       - "3002:3002"
