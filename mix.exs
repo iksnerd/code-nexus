@@ -6,7 +6,8 @@ defmodule ElixirNexus.MixProject do
       app: :elixir_nexus,
       version: "1.0.4",
       elixir: "~> 1.14",
-      description: "Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase",
+      description:
+        "Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase",
       source_url: "https://github.com/iksnerd/code-nexus",
       homepage_url: "https://github.com/iksnerd/code-nexus",
       elixirc_paths: elixirc_paths(Mix.env()),
