@@ -24,7 +24,7 @@ docker run -d --name elixir_nexus \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
   -e WORKSPACE_HOST="$HOME/Documents" \
   -v "$HOME/Documents:/workspace:ro" \
-  iksnerd/elixir-nexus:latest
+  iksnerd/code-nexus:latest
 ```
 
 ## Workspace Mount
@@ -71,7 +71,7 @@ Add to your project's `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "elixir-nexus": {
+    "code-nexus": {
       "type": "http",
       "url": "http://localhost:3002/mcp"
     }

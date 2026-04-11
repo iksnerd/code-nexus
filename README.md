@@ -21,7 +21,7 @@ Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector +
 WORKSPACE=~/projects docker-compose up -d
 
 # Or pull the pre-built image first
-docker pull iksnerd/elixir-nexus:latest
+docker pull iksnerd/code-nexus:latest
 WORKSPACE=~/projects docker-compose up -d
 ```
 

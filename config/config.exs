@@ -12,7 +12,7 @@ config :elixir_nexus, ElixirNexus.Endpoint,
   ],
   pubsub_server: ElixirNexus.PubSub,
   live_view: [signing_salt: "ElixirNexus/1.0"],
-  secret_key_base: "dev+test/2Zx9m/xQ2H7mY0vKz9ZzYvKz9ZzYvKz9ZzYvKz9ZzYvKz9ZzYvKz9ZzY"
+  secret_key_base: System.get_env("SECRET_KEY_BASE", "dev_only_placeholder_not_a_secret_do_not_use_in_prod")
 
 config :logger,
   level: :info
