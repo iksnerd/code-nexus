@@ -8,6 +8,11 @@ deps/
 .env
 .env.local
 /priv/static/
+!/priv/static/js/app.js
+!/priv/static/js/phoenix.min.js
+!/priv/static/js/phoenix_live_view.min.js
+!/priv/static/images/favicon.svg
+!/priv/static/images/logo.svg
 /cover/
 /doc/
 /.fetch
