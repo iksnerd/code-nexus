@@ -3,6 +3,23 @@ defmodule ElixirNexus.MCPServerTest do
 
   alias ElixirNexus.MCPServer
 
+  # Restore the active Qdrant collection after each test so that reindex tests
+  # which temporarily switch collections don't leave a deleted collection as
+  # the active one for subsequent test modules (e.g. ProjectSwitcherTest).
+  setup do
+    original_runtime = Application.get_env(:elixir_nexus, :qdrant_runtime)
+
+    on_exit(fn ->
+      if original_runtime do
+        Application.put_env(:elixir_nexus, :qdrant_runtime, original_runtime)
+      else
+        Application.delete_env(:elixir_nexus, :qdrant_runtime)
+      end
+    end)
+
+    :ok
+  end
+
   describe "handle_initialize/2" do
     test "extracts project root from roots param" do
       params = %{"roots" => [%{"uri" => "file:///home/user/project"}]}
