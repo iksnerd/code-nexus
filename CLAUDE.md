@@ -21,6 +21,17 @@ mix deps.get
 mix compile
 ```
 
+### Static JS vendor files
+
+`priv/static/js/phoenix.min.js` and `priv/static/js/phoenix_live_view.min.js` are vendor files required by the Phoenix LiveView dashboard. They are force-tracked in git (`git add -f`) despite `/priv/static/` being in `.gitignore`. Without them, LiveView fails to connect and all UI interactivity (buttons, graph, search) breaks.
+
+If these files are missing (e.g. after a fresh clone or dep upgrade), copy them from deps:
+```bash
+cp deps/phoenix/priv/static/phoenix.min.js priv/static/js/
+cp deps/phoenix_live_view/priv/static/phoenix_live_view.min.js priv/static/js/
+git add -f priv/static/js/phoenix.min.js priv/static/js/phoenix_live_view.min.js
+```
+
 ### Tree-sitter NIF (Rust)
 
 The tree-sitter parser is a Rust NIF that must be compiled separately. Requires Rust toolchain (`rustup`).
