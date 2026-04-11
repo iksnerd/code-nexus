@@ -56,7 +56,15 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 6 — Build and push Docker image (multi-arch)
+## 6 — Wait for CI green
+
+```bash
+gh run list --limit 1 --repo iksnerd/code-nexus
+```
+
+CI must show `completed / success` before building the Docker image. If it fails, fix the issue, push a new commit, and wait again. Never publish a Docker image from a failing commit.
+
+## 7 — Build and push Docker image (multi-arch)
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
@@ -71,7 +79,7 @@ The multi-stage Dockerfile handles NIF compilation automatically for each platfo
 
 After push, verify the manifest landed: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
 
-## 7 — Smoke-test the container locally
+## 8 — Smoke-test the container locally
 
 Pull the freshly-pushed image and run it against the real stack to catch NIF, timeout, or startup regressions before announcing:
 
@@ -99,7 +107,7 @@ MCP HTTP server listening on port 3002
 
 Then do a minimal MCP round-trip: reindex a workspace project and run `search_code` or `get_graph_stats`. Only proceed to post-release once at least one reindex + search succeeds.
 
-## 8 — Clean up old local images
+## 9 — Clean up old local images
 
 Remove images from previous releases to reclaim disk space. Keep only `latest` and the new version tag (they share the same digest):
 
@@ -113,7 +121,7 @@ docker rmi iksnerd/elixir-nexus:vOLD1 iksnerd/elixir-nexus:vOLD2
 
 `latest` and `vX.Y.Z` will both point to the same digest — only one copy is stored on disk.
 
-## 9 — Post-release (optional but recommended)
+## 10 — Post-release (optional but recommended)
 
 - Post to the council hub `elixir-nexus-issues` room: what shipped, what's still open
 - Post to `elixir-nexus-oss-prep` if any OSS prep items were completed
