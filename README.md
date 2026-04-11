@@ -318,6 +318,10 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.0.2
+- **Fix `load_resources` entity types showing as `"unknown"`** — `nexus://project/overview`, `nexus://project/architecture`, and `nexus://project/hotspots` now correctly read `node["entity_type"] || node["type"]`, matching the key used by `RelationshipGraph.build_graph/1`
+- **13 new tests for `MCPServer.Resources`** — overview, architecture, hotspots, and not-indexed message paths now directly covered
+
 ### v1.0.1
 - **Internal refactor** — split 4 large source files (`search/queries.ex`, `mcp_server.ex`, `javascript_extractor.ex`, `go_extractor.ex`) into focused domain sub-modules; all public APIs unchanged
 - **Test reorganisation** — 5 large test files split into 23 focused test files, matching source module boundaries
