@@ -26,8 +26,11 @@ RUN mix local.hex --force && \
 ENV ERL_FLAGS="+JMsingle true"
 RUN mix deps.compile --no-optional 2>/dev/null; mix deps.compile || true
 
-# Patch ex_mcp tool call timeout (10s -> 120s) for long-running tools like reindex
-RUN sed -i 's/{:execute_tool, tool_name, arguments}, 10000/{:execute_tool, tool_name, arguments}, 120_000/' deps/ex_mcp/lib/ex_mcp/message_processor.ex && \
+# Patch ex_mcp tool call timeout (default 10s -> 120s) for long-running tools like reindex.
+# ExMCP 0.9.0 has no config option for this; patch is applied at build time.
+# TODO: remove once https://github.com/cloudwalk/ex_mcp supports configurable timeouts.
+RUN sed -i 's/{:execute_tool, tool_name, arguments}, 10_*000\b/{:execute_tool, tool_name, arguments}, 120_000/' \
+        deps/ex_mcp/lib/ex_mcp/message_processor.ex && \
     mix deps.compile ex_mcp --force
 
 # Copy native code (Rust NIFs)

@@ -1,4 +1,4 @@
-# TODO — Next Release (v0.8.0)
+# TODO — Next Release (v1.1.0)
 
 Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 
@@ -9,45 +9,32 @@ Tracking bugs, improvements, and OSS prep items from council-hub feedback.
 - [ ] **`analyze_impact` / `find_all_callers` resolve to module, not enclosing function**
   While start_line/end_line are now correctly propagated from the graph cache (fixed in v0.6.0), callers still resolve to the module-level entity rather than the tightest enclosing function. e.g. `find_all_callers("FileExplorer")` returns `page` module instead of `TorrentDetailsPage`. Root cause: the call edge is on the module chunk, not the function chunk. Needs chunking-level fix to attribute calls to their enclosing function.
 
-- [ ] **Framework internals dominate top-connected nodes**
-  On shadcn/ui projects, `Comp` (degree 546) and `cn()` (473) flood the graph and bury real app modules. Filter or deprioritize single-character names and known utility patterns in `get_graph_stats` top-connected output.
-
-- [ ] **Default `reindex` with no path indexes Nexus itself**
-  First-time users get Elixir results with no relation to their project and no warning. Should warn or error if no path is given and no previously-indexed project is detected.
-
 ---
 
 ## 🟢 Nice-to-have
 
-- [ ] **`search_code` — index `"use client"` / `"use server"` as metadata**
-  Data-fetching queries (`revalidate`, `cache`, `fetch`, ISR) currently surface `"use client"` components mid-results. Index the directive as a metadata tag on chunks and boost `"use server"` / no-directive chunks for data-fetching queries. Would meaningfully improve search precision on full-stack Next.js codebases.
-
 - [ ] **`find_module_hierarchy` — populate `children` for function entities**
   `children` is always `[]` for function-level entities. Populate with JSX components rendered (once JSX edges are tracked) or nested function declarations. Currently only useful for module-level hierarchy.
 
-- [ ] **Path alias resolution (`@/`) in `find_module_hierarchy`**
-  Imports using `@/components/ui/*`, `next/link`, etc. aren't resolved to file paths. Auto-detect `tsconfig.json` `paths` to map aliases to real file paths.
+- [ ] **`search_code` — boost `"use server"` / no-directive chunks for data-fetching queries**
+  Directive metadata is now indexed (v1.0.0). Next step: in search, detect data-fetching intent and boost chunks tagged `directive:use-server` or untagged (default server in App Router).
 
-- [ ] **Configurable Ollama model via env var**
-  `nomic-embed-text` is hardcoded. Expose `OLLAMA_MODEL` env var so users can swap embedding models.
-
-- [ ] **MCP tool timeout — upstream or proper config**
-  Dockerfile patches ExMCP's `message_processor.ex` via `sed` to raise timeout to 120s. Should configure via ExMCP options or upstream the change.
-
-- [ ] **Tool/server naming for non-Elixir discoverability**
-  Server named `elixir-nexus` discourages JS/TS/Go/Python users. Consider surfacing as `code-nexus` in MCP tool listings while keeping the repo name.
-
-- [ ] **Dead code detected in own codebase** — `table_name` in chunk_cache.ex and graph_cache.ex, `get_tools` in mcp_server.ex, `version` in elixir_nexus.ex. Clean up or mark as public API.
-
-- [ ] Improve test coverage around project switching (switching collections, ETS reload, file watcher re-wiring)
-  Edge cases: switching while indexing is in progress, switching to a deleted collection, rapid successive switches.
+- [ ] **Secret audit** — run `gitleaks` or `trufflehog` on git history (neither installed locally; add to CI)
 
 ---
 
-## 📦 OSS Prep (remaining)
+## ✅ Done (v1.0.0)
 
-- [ ] **Secret audit** — run `gitleaks` or `trufflehog` on git history
-- [ ] **GitHub topics** — add discoverability tags (`mcp`, `code-intelligence`, `elixir`, `tree-sitter`, `qdrant`, `semantic-search`)
+- [x] **MCP server named `code-nexus`** — `server_info` name changed from `elixir-nexus` for non-Elixir discoverability
+- [x] **GitHub topics added** — `mcp`, `code-intelligence`, `elixir`, `tree-sitter`, `qdrant`, `semantic-search` on iksnerd/code-nexus
+- [x] **Framework noise filter extended** — `get_graph_stats` top-connected now also rejects short PascalCase wrapper names (`Comp`, `Box`, `Row`, etc.) via `~r/^[A-Z][a-z]{0,3}$/` + known React utility names (`createContext`, `memo`, etc.)
+- [x] **`reindex` no-path warning** — when no `path` given and no prior index in state, result includes a `warning` key explaining the default (CodeNexus itself)
+- [x] **`"use client"` / `"use server"` directive indexed as metadata** — `javascript_extractor.ex` detects directive from first 5 lines, tags file-level entity `is_a: ["directive:use-client"]` / `["directive:use-server"]`, and sets `content` to the directive string for embedding
+- [x] **Path alias resolution via tsconfig.json** — `resolve_by_path_alias/2` now reads `compilerOptions.paths` from `tsconfig.json` in the project root; resolves `@/*` → `src/*` style mappings before falling back to generic `@/` stripping
+- [x] **`OLLAMA_MODEL` env var wired** — `embedding_model.ex` reads `System.get_env("OLLAMA_MODEL")` with `"nomic-embed-text"` default (was hardcoded)
+- [x] **MCP timeout patch documented** — Dockerfile `sed` patch improved with regex for both `10000`/`10_000` forms; TODO comment links to upstream issue
+- [x] **Project switching edge case tests** — 3 new tests: nonexistent collection returns error without corrupting caches; rapid successive switches leave caches valid; switch while indexer is idle completes without blocking
+- [x] **Dead code investigation** — `table_name`, `get_tools`, `version` are all legitimately used (false positives from `find_dead_code` tool on overrides/attribute-backed functions)
 
 ---
 

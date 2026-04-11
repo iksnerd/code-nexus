@@ -5,11 +5,15 @@ defmodule ElixirNexus.EmbeddingModel do
   """
   require Logger
 
-  @model "nomic-embed-text"
+  @default_model "nomic-embed-text"
   @timeout 30_000
 
   defp ollama_url do
     System.get_env("OLLAMA_URL") || Application.get_env(:elixir_nexus, :ollama_url, "http://localhost:11434")
+  end
+
+  defp ollama_model do
+    System.get_env("OLLAMA_MODEL") || Application.get_env(:elixir_nexus, :ollama_model, @default_model)
   end
 
   @doc "Embed a single text. Returns {:ok, [float]} or {:error, reason}."
@@ -23,7 +27,7 @@ defmodule ElixirNexus.EmbeddingModel do
   @doc "Embed a batch of texts. Returns {:ok, [[float]]} or {:error, reason}."
   def embed_batch(texts) when is_list(texts) do
     url = "#{ollama_url()}/api/embed"
-    body = Jason.encode!(%{model: @model, input: texts})
+    body = Jason.encode!(%{model: ollama_model(), input: texts})
 
     case HTTPoison.post(url, body, [{"Content-Type", "application/json"}], recv_timeout: @timeout) do
       {:ok, %{status_code: 200, body: resp_body}} ->
@@ -57,7 +61,7 @@ defmodule ElixirNexus.EmbeddingModel do
       {:ok, %{status_code: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, %{"models" => models}} ->
-            Enum.any?(models, fn m -> String.starts_with?(m["name"], @model) end)
+            Enum.any?(models, fn m -> String.starts_with?(m["name"], ollama_model()) end)
 
           _ ->
             false

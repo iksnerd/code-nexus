@@ -41,7 +41,7 @@ defmodule ElixirNexus.MCPServer do
 
     {:ok,
      %{
-       name: "elixir-nexus",
+       name: "code-nexus",
        version: ElixirNexus.version(),
        description:
          "Code intelligence server — graph-powered semantic search, call graph traversal, " <>
@@ -322,8 +322,9 @@ defmodule ElixirNexus.MCPServer do
   @impl true
   def handle_tool_call("reindex", args, state) do
     project_root = Map.get(state, :project_root, File.cwd!())
+    path_arg = Map.get(args, "path")
 
-    case resolve_path(Map.get(args, "path"), project_root) do
+    case resolve_path(path_arg, project_root) do
       {:ok, index_root, display_path} ->
         dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(index_root)
 
@@ -351,12 +352,14 @@ defmodule ElixirNexus.MCPServer do
                 e -> Logger.warning("File watcher setup failed: #{inspect(e)}")
               end
 
-              result = %{
-                indexed_files: status.indexed_files,
-                total_chunks: status.total_chunks,
-                directories: dirs,
-                project_path: display_path
-              }
+              result =
+                %{
+                  indexed_files: status.indexed_files,
+                  total_chunks: status.total_chunks,
+                  directories: dirs,
+                  project_path: display_path
+                }
+                |> maybe_add_default_path_warning(path_arg, display_path, state)
 
               Application.put_env(:elixir_nexus, :current_project_path, display_path)
 
@@ -583,6 +586,21 @@ defmodule ElixirNexus.MCPServer do
     case list_workspace_projects() do
       [] -> ""
       projects -> " Available projects: #{Enum.join(projects, ", ")}"
+    end
+  end
+
+  # Adds a warning key to the reindex result when no path was given and no project
+  # was previously indexed. Prevents silent "why am I seeing Elixir results?" confusion.
+  defp maybe_add_default_path_warning(result, path_arg, display_path, state) do
+    if is_nil(path_arg) and not Map.has_key?(state, :indexed_dirs) do
+      Map.put(
+        result,
+        :warning,
+        "No 'path' argument given — indexed '#{display_path}' (the CodeNexus repo itself). " <>
+          "Pass a 'path' to index your own project instead."
+      )
+    else
+      result
     end
   end
 

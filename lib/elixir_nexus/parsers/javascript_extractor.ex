@@ -16,6 +16,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
 
     imports = extract_imports(ast)
     exports = extract_exports(ast)
+    directive = extract_directive(source)
 
     # Enrich declarations with import/export info
     exported_names = MapSet.new(exports)
@@ -31,10 +32,10 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
         end
       end)
 
-    # Create a file-level module entity if there are imports or exports
-    # For barrel files (index.ts/index.js), use parent directory name as module name
+    # Create a file-level module entity if there are imports, exports, or a directive.
+    # For barrel files (index.ts/index.js), use parent directory name as module name.
     file_entity =
-      if imports != [] or exports != [] do
+      if imports != [] or exports != [] or directive != nil do
         basename = Path.basename(file_path, Path.extname(file_path))
 
         module_name =
@@ -44,18 +45,22 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
             basename
           end
 
+        # Tag the directive in is_a so it flows into Qdrant and is searchable.
+        # e.g. "directive:use-client" or "directive:use-server"
+        directive_tag = if directive, do: ["directive:#{directive}"], else: []
+
         [
           %CodeSchema{
             file_path: file_path,
             entity_type: :module,
             name: module_name,
-            content: "",
+            content: if(directive, do: ~s("#{directive}"), else: ""),
             start_line: 1,
             end_line: 1,
             parameters: [],
             visibility: :public,
             calls: extract_imported_names(ast),
-            is_a: imports,
+            is_a: imports ++ directive_tag,
             contains: exports,
             language: :javascript
           }
@@ -255,6 +260,23 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
   end
 
   defp extract_content(_, _, _), do: ""
+
+  # Detect "use client" / "use server" React/Next.js directives at the top of the file.
+  # Returns "use-client", "use-server", or nil. Only checks the first 5 lines.
+  defp extract_directive(source) do
+    source
+    |> String.split("\n", parts: 6)
+    |> Enum.take(5)
+    |> Enum.find_value(nil, fn line ->
+      case String.trim(line) do
+        ~s("use client") -> "use-client"
+        "'use client'" -> "use-client"
+        ~s("use server") -> "use-server"
+        "'use server'" -> "use-server"
+        _ -> nil
+      end
+    end)
+  end
 
   defp extract_params(%{"children" => children}) do
     children
