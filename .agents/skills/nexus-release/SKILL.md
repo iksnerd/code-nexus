@@ -1,6 +1,6 @@
 ---
 name: nexus-release
-description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v0.8.0), shipping Docker images, or verifying a release is production-ready.
+description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v1.1.0), shipping Docker images, or verifying a release is production-ready.
 metadata:
   compatibility: ElixirNexus project only
 ---
@@ -28,22 +28,23 @@ version: "X.Y.Z",
 ```
 
 Follow semver:
-- **patch** (0.7.0 → 0.7.1): bug fixes, test/infra changes, no new features
-- **minor** (0.7.x → 0.8.0): new features, significant behaviour changes
-- **major** (0.x → 1.0): breaking changes to MCP API or data formats
+- **patch** (1.0.0 → 1.0.1): bug fixes, test/infra changes, refactors — no new features
+- **minor** (1.0.x → 1.1.0): new features, significant behaviour changes
+- **major** (1.x → 2.0): breaking changes to MCP API or data formats
 
 ## 3 — Update docs (if needed)
 
 - `README.md` changelog section — add entry for the new version
 - `docs/DOCKERHUB.md` — update if image size, env vars, or setup changed
 - `CLAUDE.md` — update if architecture, build steps, or key files changed
+- `.agents/skills/nexus-release/SKILL.md` — update version history table
 
 ## 4 — Commit
 
 Stage only intentional files (never `.env`, secrets, or `query_graph.exs`):
 
 ```bash
-git add lib/ test/ mix.exs README.md docs/  # adjust as needed
+git add lib/ test/ mix.exs README.md docs/ .agents/  # adjust as needed
 git commit -m "Bump version to X.Y.Z — short description of what changed"
 ```
 
@@ -66,14 +67,56 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 **Important:** Always build for both `linux/amd64` and `linux/arm64`. Single-arch amd64 images crash under Rosetta on Apple Silicon Macs (telemetry NIF fails). Multi-arch ensures native execution on both Intel and ARM hosts.
 
-The multi-stage Dockerfile handles NIF compilation automatically for each platform. Expected image size: ~588MB per arch.
+The multi-stage Dockerfile handles NIF compilation automatically for each platform.
 
-After push, verify on Docker Hub: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
+After push, verify the manifest landed: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
 
-## 7 — Post-release (optional but recommended)
+## 7 — Smoke-test the container locally
 
-- Update the council hub `elixir-nexus-issues` room with what shipped and what's still open
-- Update the `elixir-nexus-oss-prep` room if any OSS prep items were completed
+Pull the freshly-pushed image and run it against the real stack to catch NIF, timeout, or startup regressions before announcing:
+
+```bash
+# Stop any running container first
+docker-compose down
+
+# Pull the new image (confirms the push landed correctly)
+docker pull iksnerd/elixir-nexus:vX.Y.Z
+
+# docker-compose.yml uses :latest — no edit needed, just start
+WORKSPACE=~/www docker-compose up -d
+
+# Tail logs until "MCP HTTP server started" appears (30-60s)
+docker-compose logs -f elixir_nexus
+```
+
+Look for these lines — if they all appear the container is healthy:
+```
+Qdrant is healthy
+Indexer started (Broadway pipeline, ...)
+Running ElixirNexus.Endpoint with cowboy ... at 0.0.0.0:4100
+MCP HTTP server listening on port 3002
+```
+
+Then do a minimal MCP round-trip: reindex a workspace project and run `search_code` or `get_graph_stats`. Only proceed to post-release once at least one reindex + search succeeds.
+
+## 8 — Clean up old local images
+
+Remove images from previous releases to reclaim disk space. Keep only `latest` and the new version tag (they share the same digest):
+
+```bash
+# List what's local
+docker images | grep elixir-nexus
+
+# Remove old version tags (adjust version list as needed)
+docker rmi iksnerd/elixir-nexus:vOLD1 iksnerd/elixir-nexus:vOLD2
+```
+
+`latest` and `vX.Y.Z` will both point to the same digest — only one copy is stored on disk.
+
+## 9 — Post-release (optional but recommended)
+
+- Post to the council hub `elixir-nexus-issues` room: what shipped, what's still open
+- Post to `elixir-nexus-oss-prep` if any OSS prep items were completed
 - If fixing issues from council hub, mark them resolved or carry forward
 
 ## Key files to check before every release
@@ -90,6 +133,8 @@ After push, verify on Docker Hub: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
 
 | Version | Key changes |
 |---------|-------------|
+| v1.0.1  | Internal refactor — `queries.ex`, `mcp_server.ex`, `javascript_extractor.ex`, `go_extractor.ex` each split into focused sub-modules; 5 large test files split into 28; direct unit tests for `EntityResolution` and `PathResolution`; 714 tests |
+| v1.0.0  | Server renamed to `code-nexus`, `"use client"`/`"use server"` directive metadata, tsconfig alias resolution, `OLLAMA_MODEL` env var, extended graph noise filter, reindex no-path warning, 3 new project-switching tests |
 | v0.9.0  | MCP resources (4 resources + load_resources fallback tool), dynamic codebase knowledge from ETS |
 | v0.8.0  | Concurrent QdrantClient reads, cross-project isolation, caller refinement to enclosing function, fuzzy callees, @/ alias resolution, reindex warning |
 | v0.7.1  | Qdrant test collection cleanup, `delete_collection/1` added |
