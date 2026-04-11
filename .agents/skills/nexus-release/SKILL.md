@@ -68,8 +68,8 @@ CI must show `completed / success` before building the Docker image. If it fails
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t iksnerd/elixir-nexus:vX.Y.Z \
-  -t iksnerd/elixir-nexus:latest \
+  -t iksnerd/code-nexus:vX.Y.Z \
+  -t iksnerd/code-nexus:latest \
   --push .
 ```
 
@@ -77,7 +77,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 The multi-stage Dockerfile handles NIF compilation automatically for each platform.
 
-After push, verify the manifest landed: `docker pull iksnerd/elixir-nexus:vX.Y.Z`
+After push, verify the manifest landed: `docker pull iksnerd/code-nexus:vX.Y.Z`
 
 ## 8 — Smoke-test the container locally
 
@@ -88,7 +88,7 @@ Pull the freshly-pushed image and run it against the real stack to catch NIF, ti
 docker-compose down
 
 # Pull the new image (confirms the push landed correctly)
-docker pull iksnerd/elixir-nexus:vX.Y.Z
+docker pull iksnerd/code-nexus:vX.Y.Z
 
 # docker-compose.yml uses :latest — no edit needed, just start
 WORKSPACE=~/www docker-compose up -d
@@ -118,7 +118,7 @@ Remove images from previous releases to reclaim disk space. Keep only `latest` a
 docker images | grep elixir-nexus
 
 # Remove old version tags (adjust version list as needed)
-docker rmi iksnerd/elixir-nexus:vOLD1 iksnerd/elixir-nexus:vOLD2
+docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 ```
 
 `latest` and `vX.Y.Z` will both point to the same digest — only one copy is stored on disk.
