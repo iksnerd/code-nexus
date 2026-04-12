@@ -7,6 +7,8 @@ defmodule ElixirNexus.QdrantClient do
   @distance "Cosine"
   @http_timeout 30_000
 
+  # ── Configuration / naming ────────────────────────────────────────────────
+
   defp qdrant_url do
     Application.get_env(:elixir_nexus, :qdrant_url) ||
       System.get_env("QDRANT_URL") ||
@@ -50,11 +52,80 @@ defmodule ElixirNexus.QdrantClient do
     %{base | collection: collection}
   end
 
+  # ── GenServer lifecycle ───────────────────────────────────────────────────
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  # ── Read-only operations — bypass GenServer, run concurrently in caller's process ──
+  @impl true
+  def init(_opts) do
+    url = qdrant_url()
+    coll = collection_name()
+    store_runtime_state(url, coll)
+    Logger.info("Initializing Qdrant client pointing to #{url}")
+
+    case http_get("#{url}/") do
+      {:ok, _} ->
+        Logger.info("Qdrant is healthy")
+        Process.send_after(self(), :ensure_collection, 1000)
+        {:ok, %{url: url, collection: coll}}
+
+      {:error, reason} ->
+        Logger.warning("Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}")
+        {:ok, %{url: url, collection: coll}}
+    end
+  end
+
+  @impl true
+  def handle_info(:ensure_collection, state) do
+    case http_put("#{state.url}/collections/#{state.collection}", collection_schema()) do
+      {:ok, _} ->
+        Logger.info("Collection '#{state.collection}' ready (named vectors + sparse vectors)")
+
+      {:error, reason} ->
+        Logger.warning("Could not create collection: #{inspect(reason)}")
+    end
+
+    {:noreply, state}
+  end
+
+  # ── Public API: collection management ────────────────────────────────────
+
+  def health_check do
+    GenServer.call(__MODULE__, :health_check, @http_timeout)
+  end
+
+  def list_collections do
+    GenServer.call(__MODULE__, :list_collections, @http_timeout)
+  end
+
+  def create_collection(vector_size) do
+    GenServer.call(__MODULE__, {:create_collection, vector_size}, @http_timeout)
+  end
+
+  def switch_collection(name) do
+    GenServer.call(__MODULE__, {:switch_collection, name}, @http_timeout)
+  end
+
+  @doc "Switch collection without validating its existence in Qdrant."
+  def switch_collection_force(name) do
+    GenServer.call(__MODULE__, {:switch_collection_force, name}, @http_timeout)
+  end
+
+  def delete_collection do
+    GenServer.call(__MODULE__, :delete_collection, @http_timeout)
+  end
+
+  def delete_collection(name) when is_binary(name) do
+    GenServer.call(__MODULE__, {:delete_collection_by_name, name}, @http_timeout)
+  end
+
+  def reset_collection do
+    GenServer.call(__MODULE__, :reset_collection, @http_timeout)
+  end
+
+  # ── Public API: search (read-only, bypass GenServer mailbox) ─────────────
 
   @doc "Returns the currently active Qdrant collection name."
   def active_collection do
@@ -110,6 +181,8 @@ defmodule ElixirNexus.QdrantClient do
     result
   end
 
+  # ── Public API: point reads (read-only, bypass GenServer mailbox) ─────────
+
   def collection_info do
     %{url: url, collection: coll} = qdrant_state()
     http_get("#{url}/collections/#{coll}")
@@ -137,15 +210,7 @@ defmodule ElixirNexus.QdrantClient do
     http_post("#{url}/collections/#{coll}/points/count", body)
   end
 
-  # ── Write / state-mutation operations — remain as GenServer calls ──
-
-  def health_check do
-    GenServer.call(__MODULE__, :health_check, @http_timeout)
-  end
-
-  def create_collection(vector_size) do
-    GenServer.call(__MODULE__, {:create_collection, vector_size}, @http_timeout)
-  end
+  # ── Public API: point writes ──────────────────────────────────────────────
 
   def upsert_point(id, vector, payload) do
     GenServer.call(__MODULE__, {:upsert_point, id, vector, payload}, @http_timeout)
@@ -169,143 +234,11 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, {:delete_points_by_filter, filter}, @http_timeout)
   end
 
-  def list_collections do
-    GenServer.call(__MODULE__, :list_collections, @http_timeout)
-  end
-
-  def switch_collection(name) do
-    GenServer.call(__MODULE__, {:switch_collection, name}, @http_timeout)
-  end
-
-  @doc "Switch collection without validating its existence in Qdrant."
-  def switch_collection_force(name) do
-    GenServer.call(__MODULE__, {:switch_collection_force, name}, @http_timeout)
-  end
-
-  def delete_collection do
-    GenServer.call(__MODULE__, :delete_collection, @http_timeout)
-  end
-
-  def delete_collection(name) when is_binary(name) do
-    GenServer.call(__MODULE__, {:delete_collection_by_name, name}, @http_timeout)
-  end
-
-  def reset_collection do
-    GenServer.call(__MODULE__, :reset_collection, @http_timeout)
-  end
-
-  @impl true
-  def init(_opts) do
-    url = qdrant_url()
-    coll = collection_name()
-    store_runtime_state(url, coll)
-    Logger.info("Initializing Qdrant client pointing to #{url}")
-
-    case http_get("#{url}/") do
-      {:ok, _} ->
-        Logger.info("Qdrant is healthy")
-        Process.send_after(self(), :ensure_collection, 1000)
-        {:ok, %{url: url, collection: coll}}
-
-      {:error, reason} ->
-        Logger.warning("Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}")
-        {:ok, %{url: url, collection: coll}}
-    end
-  end
-
-  @impl true
-  def handle_info(:ensure_collection, state) do
-    case http_put("#{state.url}/collections/#{state.collection}", collection_schema()) do
-      {:ok, _} ->
-        Logger.info("Collection '#{state.collection}' ready (named vectors + sparse vectors)")
-
-      {:error, reason} ->
-        Logger.warning("Could not create collection: #{inspect(reason)}")
-    end
-
-    {:noreply, state}
-  end
-
-  defp collection_schema do
-    %{
-      "vectors" => %{
-        "semantic" => %{
-          "size" => @vector_size,
-          "distance" => @distance
-        }
-      },
-      "sparse_vectors" => %{
-        "keywords" => %{
-          "index" => %{"on_disk" => true}
-        }
-      }
-    }
-  end
+  # ── Callbacks: collection management ─────────────────────────────────────
 
   @impl true
   def handle_call(:health_check, _from, state) do
     result = http_get_raw("#{state.url}/healthz")
-    {:reply, result, state}
-  end
-
-  def handle_call({:create_collection, vector_size}, _from, state) do
-    payload = %{
-      "vectors" => %{
-        "semantic" => %{
-          "size" => vector_size,
-          "distance" => @distance
-        }
-      },
-      "sparse_vectors" => %{
-        "keywords" => %{
-          "index" => %{"on_disk" => true}
-        }
-      }
-    }
-
-    result = http_put("#{state.url}/collections/#{state.collection}", payload)
-    {:reply, result, state}
-  end
-
-  def handle_call({:upsert_point, id, vector, payload}, _from, state) do
-    body = %{
-      "points" => [
-        %{
-          "id" => id,
-          "vector" => %{"semantic" => vector},
-          "payload" => payload
-        }
-      ]
-    }
-
-    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
-    {:reply, result, state}
-  end
-
-  def handle_call({:upsert_point, id, vector, sparse_vec, payload}, _from, state) do
-    body = %{
-      "points" => [
-        %{
-          "id" => id,
-          "vector" => %{
-            "semantic" => vector,
-            "keywords" => sparse_vec
-          },
-          "payload" => payload
-        }
-      ]
-    }
-
-    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
-    {:reply, result, state}
-  end
-
-  def handle_call({:upsert_points, points}, _from, state) do
-    start_time = System.monotonic_time()
-    body = %{"points" => points}
-    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
-    duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    :telemetry.execute([:nexus, :qdrant, :upsert], %{duration_ms: duration_ms, point_count: length(points)}, %{})
     {:reply, result, state}
   end
 
@@ -318,6 +251,20 @@ defmodule ElixirNexus.QdrantClient do
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  def handle_call({:create_collection, vector_size}, _from, state) do
+    payload = %{
+      "vectors" => %{
+        "semantic" => %{"size" => vector_size, "distance" => @distance}
+      },
+      "sparse_vectors" => %{
+        "keywords" => %{"index" => %{"on_disk" => true}}
+      }
+    }
+
+    result = http_put("#{state.url}/collections/#{state.collection}", payload)
+    {:reply, result, state}
   end
 
   def handle_call({:switch_collection, name}, _from, state) do
@@ -336,18 +283,6 @@ defmodule ElixirNexus.QdrantClient do
     {:reply, :ok, %{state | collection: name}}
   end
 
-  def handle_call({:delete_points, ids}, _from, state) do
-    body = %{"points" => ids}
-    result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
-    {:reply, result, state}
-  end
-
-  def handle_call({:delete_points_by_filter, filter}, _from, state) do
-    body = %{"filter" => filter}
-    result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
-    {:reply, result, state}
-  end
-
   def handle_call(:delete_collection, _from, state) do
     result = http_delete("#{state.url}/collections/#{state.collection}")
     {:reply, result, state}
@@ -360,38 +295,87 @@ defmodule ElixirNexus.QdrantClient do
 
   def handle_call(:reset_collection, _from, state) do
     http_delete("#{state.url}/collections/#{state.collection}")
-
     result = http_put("#{state.url}/collections/#{state.collection}", collection_schema())
-
     {:reply, result, state}
   end
 
-  # HTTP helpers — all calls have explicit timeouts and safe JSON decoding
+  # ── Callbacks: point writes ───────────────────────────────────────────────
+
+  def handle_call({:upsert_point, id, vector, payload}, _from, state) do
+    body = %{
+      "points" => [
+        %{"id" => id, "vector" => %{"semantic" => vector}, "payload" => payload}
+      ]
+    }
+
+    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
+    {:reply, result, state}
+  end
+
+  def handle_call({:upsert_point, id, vector, sparse_vec, payload}, _from, state) do
+    body = %{
+      "points" => [
+        %{
+          "id" => id,
+          "vector" => %{"semantic" => vector, "keywords" => sparse_vec},
+          "payload" => payload
+        }
+      ]
+    }
+
+    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
+    {:reply, result, state}
+  end
+
+  def handle_call({:upsert_points, points}, _from, state) do
+    start_time = System.monotonic_time()
+    body = %{"points" => points}
+    result = http_put("#{state.url}/collections/#{state.collection}/points", body)
+    duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+    :telemetry.execute([:nexus, :qdrant, :upsert], %{duration_ms: duration_ms, point_count: length(points)}, %{})
+    {:reply, result, state}
+  end
+
+  def handle_call({:delete_points, ids}, _from, state) do
+    body = %{"points" => ids}
+    result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
+    {:reply, result, state}
+  end
+
+  def handle_call({:delete_points_by_filter, filter}, _from, state) do
+    body = %{"filter" => filter}
+    result = http_post("#{state.url}/collections/#{state.collection}/points/delete", body)
+    {:reply, result, state}
+  end
+
+  # ── Private helpers ───────────────────────────────────────────────────────
+
+  defp collection_schema do
+    %{
+      "vectors" => %{
+        "semantic" => %{"size" => @vector_size, "distance" => @distance}
+      },
+      "sparse_vectors" => %{
+        "keywords" => %{"index" => %{"on_disk" => true}}
+      }
+    }
+  end
+
   defp http_opts, do: [timeout: @http_timeout, recv_timeout: @http_timeout]
 
   defp http_get_raw(url) do
     case HTTPoison.get(url, [], http_opts()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        {:ok, body}
-
-      {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
-        {:error, {code, body}}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> {:ok, body}
+      {:ok, %HTTPoison.Response{status_code: code, body: body}} -> {:error, {code, body}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
   defp http_get(url) do
     case HTTPoison.get(url, [], http_opts()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        json_decode(body)
-
-      {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
-        {:error, {code, body}}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> json_decode(body)
+      {:ok, %HTTPoison.Response{status_code: code, body: body}} -> {:error, {code, body}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -416,14 +400,9 @@ defmodule ElixirNexus.QdrantClient do
 
   defp http_delete(url) do
     case HTTPoison.delete(url, [], http_opts()) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        json_decode(body)
-
-      {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
-        {:error, {code, body}}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> json_decode(body)
+      {:ok, %HTTPoison.Response{status_code: code, body: body}} -> {:error, {code, body}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
