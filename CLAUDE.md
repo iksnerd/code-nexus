@@ -60,11 +60,12 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 ## Testing
 
 ```bash
-mix test                    # All tests (~640, 0 compile warnings)
+mix test                    # All tests (~725, 0 compile warnings)
 mix test --trace            # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
-mix test test/elixir_nexus/indexer_test.exs  # Indexer tests
+mix test test/elixir_nexus/indexer_file_test.exs      # Single-file indexing tests
+mix test test/elixir_nexus/indexer_directory_test.exs # Directory indexing tests
 ```
 
 Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
@@ -84,7 +85,7 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 
 ### Workspace mount (Docker)
 
-Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container: `WORKSPACE=~/Documents docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server.ex`.
+Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container: `WORKSPACE=~/Documents docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
 
 **Path resolution order** (`reindex` path argument):
 1. `nil` / omitted → indexes `/app` (CodeNexus itself)
@@ -135,7 +136,7 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 
 - **`get_tools/0` override**: ExMCP DSL stores atom keys (`:input_schema`, `:display_name`, `:meta`), but MCP spec requires camelCase strings (`inputSchema`). `mcp_server.ex` overrides `get_tools/0` to normalize keys so clients discover tools correctly.
 - **Dockerfile timeout patch**: ExMCP's default tool call timeout is 10s, too short for `reindex`. The Dockerfile patches `message_processor.ex` via `sed` to increase it to 120s, then recompiles `ex_mcp`.
-- **MCP string arg coercion**: MCP tool arguments arrive as JSON strings even for numeric params. The `to_int/2` helper in `mcp_server.ex` coerces string args to integers with a default fallback. Must be used for all numeric `deftool` params.
+- **MCP string arg coercion**: MCP tool arguments arrive as JSON strings even for numeric params. The `to_int/2` helper in `mcp_server/response_format.ex` coerces string args to integers with a default fallback. Must be used for all numeric `deftool` params.
 
 ### Auto-reindex on queries
 
@@ -186,18 +187,23 @@ Key node types that must be included:
 | File | Purpose |
 |------|---------|
 | `native/tree_sitter_nif/src/lib.rs` | Rust NIF — tree-sitter parsing + AST filtering |
-| `lib/elixir_nexus/parsers/javascript_extractor.ex` | JS/TS entity + call + import/export extraction from AST |
+| `lib/elixir_nexus/parsers/javascript_extractor.ex` | JS/TS facade — delegates to `parsers/javascript/{entities,calls,imports_exports}.ex` |
 | `lib/elixir_nexus/parsers/python_extractor.ex` | Python entity + call + import + decorator extraction |
-| `lib/elixir_nexus/parsers/go_extractor.ex` | Go entity + call + import + struct/interface extraction |
+| `lib/elixir_nexus/parsers/go_extractor.ex` | Go facade — delegates to `parsers/go/{entities,calls,imports_package}.ex` |
 | `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Rust/Java |
-| `lib/elixir_nexus/search/queries.ex` | Call graph queries with reverse call index for O(1) lookups |
+| `lib/elixir_nexus/search/queries.ex` | Thin facade delegating to domain sub-modules (entity_resolution, caller_finder, callee_finder, impact_analysis, community_context, dead_code_detection, graph_stats, module_hierarchy) |
+| `lib/elixir_nexus/search/entity_resolution.ex` | Entity name matching — highest-centrality file; `matches_entity_name?/2`, `find_entity_multi_strategy/2` |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
 | `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |
 | `lib/elixir_nexus/indexing_helpers.ex` | File processing, embedding, Qdrant storage |
-| `lib/elixir_nexus/mcp_server.ex` | MCP tool definitions and handlers |
+| `lib/elixir_nexus/mcp_server.ex` | MCP tool DSL + `handle_tool_call/3` dispatch — delegates to sub-modules |
+| `lib/elixir_nexus/mcp_server/index_management.ex` | Collection switching, dirty-file auto-reindex, deleted file cleanup |
+| `lib/elixir_nexus/mcp_server/path_resolution.ex` | Workspace path translation (`resolve_path/2`, `workspace_hint/0`) |
+| `lib/elixir_nexus/mcp_server/response_format.ex` | JSON reply helpers, `to_int/2` numeric coercion, result compaction |
+| `lib/elixir_nexus/mcp_server/resources.ex` | MCP resource generators (overview, architecture, hotspots) |
 | `lib/mix/tasks/mcp_http.ex` | Mix task for HTTP/SSE MCP transport |
 | `lib/elixir_nexus/project_switcher.ex` | Collection switching + ETS reload from Qdrant |
 | `lib/elixir_nexus/embedding_model.ex` | Ollama nomic-embed-text client (768-dim dense embeddings) |
 | `lib/elixir_nexus/tfidf_embedder.ex` | TF-IDF embedder with ETS-backed IDF for concurrent reads (fallback + sparse) |
 | `lib/elixir_nexus/dirty_tracker.ex` | SHA256-based incremental indexing (polyglot) |
-| `lib/elixir_nexus/qdrant_client.ex` | Qdrant HTTP client with timeouts + safe JSON |
+| `lib/elixir_nexus/qdrant_client.ex` | Qdrant GenServer — collection management, hybrid search, point ops; read-only calls bypass mailbox |
