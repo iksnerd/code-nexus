@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.0.5  | Fix Qdrant test collection leak (on_exit cleanup), test splits (mcp_server/relationship_graph/indexer → 8 files), qdrant_client.ex domain sections, 20 new QdrantClient tests; 725 tests |
 | v1.0.4  | Fix dashboard broken LiveView — vendor JS files (`phoenix.min.js`, `phoenix_live_view.min.js`) missing from Docker image; add static asset and graph_live tests; test collection cleanup via `ExUnit.after_suite` |
 | v1.0.2  | Fix `load_resources` resource generators — entity types showing as `"unknown"` due to `"type"` vs `"entity_type"` key mismatch in GraphCache nodes; 13 new resource tests |
 | v1.0.1  | Internal refactor — `queries.ex`, `mcp_server.ex`, `javascript_extractor.ex`, `go_extractor.ex` each split into focused sub-modules; 5 large test files split into 28; direct unit tests for `EntityResolution` and `PathResolution`; 714 tests |

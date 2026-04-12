@@ -318,6 +318,13 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.0.5
+- **Fix Qdrant test collection leak** — cleanup in 3 MCP server reindex tests moved to `on_exit` so it runs even on test failure; deleted 19 previously accumulated orphan collections
+- **Test splits** — `mcp_server_test.exs`, `relationship_graph_test.exs`, `indexer_test.exs` split into 8 focused files, completing the test reorganisation series
+- **`qdrant_client.ex` internal reorganisation** — sections reordered into clear domains: configuration, GenServer lifecycle, collection management, search (read-only), point reads, point writes, callbacks, HTTP helpers
+- **QdrantClient tests** — 20 new tests covering `collection_name/0` derivation logic, `active_collection/0` Application env reads, process dict override, and `switch_collection_force/1`; collection management functions now have coverage
+- 725 tests total
+
 ### v1.0.4
 - **Fix dashboard broken LiveView** — vendor JS files (`phoenix.min.js`, `phoenix_live_view.min.js`) were not tracked in git, so Docker builds excluded them. All LiveView interactivity (buttons, graph, search) was broken in Docker mode.
 - **Static asset tests** — new `static_assets_test.exs` verifies vendor JS and image files are served with 200

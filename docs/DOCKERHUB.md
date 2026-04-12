@@ -105,7 +105,8 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.0.4)
+- `latest` — current release (v1.0.5)
+- `v1.0.5` — fix Qdrant test collection leak, test splits, qdrant_client.ex reorganisation, 20 new QdrantClient tests (725 total)
 - `v1.0.4` — fix dashboard broken LiveView (missing vendor JS in Docker), static asset tests, graph page tests, test collection cleanup
 - `v1.0.3` — rename container `elixir_nexus` → `code_nexus`
 - `v1.0.2` — fix `load_resources` entity type display, 13 new resource tests
