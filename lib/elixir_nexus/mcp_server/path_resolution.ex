@@ -55,14 +55,11 @@ defmodule ElixirNexus.MCPServer.PathResolution do
           {:error, "Path '#{path}' not found (resolved to '#{root}')." <> workspace_hint()}
         end
 
-      # Bare project name — resolve against /workspace
+      # Bare project name — resolve against any active workspace mount
       true ->
-        workspace_path = "/workspace/#{path}"
-
-        if File.dir?(workspace_path) do
-          {:ok, workspace_path, path}
-        else
-          {:error, "Project '#{path}' not found in workspace." <> workspace_hint()}
+        case resolve_bare_name(path) do
+          nil -> {:error, "Project '#{path}' not found in workspace." <> workspace_hint()}
+          workspace_path -> {:ok, workspace_path, path}
         end
     end
   end
@@ -75,17 +72,16 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     end
   end
 
-  @doc "List project directories available under /workspace."
+  @doc "List project directories available across all active workspace mounts."
   def list_workspace_projects do
-    case File.ls("/workspace") do
-      {:ok, entries} ->
-        entries
-        |> Enum.filter(&File.dir?(Path.join("/workspace", &1)))
-        |> Enum.sort()
-
-      {:error, _} ->
-        []
-    end
+    workspace_mounts()
+    |> Enum.flat_map(fn {mount, _host} ->
+      case File.ls(mount) do
+        {:ok, entries} -> Enum.filter(entries, &File.dir?(Path.join(mount, &1)))
+        {:error, _} -> []
+      end
+    end)
+    |> Enum.sort()
   end
 
   @doc """
@@ -105,17 +101,38 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     end
   end
 
-  # Translate host filesystem paths to container paths.
-  # When running in Docker, WORKSPACE_HOST tells us what host path is mounted at /workspace.
-  defp translate_host_path(path) do
-    host_prefix = System.get_env("WORKSPACE_HOST", "")
+  # Returns all active workspace mount configs: [{container_path, host_prefix}, ...]
+  # Primary slot is always active when the dir exists.
+  # Optional slots 2/3 require WORKSPACE_HOST_N to be set (non-empty), so that
+  # an unset WORKSPACE_2 mounting "." doesn't pollute project listing.
+  defp workspace_mounts do
+    primary = [{"/workspace", System.get_env("WORKSPACE_HOST", "")}]
 
-    if host_prefix != "" and String.starts_with?(path, host_prefix) do
-      relative = String.trim_leading(path, host_prefix)
-      "/workspace" <> relative
-    else
-      path
-    end
+    optional =
+      [
+        {"/workspace2", System.get_env("WORKSPACE_HOST_2", "")},
+        {"/workspace3", System.get_env("WORKSPACE_HOST_3", "")}
+      ]
+      |> Enum.filter(fn {mount, host} -> host != "" and File.dir?(mount) end)
+
+    (primary ++ optional)
+    |> Enum.filter(fn {mount, _host} -> File.dir?(mount) end)
+  end
+
+  defp resolve_bare_name(name) do
+    Enum.find_value(workspace_mounts(), fn {mount, _} ->
+      candidate = Path.join(mount, name)
+      if File.dir?(candidate), do: candidate
+    end)
+  end
+
+  # Translate host filesystem paths to container paths using any active workspace mount.
+  defp translate_host_path(path) do
+    Enum.find_value(workspace_mounts(), path, fn {mount, host_prefix} ->
+      if host_prefix != "" and String.starts_with?(path, host_prefix) do
+        Path.join(mount, String.replace_prefix(path, host_prefix, ""))
+      end
+    end)
   end
 
   defp find_project_root(path) do

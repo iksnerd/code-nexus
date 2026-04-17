@@ -27,6 +27,14 @@ WORKSPACE=~/projects docker-compose up -d
 
 `WORKSPACE` sets which host directory CodeNexus can read for indexing. It's mounted read-only at `/workspace` inside the container. MCP `reindex(path)` accepts host paths (e.g. `~/projects/my-app`) — they're automatically translated to container paths.
 
+Projects scattered across multiple directories? Add up to two more mounts:
+
+```bash
+WORKSPACE=~/projects WORKSPACE_HOST=~/projects \
+WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects \
+docker-compose up -d
+```
+
 Without `WORKSPACE`, only the CodeNexus repo itself (`/app`) is indexable.
 
 This starts three services in a single BEAM instance:
@@ -317,6 +325,10 @@ Run with `mix test --include performance`:
 | PubSub 100 subscribers | 0.17ms max | |
 
 ## Changelog
+
+### v1.1.0
+- **Multi-workspace Docker mounts** — `WORKSPACE_2`/`WORKSPACE_3` env vars mount additional host directories at `/workspace2`/`/workspace3`. Bare project names in `reindex` are resolved across all active mounts, so projects scattered across different host directories are all accessible without a shared parent.
+- 725 tests total
 
 ### v1.0.5
 - **Fix Qdrant test collection leak** — cleanup in 3 MCP server reindex tests moved to `on_exit` so it runs even on test failure; deleted 19 previously accumulated orphan collections

@@ -23,7 +23,9 @@ docker run -d --name code_nexus \
   -e MCP_HTTP_PORT=3002 \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
   -e WORKSPACE_HOST="$HOME/Documents" \
+  -e WORKSPACE_HOST_2="$HOME/GolandProjects" \
   -v "$HOME/Documents:/workspace:ro" \
+  -v "$HOME/GolandProjects:/workspace2:ro" \
   iksnerd/code-nexus:latest
 ```
 
@@ -35,16 +37,26 @@ Mount a host directory at `/workspace` to make your projects indexable:
 WORKSPACE=~/Documents docker-compose up -d
 ```
 
-The `reindex` MCP tool resolves paths flexibly:
+Projects scattered across multiple directories? Add up to two more mounts:
+
+```bash
+WORKSPACE=~/Documents WORKSPACE_HOST=~/Documents \
+WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects \
+docker-compose up -d
+```
+
+`WORKSPACE_HOST` / `WORKSPACE_HOST_2` / `WORKSPACE_HOST_3` tell the MCP server which host path maps to each container mount, enabling automatic path translation.
+
+The `reindex` MCP tool resolves bare project names across all active mounts:
 
 | Input | Resolves to |
 |-------|------------|
-| `"my-project"` | `/workspace/my-project` |
+| `"my-project"` | first mount where `/workspaceN/my-project` exists |
 | `"/Users/you/Documents/my-project"` | `/workspace/my-project` (auto-translated) |
 | `"/workspace/my-project"` | `/workspace/my-project` (passthrough) |
 | _(omitted)_ | `/app` (CodeNexus itself) |
 
-If a project isn't found, the error lists all available projects in `/workspace`.
+If a project isn't found, the error lists all available projects across all mounts.
 
 ## MCP Tools
 
@@ -87,8 +99,12 @@ Add to your project's `.mcp.json`:
 | `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
 | `OLLAMA_MODEL` | `nomic-embed-text` | Ollama embedding model name |
-| `WORKSPACE_HOST` | _(unset)_ | Host path mounted at `/workspace` (for path translation) |
+| `WORKSPACE_HOST` | _(unset)_ | Host path mapped to `/workspace` (for path translation) |
+| `WORKSPACE_HOST_2` | _(unset)_ | Host path mapped to `/workspace2` |
+| `WORKSPACE_HOST_3` | _(unset)_ | Host path mapped to `/workspace3` |
 | `WORKSPACE` | _(unset)_ | docker-compose: host dir to mount at `/workspace` |
+| `WORKSPACE_2` | _(unset)_ | docker-compose: host dir to mount at `/workspace2` |
+| `WORKSPACE_3` | _(unset)_ | docker-compose: host dir to mount at `/workspace3` |
 
 ## Architecture
 
@@ -105,7 +121,8 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.0.5)
+- `latest` — current release (v1.1.0)
+- `v1.1.0` — multi-workspace Docker mounts (`WORKSPACE_2`/`WORKSPACE_3`), bare project name resolution across all mounts
 - `v1.0.5` — fix Qdrant test collection leak, test splits, qdrant_client.ex reorganisation, 20 new QdrantClient tests (725 total)
 - `v1.0.4` — fix dashboard broken LiveView (missing vendor JS in Docker), static asset tests, graph page tests, test collection cleanup
 - `v1.0.3` — rename container `elixir_nexus` → `code_nexus`
