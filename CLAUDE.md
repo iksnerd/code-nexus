@@ -85,12 +85,12 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 
 ### Workspace mount (Docker)
 
-Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container: `WORKSPACE=~/Documents docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
+Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container. Up to two additional mounts are supported via `WORKSPACE_2`/`WORKSPACE_3` (each needs a matching `WORKSPACE_HOST_N` for path translation): `WORKSPACE=~/www WORKSPACE_HOST=~/www WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
 
 **Path resolution order** (`reindex` path argument):
 1. `nil` / omitted → indexes `/app` (CodeNexus itself)
 2. Bare project name (e.g. `"claude-vision"`) → `/workspace/claude-vision` if it exists
-3. Full host path (e.g. `"/Users/admin/Documents/claude-vision"`) → stripped via `WORKSPACE_HOST` → `/workspace/claude-vision`
+3. Full host path (e.g. `"/Users/admin/Documents/claude-vision"`) → stripped via matching `WORKSPACE_HOST_N` → `/workspaceN/claude-vision`
 4. Container path (e.g. `"/workspace/claude-vision"`) → passthrough
 
 On failure (path not found or no source dirs), the error message lists available projects in `/workspace`.
