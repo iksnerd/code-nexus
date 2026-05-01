@@ -41,7 +41,7 @@ services:
     networks:
       - nexus
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4100/"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/4100'"]
       interval: 5s
       timeout: 3s
       retries: 10
