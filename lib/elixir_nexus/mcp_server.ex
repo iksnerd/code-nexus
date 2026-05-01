@@ -316,10 +316,13 @@ defmodule ElixirNexus.MCPServer do
                PathResolution.workspace_hint(), state}
 
           ElixirNexus.Indexer.busy?() ->
-            {:error, "Reindex failed: :indexing_in_progress", state}
+            {:error, busy_message(display_path), state}
 
           true ->
             IndexManagement.ensure_collection_for_project(index_root)
+            # Record the project under reindex so a concurrent caller's
+            # busy_message/1 can name what is blocking them.
+            Application.put_env(:elixir_nexus, :current_project_path, display_path)
             Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
 
             case ElixirNexus.Indexer.index_directories(dirs) do
@@ -498,6 +501,17 @@ defmodule ElixirNexus.MCPServer do
 
   def handle_tool_call(name, _args, state) do
     {:error, "Unknown tool: #{name}", state}
+  end
+
+  defp busy_message(requested_path) do
+    %{indexed_files: indexed, total_chunks: chunks} = ElixirNexus.Indexer.status()
+    current_project = Application.get_env(:elixir_nexus, :current_project_path) || "unknown"
+
+    "Cannot reindex '#{requested_path}' — another indexing job is already running for '#{current_project}' " <>
+      "(#{indexed} files, #{chunks} chunks indexed so far). " <>
+      "Wait for it to complete, then retry. " <>
+      "Concurrent reindex of different projects is not supported because each project uses its own Qdrant collection. " <>
+      "You can monitor progress at http://localhost:4100."
   end
 
   # Resource read handler — called by resource-aware MCP clients

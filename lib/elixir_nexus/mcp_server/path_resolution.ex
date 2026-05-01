@@ -111,7 +111,9 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     optional =
       [
         {"/workspace2", System.get_env("WORKSPACE_HOST_2", "")},
-        {"/workspace3", System.get_env("WORKSPACE_HOST_3", "")}
+        {"/workspace3", System.get_env("WORKSPACE_HOST_3", "")},
+        {"/workspace4", System.get_env("WORKSPACE_HOST_4", "")},
+        {"/workspace5", System.get_env("WORKSPACE_HOST_5", "")}
       ]
       |> Enum.filter(fn {mount, host} -> host != "" and File.dir?(mount) end)
 
