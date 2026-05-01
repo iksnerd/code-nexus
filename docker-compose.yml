@@ -27,6 +27,7 @@ services:
       QDRANT_URL: "http://qdrant:6333"
       MCP_HTTP_PORT: "3002"
       OLLAMA_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-embeddinggemma:300m}"
       WORKSPACE_HOST: "${WORKSPACE_HOST:-}"
       WORKSPACE_HOST_2: "${WORKSPACE_HOST_2:-}"
       WORKSPACE_HOST_3: "${WORKSPACE_HOST_3:-}"
