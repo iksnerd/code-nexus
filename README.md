@@ -326,6 +326,10 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.8
+- **Skip real Ollama calls in tests** — `EmbeddingModel.embed_batch/1` short-circuits to `{:error, :test_mode}` when `config :elixir_nexus, env: :test`. Tests that called `Indexer.index_file/1` were previously timing out on `econnrefused` to localhost:11434 in CI (no Ollama service). Existing TF-IDF fallback path handles the error gracefully. CI test runtime drops from ~10min back to ~30s.
+- **Slim CI triggers** — `.github/workflows/ci.yml` no longer runs on tag pushes (releases are local via Makefile). PR + main push still run tests; secret scan stays scheduled weekly.
+
 ### v1.2.7
 - **Add Go convention dirs to source detection** — `cmd/`, `internal/`, `pkg/` are now in `@indexable_dirs`. Without this, monorepos like council-hub had `mcp-server/cmd/` skipped during depth-2 detection, even though the Go files inside it should be indexed. `find_project_root/1` source-dir list also gets the additions so paths like `/workspace4/mcp-server/cmd` correctly strip to the parent module.
 

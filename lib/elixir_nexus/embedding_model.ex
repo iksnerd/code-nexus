@@ -37,7 +37,15 @@ defmodule ElixirNexus.EmbeddingModel do
   are configurable via Application env (`:ollama_retry_attempts`, `:ollama_timeout`).
   """
   def embed_batch(texts) when is_list(texts) do
-    do_embed_batch(texts, 1)
+    if Application.get_env(:elixir_nexus, :env) == :test do
+      # Test environment: skip the real Ollama call entirely. Callers that need
+      # actual dense vectors should set up their own stub. Production-like
+      # search paths fall through to the TF-IDF embedder, which is what the
+      # vast majority of tests assume already.
+      {:error, :test_mode}
+    else
+      do_embed_batch(texts, 1)
+    end
   end
 
   defp do_embed_batch(texts, attempt) do

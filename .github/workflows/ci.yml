@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
   schedule:
@@ -12,8 +11,9 @@ on:
 # Docker images are built and published locally via the Makefile (`make publish`).
 # CI only runs tests and secret-scan.
 #
-# main branch + tag pushes run: test + secret-scan
+# main pushes run: test + secret-scan
 # PRs run: test only
+# Tag pushes run nothing — releases are local-only.
 
 env:
   MIX_ENV: test
