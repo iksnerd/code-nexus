@@ -58,6 +58,12 @@ defmodule ElixirNexus.API.VectorsController do
           }
         })
 
+      # Collection not yet created (e.g. fresh boot before any reindex). Return an
+      # empty scroll instead of a 500 — the question "what points exist?" has a
+      # legitimate answer of "none" when there is no collection.
+      {:error, {404, _}} ->
+        json(conn, %{success: true, data: %{points: [], next_offset: nil}})
+
       {:error, reason} ->
         json(conn, %{success: false, error: inspect(reason)})
     end
