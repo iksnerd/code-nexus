@@ -28,7 +28,7 @@ Indexer.index_directories([paths])
         → emit telemetry :file_parsed
         → put_batcher(:embed_and_store)
     → Broadway Batcher (batch_size: 32, timeout: 1000ms):
-        EmbeddingModel.embed(chunks)   # Ollama nomic-embed-text
+        EmbeddingModel.embed(chunks)   # Ollama embeddinggemma:300m (default; OLLAMA_MODEL env var)
         → QdrantClient.upsert_points
         → ChunkCache.insert_chunks
         → RelationshipGraph rebuild (async)

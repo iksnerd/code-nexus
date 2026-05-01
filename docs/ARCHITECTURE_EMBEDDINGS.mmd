@@ -7,7 +7,7 @@ graph LR
     end
 
     subgraph Ollama["Ollama (Primary Dense)"]
-        Model["nomic-embed-text<br/>(137M params, F16)"]
+        Model["embeddinggemma:300m (default)<br/>or nomic-embed-text<br/>(OLLAMA_MODEL env var)"]
         HTTPCall["HTTP POST<br/>/api/embed<br/>(batch support)"]
         DenseVec["768-dim Dense Vector<br/>(semantic similarity)"]
     end
