@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.2
+- **Single-project workspace mounts** — when `WORKSPACE_HOST_N` points at the project root itself (rather than a parent directory of projects), `reindex(<project-name>)` now resolves bare names to the mount itself. Useful for repos like `~/council-hub` that aren't grouped under a parent. The `available projects` list also includes these mounts (detected via top-level source dirs or project markers like `README.md`, `Dockerfile`, `mix.exs`, `package.json`, etc.).
+
 ### v1.2.1
 - **Workspace mounts extended to 5 slots** — `WORKSPACE_4`/`WORKSPACE_5` (with matching `WORKSPACE_HOST_4`/`WORKSPACE_HOST_5`) now mount additional host directories at `/workspace4`/`/workspace5`. Useful when projects are scattered across `~/GolandProjects`, `~/WebstormProjects`, `~/PyCharmProjects`, etc.
 - **Better busy reindex error message** — instead of `Reindex failed: :indexing_in_progress`, the response now names the project currently being reindexed and explains why concurrent reindex of different projects is rejected.
