@@ -23,10 +23,13 @@ defmodule ElixirNexus.Search.DataFetching do
               "end_line" => chunk.end_line,
               "module_path" => chunk.module_path,
               "visibility" => chunk.visibility && to_string(chunk.visibility),
-              "parameters" => chunk.parameters,
-              "calls" => chunk.calls || [],
-              "is_a" => chunk.is_a || [],
-              "contains" => chunk.contains || [],
+              # All collection-shape fields use Map.get to tolerate older chunks
+              # missing optional keys — relevant after a schema bump or for
+              # test fixtures built before a field was added.
+              "parameters" => Map.get(chunk, :parameters, []),
+              "calls" => Map.get(chunk, :calls, []) || [],
+              "is_a" => Map.get(chunk, :is_a, []) || [],
+              "contains" => Map.get(chunk, :contains, []) || [],
               "content" => chunk.content,
               "language" => chunk[:language] && to_string(chunk[:language])
             }
