@@ -18,6 +18,7 @@ defmodule ElixirNexus.MCPServer.ResourcesTest do
       end_line: 10,
       module_path: "Server",
       visibility: :public,
+      parameters: [],
       calls: ["GenServer.start_link"],
       is_a: ["GenServer"],
       contains: ["Server.handle_call"],
@@ -33,6 +34,7 @@ defmodule ElixirNexus.MCPServer.ResourcesTest do
       end_line: 5,
       module_path: "Server",
       visibility: :public,
+      parameters: ["msg", "_from", "state"],
       calls: [],
       is_a: [],
       contains: [],
@@ -48,6 +50,7 @@ defmodule ElixirNexus.MCPServer.ResourcesTest do
       end_line: 3,
       module_path: "Client",
       visibility: :public,
+      parameters: [],
       calls: ["Server.handle_call", "GenServer.call"],
       is_a: [],
       contains: [],
@@ -64,6 +67,19 @@ defmodule ElixirNexus.MCPServer.ResourcesTest do
     ChunkCache.insert_many(@chunks)
 
     GraphCache.rebuild_from_chunks(@chunks)
+
+    # Clear on exit so this test's fixtures don't leak into the next test's
+    # ChunkCache. mcp_server_query_tools_test runs without its own clear and
+    # was previously seeing :parameters-less leftover chunks here.
+    on_exit(fn ->
+      try do
+        ChunkCache.clear()
+        GraphCache.clear()
+      rescue
+        _ -> :ok
+      end
+    end)
+
     :ok
   end
 
