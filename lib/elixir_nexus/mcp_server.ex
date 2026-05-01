@@ -309,49 +309,54 @@ defmodule ElixirNexus.MCPServer do
       {:ok, index_root, display_path} ->
         dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(index_root)
 
-        if dirs == [] do
-          {:error,
-           "No indexable source directories found at '#{display_path}'." <>
-             PathResolution.workspace_hint(), state}
-        else
-          IndexManagement.ensure_collection_for_project(index_root)
-          Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
+        cond do
+          dirs == [] ->
+            {:error,
+             "No indexable source directories found at '#{display_path}'." <>
+               PathResolution.workspace_hint(), state}
 
-          case ElixirNexus.Indexer.index_directories(dirs) do
-            {:ok, status} ->
-              # File watching is best-effort — don't crash if it fails (e.g. in Docker without inotify)
-              try do
-                ElixirNexus.FileWatcher.unwatch_all()
+          ElixirNexus.Indexer.busy?() ->
+            {:error, "Reindex failed: :indexing_in_progress", state}
 
-                Enum.each(dirs, fn dir ->
-                  case ElixirNexus.FileWatcher.watch_directory(dir) do
-                    {:ok, _pid} -> :ok
-                    {:error, reason} -> Logger.warning("Could not watch #{dir}: #{inspect(reason)}")
-                  end
-                end)
-              rescue
-                e -> Logger.warning("File watcher setup failed: #{inspect(e)}")
-              end
+          true ->
+            IndexManagement.ensure_collection_for_project(index_root)
+            Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
 
-              result =
-                %{
-                  indexed_files: status.indexed_files,
-                  total_chunks: status.total_chunks,
-                  directories: dirs,
-                  project_path: display_path
-                }
-                |> PathResolution.maybe_add_default_path_warning(path_arg, display_path, state)
+            case ElixirNexus.Indexer.index_directories(dirs) do
+              {:ok, status} ->
+                # File watching is best-effort — don't crash if it fails (e.g. in Docker without inotify)
+                try do
+                  ElixirNexus.FileWatcher.unwatch_all()
 
-              Application.put_env(:elixir_nexus, :current_project_path, display_path)
+                  Enum.each(dirs, fn dir ->
+                    case ElixirNexus.FileWatcher.watch_directory(dir) do
+                      {:ok, _pid} -> :ok
+                      {:error, reason} -> Logger.warning("Could not watch #{dir}: #{inspect(reason)}")
+                    end
+                  end)
+                rescue
+                  e -> Logger.warning("File watcher setup failed: #{inspect(e)}")
+                end
 
-              ResponseFormat.json_reply(
-                result,
-                state |> Map.put(:indexed_dirs, dirs) |> Map.put(:project_path, display_path)
-              )
+                result =
+                  %{
+                    indexed_files: status.indexed_files,
+                    total_chunks: status.total_chunks,
+                    directories: dirs,
+                    project_path: display_path
+                  }
+                  |> PathResolution.maybe_add_default_path_warning(path_arg, display_path, state)
 
-            {:error, reason} ->
-              {:error, "Reindex failed: #{inspect(reason)}", state}
-          end
+                Application.put_env(:elixir_nexus, :current_project_path, display_path)
+
+                ResponseFormat.json_reply(
+                  result,
+                  state |> Map.put(:indexed_dirs, dirs) |> Map.put(:project_path, display_path)
+                )
+
+              {:error, reason} ->
+                {:error, "Reindex failed: #{inspect(reason)}", state}
+            end
         end
 
       {:error, message} ->

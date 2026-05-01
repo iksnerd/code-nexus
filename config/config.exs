@@ -21,7 +21,7 @@ config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id, :file, :line]
 
-# Embedding model config (Ollama nomic-embed-text, 768-dim)
+# Embedding model config (Ollama embeddinggemma:300m, 768-dim — alt: nomic-embed-text)
 config :elixir_nexus,
   ollama_url: "http://localhost:11434"
 

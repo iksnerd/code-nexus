@@ -72,7 +72,7 @@ Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
 
 ## Running
 
-**Prerequisites:** Ollama running on host with `nomic-embed-text` model pulled (`ollama pull nomic-embed-text`).
+**Prerequisites:** Ollama running on host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Override with `OLLAMA_MODEL=nomic-embed-text` if you prefer the older default.
 
 ```bash
 # Docker — starts Phoenix :4100 + MCP Streamable HTTP :3002 in a single BEAM
@@ -100,7 +100,7 @@ On failure (path not found or no source dirs), the error message lists available
 For building/testing CodeNexus itself:
 
 ```bash
-ollama pull nomic-embed-text                          # Ensure embedding model
+ollama pull embeddinggemma:300m                       # Ensure embedding model
 docker-compose up -d qdrant                           # Qdrant only
 nohup mix phx.server > /tmp/nexus_server.log 2>&1 &  # Phoenix dashboard
 mix mcp                                               # MCP stdio transport
@@ -113,7 +113,7 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 
 - **MCP Server** (`lib/elixir_nexus/mcp_server.ex`) — stdio + HTTP (Streamable HTTP at `/mcp`) transport, ex_mcp 0.9.0
 - **Phoenix Dashboard** (`lib/elixir_nexus_web/`) — LiveView dashboard on port 4100, auto-syncs from Qdrant
-- **Indexing Pipeline** — Broadway-based: parse (tree-sitter/sourceror) -> chunk -> embed (Ollama nomic-embed-text, 768-dim) -> store (Qdrant + ETS)
+- **Indexing Pipeline** — Broadway-based: parse (tree-sitter/sourceror) -> chunk -> embed (Ollama embeddinggemma:300m, 768-dim) -> store (Qdrant + ETS)
 - **ETS Caches** — `ChunkCache` (chunks by file) + `GraphCache` (call graph nodes) — owned by `CacheOwner` GenServer
 - **TF-IDF ETS** — IDF vocabulary in ETS with `read_concurrency: true` for lock-free concurrent embeddings
 - **Supervision** — `rest_for_one` strategy: if a dependency crashes, all processes started after it restart
@@ -203,7 +203,7 @@ Key node types that must be included:
 | `lib/elixir_nexus/mcp_server/resources.ex` | MCP resource generators (overview, architecture, hotspots) |
 | `lib/mix/tasks/mcp_http.ex` | Mix task for HTTP/SSE MCP transport |
 | `lib/elixir_nexus/project_switcher.ex` | Collection switching + ETS reload from Qdrant |
-| `lib/elixir_nexus/embedding_model.ex` | Ollama nomic-embed-text client (768-dim dense embeddings) |
+| `lib/elixir_nexus/embedding_model.ex` | Ollama embedding client (768-dim, default `embeddinggemma:300m`); retries on timeout/cold-start; `warm_up/0` called from Application |
 | `lib/elixir_nexus/tfidf_embedder.ex` | TF-IDF embedder with ETS-backed IDF for concurrent reads (fallback + sparse) |
 | `lib/elixir_nexus/dirty_tracker.ex` | SHA256-based incremental indexing (polyglot) |
 | `lib/elixir_nexus/qdrant_client.ex` | Qdrant GenServer — collection management, hybrid search, point ops; read-only calls bypass mailbox |

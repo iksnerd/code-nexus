@@ -46,6 +46,11 @@ defmodule ElixirNexus.Application do
     opts = [strategy: :rest_for_one, name: ElixirNexus.Supervisor]
     {:ok, pid} = Supervisor.start_link(children, opts)
 
+    # Warm up Ollama so the first real embedding batch doesn't block on cold model load
+    if Mix.env() != :test do
+      ElixirNexus.EmbeddingModel.warm_up()
+    end
+
     # Start MCP HTTP server if MCP_HTTP_PORT is set (Docker mode)
     if mcp_http_port = System.get_env("MCP_HTTP_PORT") do
       port = String.to_integer(mcp_http_port)
