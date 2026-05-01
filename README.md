@@ -326,6 +326,10 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.3
+- **Fix collection name for single-project mounts** — when `WORKSPACE_HOST_N` points at the project root itself (v1.2.2), the resolved container path is `/workspaceN`, which previously produced a useless `nexus_workspaceN` collection name. `IndexManagement.ensure_collection_for_project/2` now accepts the user's `display_path` and prefers the bare project name (e.g. `nexus_council_hub` instead of `nexus_workspace4`).
+- **Trim trailing underscores in collection names** — prevents `nexus_` / `nexus__` artifacts when the source path ends in `.` or `_`.
+
 ### v1.2.2
 - **Single-project workspace mounts** — when `WORKSPACE_HOST_N` points at the project root itself (rather than a parent directory of projects), `reindex(<project-name>)` now resolves bare names to the mount itself. Useful for repos like `~/council-hub` that aren't grouped under a parent. The `available projects` list also includes these mounts (detected via top-level source dirs or project markers like `README.md`, `Dockerfile`, `mix.exs`, `package.json`, etc.).
 

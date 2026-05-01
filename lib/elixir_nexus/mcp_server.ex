@@ -319,7 +319,7 @@ defmodule ElixirNexus.MCPServer do
             {:error, busy_message(display_path), state}
 
           true ->
-            IndexManagement.ensure_collection_for_project(index_root)
+            IndexManagement.ensure_collection_for_project(index_root, display_path)
             # Record the project under reindex so a concurrent caller's
             # busy_message/1 can name what is blocking them.
             Application.put_env(:elixir_nexus, :current_project_path, display_path)
