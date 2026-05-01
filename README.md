@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.6
+- **Disambiguate sub-project collection names** — when a project is reindexed from a subdirectory of a single-project workspace mount (e.g. `/workspace4/mcp-server` under `WORKSPACE_HOST_4=/Users/yourname/council-hub`), the collection name now prefixes the parent mount's host basename: `nexus_council_hub__mcp_server` instead of the ambiguous `nexus_mcp_server`. Multi-project mounts (`WORKSPACE_HOST=/Users/yourname/www`) and root-mount reindexes are unaffected.
+
 ### v1.2.5
 - **Monorepo source-dir detection** — `IndexingHelpers.detect_indexable_dirs/1` now descends one level when no top-level source dir is found. Repos like `council-hub` (with `channel-plugin/src`, `mcp-server/cmd`, `ui/lib` at depth 2) now index all subprojects in a single `reindex(...)` call instead of just the root files. Single-project repos still take the fast top-level path.
 

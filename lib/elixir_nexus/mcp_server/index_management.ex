@@ -33,14 +33,30 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
 
   # Decide what to name a project's Qdrant collection.
   #
-  # Priority order:
+  # Priority order for the base name:
   #   1. display_path (the user's bare name like "council-hub") if it's a bare
   #      name (no slash) — that's the user's intent.
   #   2. project_root basename, unless it's a generic /workspace[N] mount root,
   #      in which case fall through.
   #   3. display_path basename (handles full host paths like "/Users/x/foo").
   #   4. project_root basename anyway (last resort).
+  #
+  # When the project is a subdirectory of a single-project workspace mount
+  # (e.g. /workspace4/mcp-server under WORKSPACE_HOST_4=/Users/yourname/council-hub),
+  # the parent mount's host basename is prefixed: `council-hub__mcp-server`.
+  # This avoids collisions when multiple parent repos contain a similarly-named
+  # subproject (council-hub/mcp-server vs elixir-nexus/lib/elixir_nexus/mcp_server.ex).
   defp derive_project_name(project_root, display_path) do
+    base = base_name(project_root, display_path)
+
+    case ElixirNexus.MCPServer.PathResolution.parent_mount_basename(project_root) do
+      nil -> base
+      parent when parent == base -> base
+      parent -> "#{parent}__#{base}"
+    end
+  end
+
+  defp base_name(project_root, display_path) do
     container_basename = Path.basename(project_root)
     looks_generic? = Regex.match?(~r/^workspace[0-9]*$/, container_basename) or container_basename in ["", ".", "_"]
 
