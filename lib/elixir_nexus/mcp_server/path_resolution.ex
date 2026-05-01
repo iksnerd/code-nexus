@@ -150,6 +150,40 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     |> Enum.filter(fn {mount, _host} -> File.dir?(mount) end)
   end
 
+  @doc """
+  Return the host basename of the single-project workspace mount that contains
+  `container_path`, or nil if no such mount exists.
+
+  Used by IndexManagement.derive_project_name/2 to prefix collection names with
+  the parent project when reindexing a subproject. Example: `/workspace4/mcp-server`
+  with `WORKSPACE_HOST_4=/Users/admin/council-hub` → returns `"council-hub"`, so
+  the collection becomes `nexus_council_hub__mcp_server` instead of the ambiguous
+  `nexus_mcp_server`.
+
+  Returns nil for multi-project mounts (e.g. `/workspace/foo` where /workspace is
+  a parent of many projects), since the project name alone is unambiguous there.
+  """
+  def parent_mount_basename(container_path) do
+    Enum.find_value(workspace_mounts(), fn {mount, host_prefix} ->
+      cond do
+        host_prefix == "" ->
+          nil
+
+        # Strict subpath of mount AND the mount itself is a project (not just
+        # a parent dir of projects). Distinguishes single-project mounts like
+        # WORKSPACE_HOST=/Users/admin/council-hub (parent for prefixing) from
+        # multi-project mounts like WORKSPACE_HOST=/Users/admin/www (not).
+        container_path != mount and
+          String.starts_with?(container_path, mount <> "/") and
+            looks_like_project_root?(mount) ->
+          Path.basename(host_prefix)
+
+        true ->
+          nil
+      end
+    end)
+  end
+
   defp resolve_bare_name(name) do
     Enum.find_value(workspace_mounts(), fn {mount, host_prefix} ->
       cond do
