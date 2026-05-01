@@ -83,6 +83,10 @@ defmodule ElixirNexus.QdrantClient do
       {:ok, _} ->
         Logger.info("Collection '#{state.collection}' ready (named vectors + sparse vectors)")
 
+      {:error, {409, _body}} ->
+        # 409 = collection already exists, expected on every boot when reusing data
+        Logger.debug("Collection '#{state.collection}' already exists, reusing")
+
       {:error, reason} ->
         Logger.warning("Could not create collection: #{inspect(reason)}")
     end

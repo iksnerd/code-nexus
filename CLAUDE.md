@@ -85,7 +85,7 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 
 ### Workspace mount (Docker)
 
-Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container. Up to two additional mounts are supported via `WORKSPACE_2`/`WORKSPACE_3` (each needs a matching `WORKSPACE_HOST_N` for path translation): `WORKSPACE=~/www WORKSPACE_HOST=~/www WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
+Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container. Up to four additional mounts are supported via `WORKSPACE_2`…`WORKSPACE_5` (each needs a matching `WORKSPACE_HOST_N` for path translation): `WORKSPACE=~/www WORKSPACE_HOST=~/www WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects WORKSPACE_3=~/WebstormProjects WORKSPACE_HOST_3=~/WebstormProjects docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
 
 **Path resolution order** (`reindex` path argument):
 1. `nil` / omitted → indexes `/app` (CodeNexus itself)

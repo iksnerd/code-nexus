@@ -31,6 +31,8 @@ services:
       WORKSPACE_HOST: "${WORKSPACE_HOST:-}"
       WORKSPACE_HOST_2: "${WORKSPACE_HOST_2:-}"
       WORKSPACE_HOST_3: "${WORKSPACE_HOST_3:-}"
+      WORKSPACE_HOST_4: "${WORKSPACE_HOST_4:-}"
+      WORKSPACE_HOST_5: "${WORKSPACE_HOST_5:-}"
     depends_on:
       qdrant:
         condition: service_healthy
@@ -38,6 +40,8 @@ services:
       - ${WORKSPACE:-.}:/workspace:ro
       - ${WORKSPACE_2:-.}:/workspace2:ro
       - ${WORKSPACE_3:-.}:/workspace3:ro
+      - ${WORKSPACE_4:-.}:/workspace4:ro
+      - ${WORKSPACE_5:-.}:/workspace5:ro
     networks:
       - nexus
     healthcheck:

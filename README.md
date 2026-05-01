@@ -326,6 +326,11 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.1
+- **Workspace mounts extended to 5 slots** — `WORKSPACE_4`/`WORKSPACE_5` (with matching `WORKSPACE_HOST_4`/`WORKSPACE_HOST_5`) now mount additional host directories at `/workspace4`/`/workspace5`. Useful when projects are scattered across `~/GolandProjects`, `~/WebstormProjects`, `~/PyCharmProjects`, etc.
+- **Better busy reindex error message** — instead of `Reindex failed: :indexing_in_progress`, the response now names the project currently being reindexed and explains why concurrent reindex of different projects is rejected.
+- **Quieter boot logs** — the expected 409 "Collection already exists" response on startup is now logged at debug, not warning.
+
 ### v1.2.0
 - **Default embedding model is now `embeddinggemma:300m`** — `embedding_model.ex` `@default_model`, `docker-compose.yml`, `.env.example`, `config/config.exs` all updated. `OLLAMA_MODEL=nomic-embed-text` continues to work as an override.
 - **Fix concurrency race in collection switch** — `reindex` now pre-checks `Indexer.busy?/0` before calling `ensure_collection_for_project`, so a rejected reindex no longer swaps the active Qdrant collection out from under in-flight Broadway batches (which previously caused hundreds of `404 Not found: Collection 'nexus_X' doesn't exist` errors).
