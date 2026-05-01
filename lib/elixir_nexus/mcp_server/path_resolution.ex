@@ -215,7 +215,7 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     basename = Path.basename(path)
 
     source_dirs =
-      ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views)
+      ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views cmd internal pkg)
 
     if basename in source_dirs and File.dir?(path) do
       Path.dirname(path)
