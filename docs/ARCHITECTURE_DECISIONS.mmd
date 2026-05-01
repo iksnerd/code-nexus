@@ -1,7 +1,7 @@
 graph LR
     subgraph D1["Decision 1: Embeddings"]
         D1Q["How to embed<br/>code chunks?"]
-        D1A["Ollama (primary)<br/>nomic-embed-text (768-dim)"]
+        D1A["Ollama (primary)<br/>embeddinggemma:300m (768-dim, default)<br/>OLLAMA_MODEL env var"]
         D1B["TF-IDF (fallback)<br/>+ sparse vectors"]
         D1Why["Ollama: high-quality semantic vectors<br/>via HTTP, runs on host.<br/>TF-IDF: always works + keyword matching.<br/>IDF in ETS (read_concurrency) for<br/>lock-free concurrent embeddings."]
     end

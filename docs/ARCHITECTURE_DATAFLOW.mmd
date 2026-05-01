@@ -17,7 +17,7 @@ sequenceDiagram
 
     Search->>Embedder: embed("parse")
     alt Ollama available
-        Embedder->>Ollama: POST /api/embed (nomic-embed-text)
+        Embedder->>Ollama: POST /api/embed (embeddinggemma:300m default; OLLAMA_MODEL env var)
         Ollama-->>Embedder: embeddings
         Embedder-->>Search: dense vector [768 dims]
     else Ollama unavailable

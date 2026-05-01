@@ -1,6 +1,6 @@
 ---
 name: nexus-release
-description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v1.1.0), shipping Docker images, or verifying a release is production-ready.
+description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v1.2.1), shipping Docker images, or verifying a release is production-ready.
 metadata:
   compatibility: ElixirNexus project only
 ---
@@ -146,6 +146,8 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.2.1  | Workspace mounts extended to 5 slots (`WORKSPACE_4`/`WORKSPACE_5`); user-friendly "busy" reindex error message naming the running project; quieter boot (`:debug` for expected 409 collection-exists); Docker image build moved from CI to local Makefile (`make docker.publish` multi-arch buildx); healthcheck switched from `curl` to `bash /dev/tcp` |
+| v1.2.0  | Default embedding model switched to `embeddinggemma:300m` (override with `OLLAMA_MODEL`); fix concurrency race where rejected reindex still swapped the active Qdrant collection (`Indexer.busy?/0` pre-check); fix cold-start Ollama timeouts dropping chunks (retries + `warm_up/0` on supervisor start; configurable `:ollama_timeout`/`:ollama_retry_attempts`) |
 | v1.1.0  | Multi-workspace Docker mounts — `WORKSPACE_2`/`WORKSPACE_3` vars + `/workspace2`/`/workspace3` container paths; bare project name resolution across all active mounts |
 | v1.0.5  | Fix Qdrant test collection leak (on_exit cleanup), test splits (mcp_server/relationship_graph/indexer → 8 files), qdrant_client.ex domain sections, 20 new QdrantClient tests; 725 tests |
 | v1.0.4  | Fix dashboard broken LiveView — vendor JS files (`phoenix.min.js`, `phoenix_live_view.min.js`) missing from Docker image; add static asset and graph_live tests; test collection cleanup via `ExUnit.after_suite` |
