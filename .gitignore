@@ -23,3 +23,5 @@ erl_crash.dump
 /config/*.secret.exs
 .gemini/
 /docs/personal/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
