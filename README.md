@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.7
+- **Add Go convention dirs to source detection** — `cmd/`, `internal/`, `pkg/` are now in `@indexable_dirs`. Without this, monorepos like council-hub had `mcp-server/cmd/` skipped during depth-2 detection, even though the Go files inside it should be indexed. `find_project_root/1` source-dir list also gets the additions so paths like `/workspace4/mcp-server/cmd` correctly strip to the parent module.
+
 ### v1.2.6
 - **Disambiguate sub-project collection names** — when a project is reindexed from a subdirectory of a single-project workspace mount (e.g. `/workspace4/mcp-server` under `WORKSPACE_HOST_4=/Users/yourname/council-hub`), the collection name now prefixes the parent mount's host basename: `nexus_council_hub__mcp_server` instead of the ambiguous `nexus_mcp_server`. Multi-project mounts (`WORKSPACE_HOST=/Users/yourname/www`) and root-mount reindexes are unaffected.
 

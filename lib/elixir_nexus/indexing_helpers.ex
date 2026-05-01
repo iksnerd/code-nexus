@@ -58,7 +58,13 @@ defmodule ElixirNexus.IndexingHelpers do
     # MVC models
     "models",
     # MVC views
-    "views"
+    "views",
+    # Go entrypoints (main packages)
+    "cmd",
+    # Go internal packages (private to the module)
+    "internal",
+    # Go shared packages
+    "pkg"
   ]
 
   @doc """
