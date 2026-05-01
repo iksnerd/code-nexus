@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.4
+- **No auto-create of default collection at boot** — `QdrantClient.init/1` no longer schedules `:ensure_collection`. Previously this produced a duplicate `nexus_app` collection alongside the explicitly-indexed `nexus_<project>` for the same code (the in-container `/app` is the same source as host-mounted `~/www/elixir-nexus`). The default collection is now created on first explicit `reindex(...)`. Searches against a non-existent collection still fall back to the indexer keyword search (existing 404 handling), so this is a quieter-state change, not a breaking one.
+
 ### v1.2.3
 - **Fix collection name for single-project mounts** — when `WORKSPACE_HOST_N` points at the project root itself (v1.2.2), the resolved container path is `/workspaceN`, which previously produced a useless `nexus_workspaceN` collection name. `IndexManagement.ensure_collection_for_project/2` now accepts the user's `display_path` and prefers the bare project name (e.g. `nexus_council_hub` instead of `nexus_workspace4`).
 - **Trim trailing underscores in collection names** — prevents `nexus_` / `nexus__` artifacts when the source path ends in `.` or `_`.

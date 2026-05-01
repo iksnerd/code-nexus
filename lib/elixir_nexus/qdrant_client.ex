@@ -67,8 +67,7 @@ defmodule ElixirNexus.QdrantClient do
 
     case http_get("#{url}/") do
       {:ok, _} ->
-        Logger.info("Qdrant is healthy")
-        Process.send_after(self(), :ensure_collection, 1000)
+        Logger.info("Qdrant is healthy. Default collection: #{coll} (created on first reindex)")
         {:ok, %{url: url, collection: coll}}
 
       {:error, reason} ->
@@ -77,6 +76,7 @@ defmodule ElixirNexus.QdrantClient do
     end
   end
 
+  # Kept for tests and explicit callers that want to pre-create the default collection.
   @impl true
   def handle_info(:ensure_collection, state) do
     case http_put("#{state.url}/collections/#{state.collection}", collection_schema()) do
@@ -84,7 +84,6 @@ defmodule ElixirNexus.QdrantClient do
         Logger.info("Collection '#{state.collection}' ready (named vectors + sparse vectors)")
 
       {:error, {409, _body}} ->
-        # 409 = collection already exists, expected on every boot when reusing data
         Logger.debug("Collection '#{state.collection}' already exists, reusing")
 
       {:error, reason} ->

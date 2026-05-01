@@ -4,7 +4,7 @@ defmodule ElixirNexus.MixProject do
   def project do
     [
       app: :elixir_nexus,
-      version: "1.2.3",
+      version: "1.2.4",
       elixir: "~> 1.14",
       description:
         "Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase",
