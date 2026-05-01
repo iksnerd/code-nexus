@@ -61,14 +61,49 @@ defmodule ElixirNexus.IndexingHelpers do
     "views"
   ]
 
-  @doc "Detect indexable source directories under a base path. Falls back to base path itself."
+  @doc """
+  Detect indexable source directories under a base path. Falls back to base path itself.
+
+  Search order:
+    1. Top-level source dirs (lib/, src/, app/, ...) — fast path for single-project repos
+    2. If nothing at depth 1, search depth-2 monorepo layout — e.g. council-hub
+       has `channel-plugin/src`, `mcp-server/cmd`, `ui/lib`. We descend one level
+       so monorepos get indexed without the user having to reindex each subproject.
+    3. If nothing at either level, fall back to the base path itself.
+  """
   def detect_indexable_dirs(base_path) do
-    found =
+    top_level =
       @indexable_dirs
       |> Enum.map(&Path.join(base_path, &1))
       |> Enum.filter(&File.dir?/1)
 
-    if found == [], do: [base_path], else: found
+    if top_level != [] do
+      top_level
+    else
+      second_level = monorepo_source_dirs(base_path)
+      if second_level != [], do: second_level, else: [base_path]
+    end
+  end
+
+  defp monorepo_source_dirs(base_path) do
+    case File.ls(base_path) do
+      {:ok, entries} ->
+        entries
+        |> Enum.flat_map(fn child ->
+          child_path = Path.join(base_path, child)
+
+          if File.dir?(child_path) and not String.starts_with?(child, ".") do
+            @indexable_dirs
+            |> Enum.map(&Path.join(child_path, &1))
+            |> Enum.filter(&File.dir?/1)
+          else
+            []
+          end
+        end)
+
+      {:error, _} ->
+        []
+    end
   end
 
   @doc "Parse a source file into chunks."

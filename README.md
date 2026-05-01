@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.5
+- **Monorepo source-dir detection** — `IndexingHelpers.detect_indexable_dirs/1` now descends one level when no top-level source dir is found. Repos like `council-hub` (with `channel-plugin/src`, `mcp-server/cmd`, `ui/lib` at depth 2) now index all subprojects in a single `reindex(...)` call instead of just the root files. Single-project repos still take the fast top-level path.
+
 ### v1.2.4
 - **No auto-create of default collection at boot** — `QdrantClient.init/1` no longer schedules `:ensure_collection`. Previously this produced a duplicate `nexus_app` collection alongside the explicitly-indexed `nexus_<project>` for the same code (the in-container `/app` is the same source as host-mounted `~/www/elixir-nexus`). The default collection is now created on first explicit `reindex(...)`. Searches against a non-existent collection still fall back to the indexer keyword search (existing 404 handling), so this is a quieter-state change, not a breaking one.
 
