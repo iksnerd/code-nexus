@@ -72,16 +72,45 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     end
   end
 
-  @doc "List project directories available across all active workspace mounts."
+  @doc """
+  List project directories available across all active workspace mounts.
+  Includes single-project mounts (where the mount itself is the project) under
+  their host basename, in addition to direct children of multi-project mounts.
+  """
   def list_workspace_projects do
     workspace_mounts()
-    |> Enum.flat_map(fn {mount, _host} ->
-      case File.ls(mount) do
-        {:ok, entries} -> Enum.filter(entries, &File.dir?(Path.join(mount, &1)))
-        {:error, _} -> []
-      end
+    |> Enum.flat_map(fn {mount, host_prefix} ->
+      children =
+        case File.ls(mount) do
+          {:ok, entries} -> Enum.filter(entries, &File.dir?(Path.join(mount, &1)))
+          {:error, _} -> []
+        end
+
+      # Single-project mount: include the mount's own basename if it looks
+      # like a project root (has source dirs at top level OR a README/Makefile/
+      # docker-compose.yml at the root). Multi-component repos like council-hub
+      # match via the second condition.
+      self_name =
+        if host_prefix != "" and looks_like_project_root?(mount) do
+          [Path.basename(host_prefix)]
+        else
+          []
+        end
+
+      children ++ self_name
     end)
+    |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  defp looks_like_project_root?(path) do
+    source_dirs = ~w(lib src app pages components packages services)
+
+    project_markers =
+      ~w(README.md README Makefile Dockerfile docker-compose.yml mix.exs package.json Cargo.toml go.mod pyproject.toml)
+
+    Enum.any?(source_dirs, fn dir -> File.dir?(Path.join(path, dir)) end) or
+      Enum.any?(project_markers, fn marker -> File.regular?(Path.join(path, marker)) end)
   end
 
   @doc """
@@ -122,9 +151,20 @@ defmodule ElixirNexus.MCPServer.PathResolution do
   end
 
   defp resolve_bare_name(name) do
-    Enum.find_value(workspace_mounts(), fn {mount, _} ->
-      candidate = Path.join(mount, name)
-      if File.dir?(candidate), do: candidate
+    Enum.find_value(workspace_mounts(), fn {mount, host_prefix} ->
+      cond do
+        # Mount contains a child dir matching the name: /workspace2/llm-memory
+        File.dir?(Path.join(mount, name)) ->
+          Path.join(mount, name)
+
+        # Mount itself is a single-project mount whose host basename matches:
+        # WORKSPACE_HOST_4=/Users/admin/council-hub → bare "council-hub" resolves to /workspace4
+        host_prefix != "" and Path.basename(host_prefix) == name and File.dir?(mount) ->
+          mount
+
+        true ->
+          nil
+      end
     end)
   end
 
