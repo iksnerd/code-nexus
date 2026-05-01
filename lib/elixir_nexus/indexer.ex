@@ -36,6 +36,11 @@ defmodule ElixirNexus.Indexer do
     GenServer.call(__MODULE__, :status)
   end
 
+  @doc "Returns true when an indexing job is currently running."
+  def busy? do
+    status().status == :indexing
+  end
+
   def search_chunks(query, limit \\ 10) do
     {:ok, ChunkCache.search(query, limit)}
   end

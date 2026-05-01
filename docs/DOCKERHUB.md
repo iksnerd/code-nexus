@@ -4,7 +4,7 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 
 ## Quick Start
 
-**Prerequisites:** Ollama running on the host with `nomic-embed-text` pulled (`ollama pull nomic-embed-text`).
+**Prerequisites:** Ollama running on the host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). To use the older default instead, set `OLLAMA_MODEL=nomic-embed-text` and pull that model.
 
 ```bash
 WORKSPACE=~/Documents docker-compose up -d
@@ -98,7 +98,7 @@ Add to your project's `.mcp.json`:
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector DB URL |
 | `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
-| `OLLAMA_MODEL` | `nomic-embed-text` | Ollama embedding model name |
+| `OLLAMA_MODEL` | `embeddinggemma:300m` | Ollama embedding model name (768-dim) |
 | `WORKSPACE_HOST` | _(unset)_ | Host path mapped to `/workspace` (for path translation) |
 | `WORKSPACE_HOST_2` | _(unset)_ | Host path mapped to `/workspace2` |
 | `WORKSPACE_HOST_3` | _(unset)_ | Host path mapped to `/workspace3` |
@@ -110,7 +110,7 @@ Add to your project's `.mcp.json`:
 
 - **Elixir/Phoenix** app with Broadway-based indexing pipeline
 - **Tree-sitter** (Rust NIF) for AST parsing across all supported languages
-- **Ollama nomic-embed-text** for 768-dim dense semantic embeddings
+- **Ollama embeddinggemma:300m** for 768-dim dense semantic embeddings (configurable via `OLLAMA_MODEL`)
 - **TF-IDF** sparse vectors with ETS-backed vocabulary for hybrid search
 - **Qdrant** for vector storage and hybrid search (RRF fusion)
 - **ExMCP** for MCP protocol (stdio + Streamable HTTP)
