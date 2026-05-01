@@ -108,7 +108,7 @@ graph TB
 
     subgraph Indexing["Indexing Pipeline (Broadway)"]
         CH["Chunker<br/>semantic chunks"]
-        OL["Ollama nomic-embed-text<br/>768-dim dense vectors"]
+        OL["Ollama embeddinggemma:300m<br/>768-dim dense vectors"]
         TFIDF["TF-IDF<br/>sparse keyword vectors"]
     end
 
@@ -149,7 +149,7 @@ graph LR
     GR --> R["Results"]
 ```
 
-1. **Dense embedding** via Ollama nomic-embed-text (falls back to TF-IDF)
+1. **Dense embedding** via Ollama (default `embeddinggemma:300m`, falls back to TF-IDF)
 2. **Sparse keyword vector** via TF-IDF feature hashing
 3. **Qdrant hybrid query** with prefetch + RRF fusion (server-side)
 4. **Deduplication** by name + entity type
@@ -270,7 +270,7 @@ Tree-sitter support requires the Rust toolchain. Without it, only Elixir files a
 
 | Vector Type | Model | Purpose |
 |-------------|-------|---------|
-| Dense (768-dim) | `nomic-embed-text` via Ollama | Semantic similarity |
+| Dense (768-dim) | `embeddinggemma:300m` via Ollama (override with `OLLAMA_MODEL`) | Semantic similarity |
 | Sparse | TF-IDF feature hashing (ETS-backed IDF) | Keyword/exact match |
 | Fusion | Qdrant RRF | Combines both server-side |
 
@@ -325,6 +325,12 @@ Run with `mix test --include performance`:
 | PubSub 100 subscribers | 0.17ms max | |
 
 ## Changelog
+
+### v1.2.0
+- **Default embedding model is now `embeddinggemma:300m`** — `embedding_model.ex` `@default_model`, `docker-compose.yml`, `.env.example`, `config/config.exs` all updated. `OLLAMA_MODEL=nomic-embed-text` continues to work as an override.
+- **Fix concurrency race in collection switch** — `reindex` now pre-checks `Indexer.busy?/0` before calling `ensure_collection_for_project`, so a rejected reindex no longer swaps the active Qdrant collection out from under in-flight Broadway batches (which previously caused hundreds of `404 Not found: Collection 'nexus_X' doesn't exist` errors).
+- **Fix cold-start Ollama timeouts dropping chunks** — `embed_batch/1` now retries on `:timeout`/`:connect_timeout`/`:econnrefused` (up to 3 attempts, linear backoff); `recv_timeout` raised from 30s → 60s; `EmbeddingModel.warm_up/0` runs at supervisor start so the first real batch doesn't block on a cold model load.
+- **Fix Docker healthcheck** — `code_nexus` healthcheck now uses `bash /dev/tcp` (the published image has no `curl`), so the container is correctly marked healthy.
 
 ### v1.1.0
 - **Multi-workspace Docker mounts** — `WORKSPACE_2`/`WORKSPACE_3` env vars mount additional host directories at `/workspace2`/`/workspace3`. Bare project names in `reindex` are resolved across all active mounts, so projects scattered across different host directories are all accessible without a shared parent.
