@@ -1,7 +1,13 @@
-.PHONY: build test format lint publish run stop clean
+.PHONY: deps compile test test.all format format.check \
+	build run stop logs \
+	docker.buildx docker.build docker.push docker.publish docker.publish.local \
+	tag release clean
 
 IMAGE := iksnerd/code-nexus
-TAG := $(shell git describe --tags --always 2>/dev/null || echo "dev")
+VERSION := $(shell grep -E '^\s*version:' mix.exs | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+TAG := v$(VERSION)
+PLATFORMS := linux/amd64,linux/arm64
+BUILDER := nexus-multiarch
 
 ## Development
 
@@ -9,10 +15,10 @@ deps:
 	mix deps.get
 
 compile: deps
-	mix compile
+	mix compile --warnings-as-errors
 
 test: compile
-	mix test --exclude performance
+	mix test --exclude performance --exclude multi_project --exclude nif --exclude file_watcher
 
 test.all: compile
 	mix test
@@ -23,7 +29,7 @@ format:
 format.check:
 	mix format --check-formatted
 
-## Docker
+## Docker (local single-arch via docker-compose)
 
 build:
 	docker-compose build code_nexus
@@ -37,31 +43,65 @@ stop:
 logs:
 	docker logs -f code_nexus
 
-## Publish to Docker Hub
+## Docker Hub publish (multi-arch via buildx)
 
-publish: publish.latest publish.tag
+# Ensure a buildx builder exists for multi-arch builds.
+docker.buildx:
+	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
+		docker buildx create --name $(BUILDER) --use --bootstrap
 
-publish.latest:
-	docker build -t $(IMAGE):latest .
-	docker push $(IMAGE):latest
+# Build multi-arch image locally without pushing (verifies the build).
+docker.build: docker.buildx
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		-t $(IMAGE):$(TAG) \
+		-t $(IMAGE):latest \
+		.
 
-publish.tag:
-	docker build -t $(IMAGE):$(TAG) .
-	docker push $(IMAGE):$(TAG)
+# Build and push multi-arch image to Docker Hub.
+# This is the main release command — replaces the old CI publish job.
+docker.publish: docker.buildx
+	@echo "Publishing $(IMAGE):$(TAG) and :latest for $(PLATFORMS)"
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		-t $(IMAGE):$(TAG) \
+		-t $(IMAGE):latest \
+		--push \
+		.
+
+# Local-only single-arch build for fast iteration (host platform).
+docker.publish.local:
+	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest .
 
 ## Release
 
-tag:
-	@echo "Current tags:"; git tag --list | sort -V | tail -5
-	@read -p "New version (e.g. v0.2.0): " version; \
-	git tag -a $$version -m "Release $$version"; \
-	echo "Tagged $$version. Run 'git push origin $$version' to publish."
+# Bump version in mix.exs first, then run `make release`.
+# This runs the pre-push checks, tags the commit, pushes the tag,
+# and publishes a multi-arch image to Docker Hub.
+release: format.check test
+	@echo "Tagging $(TAG)..."
+	@git tag -a $(TAG) -m "Release $(TAG)" 2>/dev/null || echo "Tag $(TAG) already exists"
+	@git push origin $(TAG)
+	$(MAKE) docker.publish
+	@echo "Released $(TAG) — image pushed to Docker Hub"
 
-release: format.check test build publish
-	@echo "Released $(TAG)"
+# Just create + push a tag (no docker build).
+tag:
+	@echo "Current version in mix.exs: $(VERSION)"
+	@echo "Tagging $(TAG)..."
+	git tag -a $(TAG) -m "Release $(TAG)"
+	git push origin $(TAG)
 
 ## Cleanup
 
 clean:
 	mix clean
 	rm -rf _build deps
+
+# Remove old image tags from local Docker, keeping only :latest and current $(TAG).
+clean.images:
+	@echo "Keeping $(IMAGE):latest and $(IMAGE):$(TAG)"
+	@docker images --format '{{.Repository}}:{{.Tag}}' | \
+		grep '^$(IMAGE):v' | \
+		grep -v '^$(IMAGE):$(TAG)$$' | \
+		xargs -r docker rmi || true
