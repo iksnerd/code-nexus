@@ -3,15 +3,23 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
 
   require Logger
 
-  @doc "Switch Qdrant collection to match the project being indexed."
-  def ensure_collection_for_project(project_root) do
+  @doc """
+  Switch Qdrant collection to match the project being indexed.
+
+  Collection naming derives from the project name, not the container path.
+  For single-project mounts (where project_root == /workspaceN), this avoids
+  producing a useless `nexus_workspaceN` and instead names the collection
+  after the user-supplied bare name or the host-side basename.
+  """
+  def ensure_collection_for_project(project_root, display_path \\ nil) do
+    project_name = derive_project_name(project_root, display_path)
+
     collection =
-      project_root
-      |> Path.basename()
-      |> then(&"nexus_#{&1}")
+      "nexus_#{project_name}"
       |> String.downcase()
       |> String.replace(~r/[^a-z0-9_]/, "_")
       |> String.trim_leading("_")
+      |> String.trim_trailing("_")
       |> String.slice(0..59)
 
     current = ElixirNexus.QdrantClient.active_collection()
@@ -20,6 +28,34 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
       Logger.info("Switching Qdrant collection: #{current} -> #{collection}")
       ElixirNexus.QdrantClient.switch_collection_force(collection)
       ElixirNexus.Events.broadcast_collection_changed(collection)
+    end
+  end
+
+  # Decide what to name a project's Qdrant collection.
+  #
+  # Priority order:
+  #   1. display_path (the user's bare name like "council-hub") if it's a bare
+  #      name (no slash) — that's the user's intent.
+  #   2. project_root basename, unless it's a generic /workspace[N] mount root,
+  #      in which case fall through.
+  #   3. display_path basename (handles full host paths like "/Users/x/foo").
+  #   4. project_root basename anyway (last resort).
+  defp derive_project_name(project_root, display_path) do
+    container_basename = Path.basename(project_root)
+    looks_generic? = Regex.match?(~r/^workspace[0-9]*$/, container_basename) or container_basename in ["", ".", "_"]
+
+    cond do
+      is_binary(display_path) and display_path != "" and not String.contains?(display_path, "/") ->
+        display_path
+
+      not looks_generic? ->
+        container_basename
+
+      is_binary(display_path) and display_path != "" ->
+        Path.basename(display_path)
+
+      true ->
+        container_basename
     end
   end
 
