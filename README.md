@@ -326,6 +326,10 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.0
+- **Skills exposed as MCP resources** — every bundled skill in `.agents/skills/` is now reachable as `nexus://skill/<name>`, with a `nexus://skills/index` listing all of them. Resources are enumerated and embedded at compile time (`@external_resource` triggers a recompile when any `SKILL.md` changes), so the running container needs no filesystem access to serve them. Currently 16 skills (Elixir/OTP patterns, Phoenix LiveView, ElixirNexus internals, etc.).
+- **`load_resources` tool fallback for clients without resource support** — the existing tool now also lists skills in its no-arg response, so MCP clients that only speak tools (not resources) can still discover and read skills via `load_resources(uri: "nexus://skill/<name>")`.
+
 ### v1.2.9
 - **Image catch-up release** — rolls up v1.2.8 (test env short-circuit, slim CI triggers), the `vectors_controller` scroll 404 handler, and the `mcp_server_query_tools` flake fix (defensive `Map.get` for optional chunk fields, `on_exit` cache cleanup). No runtime behavior change for non-test code paths; just brings the published image version stamp in sync with main.
 
