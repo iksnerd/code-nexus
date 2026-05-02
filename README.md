@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.4
+- **Fix: skills wiped at runtime by dev-mode code reload** — v1.3.3 baked skills correctly into the builder's `.beam` files, but the runtime stage didn't include `.agents/`. Phoenix's `code_reloader: true` (dev mode in docker-compose.yml) recompiled `MCPServer.Resources` at boot, found `@skills_dir` empty, and overwrote the well-formed `.beam` with an empty `@skill_content`. Fix: also copy `.agents/` into the runtime stage so dev-mode recompile sees the source. Production-mode (no code reloader) wouldn't have this problem, but matching the running config is safer than counting on it.
+
 ### v1.3.3
 - **Fix: `.dockerignore` was hiding SKILL.md from the build context** — v1.3.2 added `COPY .agents .agents` to the Dockerfile but `.dockerignore` had `*.md` (with only `!mix.exs` exception), so Docker never put any markdown into the build context. Compile-time skill enumeration ran on a directory without SKILL.md files. Add `!.agents/**/*.md` exception so bundled skills actually get embedded.
 

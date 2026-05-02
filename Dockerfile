@@ -76,6 +76,11 @@ COPY --from=builder /app/lib lib
 COPY --from=builder /app/config config
 COPY --from=builder /app/priv priv
 
+# Copy bundled skills into runtime — Phoenix's dev-mode code reloader can
+# recompile Resources at startup and re-reads @skills_dir then. Without this,
+# any recompile produces an empty skill list.
+COPY --from=builder /app/.agents .agents
+
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
