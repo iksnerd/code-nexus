@@ -32,11 +32,14 @@ search_code(query, limit) in mcp_server.ex
     → embed dense vector via EmbeddingModel.embed/1 (Ollama)
     → embed sparse vector via TFIDFEmbedder.embed/1 (TF-IDF feature hashing)
     → QdrantClient.hybrid_search/4 — server-side RRF prefetch fusion
-    → dedup by (name, entity_type)
-    → GraphBoost.rerank/2 — re-rank by call-graph centrality
-    → filter junk (temp files, oversize content)
-    → Enum.take(limit)
+    → Scoring.deduplicate/1 — dedup by (name, entity_type), keeping max-score
+    → GraphBoost.apply_graph_boost/2 — re-rank by call-graph centrality
+    → reject temp-prefix file paths
+    → Enum.uniq_by (belt-and-suspenders re-dedup; cheap O(n))
+    → Enum.sort_by score desc + Enum.take(limit)
 ```
+
+**Why two dedups?** `Scoring.deduplicate/1` runs early so `GraphBoost`/graph-build operate on a smaller, unique set. The second `Enum.uniq_by` at step 6 is a guarantee, not a perf concern — added when the dedup test on CI flaked under heavy accumulated test-collection state. The `search_code` contract is "no two results with the same name+type", and this enforces it unconditionally.
 
 Note: `search.ex` (NOT `search/queries.ex`) is the entry point for hybrid search. The `search/queries.ex` facade is for **graph-only queries** (callers, callees, impact, etc.) that don't need an embedded query vector.
 
