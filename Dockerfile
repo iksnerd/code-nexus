@@ -41,6 +41,10 @@ COPY lib lib
 COPY config config
 COPY priv priv
 
+# Bundled skills are read at compile time by Resources.skill_index/0 and embedded
+# in the module binary. Without this copy, the published image ships zero skills.
+COPY .agents .agents
+
 # Remove macOS NIF binary (will be rebuilt for Linux below)
 RUN rm -f priv/native/tree_sitter_nif.so
 

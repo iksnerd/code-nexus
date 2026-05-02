@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.2
+- **Fix: Docker image missing bundled skills** — `.agents/` was not copied into the builder stage, so the v1.3.0/v1.3.1 published images compiled `Resources.skill_index/0` with an empty directory and shipped zero skills. Added `COPY .agents .agents` before `mix compile`. The skill content is baked into the module binary at compile time, so the runtime stage is unchanged.
+
 ### v1.3.1
 - **Restrict MCP-exposed skills to user-facing client guides** — only `nexus-client-*` skills are exposed as `nexus://skill/<name>` resources. Internal-development skills (Elixir/OTP/Phoenix patterns, code-nexus internals) stay in `.agents/skills/` for repo contributors but aren't surfaced over the wire. Three new client skills shipped:
   - `nexus-client-search-recipes` — query patterns for `search_code`, when grep wins, intent-based phrasing
