@@ -195,6 +195,7 @@ Domain-specific guidance documents that ship with the repo. Each skill is a `SKI
 The `nexus-client-*` filter is enforced in `lib/elixir_nexus/mcp_server/resources.ex` `@skills` — only those get a `defresource` declaration. Skill content is read at compile time via `@external_resource` and embedded in the module binary, so the runtime container doesn't need filesystem access. **The Dockerfile `COPY .agents .agents` must be in BOTH the builder stage AND runtime stage** — Phoenix's dev-mode code reloader recompiles on boot and would otherwise wipe the embedded content (lesson from v1.3.4).
 
 ### Internal nexus skills (subsystem deep-dives)
+
 - `nexus-search-subsystem` — `lib/elixir_nexus/search/` architecture, hybrid query path, RRF fusion, graph re-ranking
 - `nexus-parser-extractor` — Sourceror + Tree-sitter pattern, how to add a new language
 - `nexus-qdrant-patterns` — collection switching, the `Process.put` concurrent-read trick, hybrid query shape
@@ -206,6 +207,7 @@ The `nexus-client-*` filter is enforced in `lib/elixir_nexus/mcp_server/resource
 - `nexus-release` — release checklist (pre-push, version bump, tag, multi-arch buildx, smoke test)
 
 ### Client-facing nexus skills (exposed as MCP resources)
+
 - `nexus-client-onboarding` — first-look workflow on an unfamiliar codebase
 - `nexus-client-search-recipes` — query patterns for `search_code`, when to grep instead
 - `nexus-client-refactoring-workflow` — `analyze_impact` → `find_all_callers` recipe
