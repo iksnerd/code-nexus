@@ -172,7 +172,7 @@ defmodule ElixirNexus.MCPServer.PathResolution do
         # Strict subpath of mount AND the mount itself is a project (not just
         # a parent dir of projects). Distinguishes single-project mounts like
         # WORKSPACE_HOST=/Users/yourname/council-hub (parent for prefixing) from
-        # multi-project mounts like WORKSPACE_HOST=/Users/yourname/www (not).
+        # multi-project mounts like WORKSPACE_HOST=/Users/yourname/projects (not).
         container_path != mount and
           String.starts_with?(container_path, mount <> "/") and
             looks_like_project_root?(mount) ->
