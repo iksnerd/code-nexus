@@ -326,8 +326,14 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.1
+- **Restrict MCP-exposed skills to user-facing client guides** — only `nexus-client-*` skills are exposed as `nexus://skill/<name>` resources. Internal-development skills (Elixir/OTP/Phoenix patterns, code-nexus internals) stay in `.agents/skills/` for repo contributors but aren't surfaced over the wire. Three new client skills shipped:
+  - `nexus-client-search-recipes` — query patterns for `search_code`, when grep wins, intent-based phrasing
+  - `nexus-client-refactoring-workflow` — `analyze_impact` → `find_all_callers` recipe and `depth` parameter guide
+  - `nexus-client-onboarding` — first-look workflow for unfamiliar codebases, the right tool order
+
 ### v1.3.0
-- **Skills exposed as MCP resources** — every bundled skill in `.agents/skills/` is now reachable as `nexus://skill/<name>`, with a `nexus://skills/index` listing all of them. Resources are enumerated and embedded at compile time (`@external_resource` triggers a recompile when any `SKILL.md` changes), so the running container needs no filesystem access to serve them. Currently 16 skills (Elixir/OTP patterns, Phoenix LiveView, ElixirNexus internals, etc.).
+- **Skills exposed as MCP resources** — every bundled skill in `.agents/skills/` is now reachable as `nexus://skill/<name>`, with a `nexus://skills/index` listing all of them. Resources are enumerated and embedded at compile time (`@external_resource` triggers a recompile when any `SKILL.md` changes), so the running container needs no filesystem access to serve them.
 - **`load_resources` tool fallback for clients without resource support** — the existing tool now also lists skills in its no-arg response, so MCP clients that only speak tools (not resources) can still discover and read skills via `load_resources(uri: "nexus://skill/<name>")`.
 
 ### v1.2.9
