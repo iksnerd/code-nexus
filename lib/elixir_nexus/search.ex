@@ -88,12 +88,18 @@ defmodule ElixirNexus.Search do
         deduped
       end
 
-    # Step 6: Final sort, filter temp files, and limit
+    # Step 6: Final sort, filter temp files, dedup again (belt-and-suspenders —
+    # GraphBoost remaps scores and shouldn't re-introduce duplicates, but
+    # under contention from accumulated test-collection data the dedup at
+    # step 4 has been observed to leak. Re-dedup here is cheap.), and limit.
     final =
       reranked
       |> Enum.reject(fn r ->
         path = r.entity["file_path"] || ""
         Enum.any?(@temp_prefixes, &String.starts_with?(path, &1))
+      end)
+      |> Enum.uniq_by(fn r ->
+        {Map.get(r.entity, "name", ""), Map.get(r.entity, "entity_type", "")}
       end)
       |> Enum.sort_by(& &1.score, :desc)
       |> Enum.take(limit)
