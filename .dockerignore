@@ -8,6 +8,9 @@ docs
 screenshots
 *.md
 !mix.exs
+# Bundled skills are read at compile time and embedded in the module binary;
+# their SKILL.md files inside .agents/skills/ must NOT be excluded by *.md above.
+!.agents/**/*.md
 .env*
 .gemini
 .claude

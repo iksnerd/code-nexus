@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.3
+- **Fix: `.dockerignore` was hiding SKILL.md from the build context** — v1.3.2 added `COPY .agents .agents` to the Dockerfile but `.dockerignore` had `*.md` (with only `!mix.exs` exception), so Docker never put any markdown into the build context. Compile-time skill enumeration ran on a directory without SKILL.md files. Add `!.agents/**/*.md` exception so bundled skills actually get embedded.
+
 ### v1.3.2
 - **Fix: Docker image missing bundled skills** — `.agents/` was not copied into the builder stage, so the v1.3.0/v1.3.1 published images compiled `Resources.skill_index/0` with an empty directory and shipped zero skills. Added `COPY .agents .agents` before `mix compile`. The skill content is baked into the module binary at compile time, so the runtime stage is unchanged.
 
