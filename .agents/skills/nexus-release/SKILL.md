@@ -1,6 +1,6 @@
 ---
 name: nexus-release
-description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v1.2.1), shipping Docker images, or verifying a release is production-ready.
+description: ElixirNexus release checklist — pre-push checks, version bump, git tag, Docker Hub build and push. Use when cutting a new release (e.g. v1.3.4), shipping Docker images, or verifying a release is production-ready.
 metadata:
   compatibility: ElixirNexus project only
 ---
@@ -146,6 +146,19 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.3.4  | Fix dev-mode code reloader wiping skill content at runtime (`COPY .agents` added to runtime stage so re-evaluated `@skills_dir` finds the source). Final fix in the v1.3.x skill-bundling chain. |
+| v1.3.3  | Fix `.dockerignore *.md` blocking `SKILL.md` from build context (added `!.agents/**/*.md` exception) |
+| v1.3.2  | First attempt to ship `.agents/` in image — added `COPY .agents .agents` to builder (incomplete: `.dockerignore` still blocked) |
+| v1.3.1  | Restrict MCP-exposed skills to user-facing `nexus-client-*` only; ship `nexus-client-search-recipes`, `nexus-client-refactoring-workflow`, `nexus-client-onboarding` |
+| v1.3.0  | Skills exposed as MCP resources via `nexus://skill/<name>` + `nexus://skills/index`; compile-time embedding from `.agents/skills/` |
+| v1.2.9  | Image catch-up release (rolled up v1.2.8 + post-tag CI fixes) |
+| v1.2.8  | CI fix: `EmbeddingModel.embed_batch/1` short-circuits in test env (saves ~10min per CI run); slimmed CI triggers (no tag-push) |
+| v1.2.7  | Add Go convention dirs (`cmd/`, `internal/`, `pkg/`) to `@indexable_dirs` so monorepos with Go subprojects index correctly |
+| v1.2.6  | Disambiguate sub-project collection names — `IndexManagement.derive_project_name/2` prefixes parent mount basename for single-project mounts (e.g. `nexus_council_hub__mcp_server` not `nexus_mcp_server`) |
+| v1.2.5  | Monorepo source-dir detection — `detect_indexable_dirs/1` descends to depth 2 when nothing matches at depth 1 |
+| v1.2.4  | Drop boot-time auto-create of default Qdrant collection (was producing a useless `nexus_app` duplicate); test env restores it for setup-free queries |
+| v1.2.3  | Fix collection name for single-project mounts — derive from `display_path` not generic `/workspaceN`; trim trailing underscores |
+| v1.2.2  | Single-project workspace mount support — `resolve_bare_name` matches mount basename when `WORKSPACE_HOST_N` points at a project root |
 | v1.2.1  | Workspace mounts extended to 5 slots (`WORKSPACE_4`/`WORKSPACE_5`); user-friendly "busy" reindex error message naming the running project; quieter boot (`:debug` for expected 409 collection-exists); Docker image build moved from CI to local Makefile (`make docker.publish` multi-arch buildx); healthcheck switched from `curl` to `bash /dev/tcp` |
 | v1.2.0  | Default embedding model switched to `embeddinggemma:300m` (override with `OLLAMA_MODEL`); fix concurrency race where rejected reindex still swapped the active Qdrant collection (`Indexer.busy?/0` pre-check); fix cold-start Ollama timeouts dropping chunks (retries + `warm_up/0` on supervisor start; configurable `:ollama_timeout`/`:ollama_retry_attempts`) |
 | v1.1.0  | Multi-workspace Docker mounts — `WORKSPACE_2`/`WORKSPACE_3` vars + `/workspace2`/`/workspace3` container paths; bare project name resolution across all active mounts |

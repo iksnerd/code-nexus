@@ -200,7 +200,7 @@ Key node types that must be included:
 | `lib/elixir_nexus/mcp_server/index_management.ex` | Collection switching, dirty-file auto-reindex, deleted file cleanup |
 | `lib/elixir_nexus/mcp_server/path_resolution.ex` | Workspace path translation (`resolve_path/2`, `workspace_hint/0`) |
 | `lib/elixir_nexus/mcp_server/response_format.ex` | JSON reply helpers, `to_int/2` numeric coercion, result compaction |
-| `lib/elixir_nexus/mcp_server/resources.ex` | MCP resource generators (overview, architecture, hotspots) |
+| `lib/elixir_nexus/mcp_server/resources.ex` | MCP resources — `nexus://guide/tools`, `nexus://project/{overview,architecture,hotspots}`, `nexus://skills/index`, and `nexus://skill/<name>` for each `nexus-client-*` skill in `.agents/skills/`. Skills are read at compile time via `@external_resource` and embedded in the module binary. |
 | `lib/mix/tasks/mcp_http.ex` | Mix task for HTTP/SSE MCP transport |
 | `lib/elixir_nexus/project_switcher.ex` | Collection switching + ETS reload from Qdrant |
 | `lib/elixir_nexus/embedding_model.ex` | Ollama embedding client (768-dim, default `embeddinggemma:300m`); retries on timeout/cold-start; `warm_up/0` called from Application |
