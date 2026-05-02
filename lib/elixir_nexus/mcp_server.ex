@@ -274,6 +274,29 @@ defmodule ElixirNexus.MCPServer do
     mime_type("text/markdown")
   end
 
+  defresource "nexus://skills/index" do
+    meta do
+      name("Skills Index")
+      description("List of all bundled skills (domain-specific guidance docs) with their URIs.")
+    end
+
+    mime_type("text/markdown")
+  end
+
+  # One MCP resource per bundled skill so clients with resource support can
+  # discover and read them directly. The set is enumerated at compile time
+  # by ElixirNexus.MCPServer.Resources from `.agents/skills/`.
+  for {skill, desc} <- Resources.skill_index() do
+    defresource "nexus://skill/#{skill}" do
+      meta do
+        name("Skill: #{skill}")
+        description(desc)
+      end
+
+      mime_type("text/markdown")
+    end
+  end
+
   deftool "load_resources" do
     meta do
       name("load_resources")
@@ -466,7 +489,7 @@ defmodule ElixirNexus.MCPServer do
   def handle_tool_call("load_resources", args, state) do
     case Map.get(args, "uri") do
       nil ->
-        resources = [
+        core = [
           %{
             uri: "nexus://guide/tools",
             name: "CodeNexus Tool Guide",
@@ -486,10 +509,22 @@ defmodule ElixirNexus.MCPServer do
             uri: "nexus://project/hotspots",
             name: "Complexity Hotspots",
             description: "High fan-in/fan-out nodes, bottleneck files, dead code summary"
+          },
+          %{
+            uri: "nexus://skills/index",
+            name: "Skills Index",
+            description: "List of all bundled skills with their nexus://skill/<name> URIs"
           }
         ]
 
-        ResponseFormat.json_reply(%{resources: resources}, state)
+        skill_resources =
+          Resources.skill_index()
+          |> Enum.sort()
+          |> Enum.map(fn {name, desc} ->
+            %{uri: "nexus://skill/#{name}", name: "Skill: #{name}", description: desc}
+          end)
+
+        ResponseFormat.json_reply(%{resources: core ++ skill_resources}, state)
 
       uri ->
         case Resources.read_resource_content(uri) do

@@ -1,12 +1,93 @@
 defmodule ElixirNexus.MCPServer.Resources do
-  @moduledoc "MCP resource content generation — tool guide, project overview, architecture, hotspots."
+  @moduledoc """
+  MCP resource content generation — tool guide, project overview, architecture,
+  hotspots, and bundled skills.
+
+  Skills are loaded from `.agents/skills/*/SKILL.md` at compile time and embedded
+  in the module binary, so the running container needs no filesystem access to
+  serve them. New skills require a recompile (`@external_resource` triggers it).
+  """
+
+  # Skills live at the repo root in `.agents/skills/`. Mix runs `compile` from
+  # the project root, so `File.cwd!()` is correct here. In Docker, the source
+  # tree (including `.agents/`) is copied to /app and compile happens there.
+  @skills_dir Path.join(File.cwd!(), ".agents/skills")
+
+  # Track the directory listing so a new/removed skill triggers a recompile.
+  @external_resource @skills_dir
+
+  @skills (case File.ls(@skills_dir) do
+             {:ok, entries} ->
+               entries
+               |> Enum.filter(&File.regular?(Path.join([@skills_dir, &1, "SKILL.md"])))
+               |> Enum.sort()
+
+             _ ->
+               []
+           end)
+
+  # Track each SKILL.md file so editing one triggers a recompile.
+  for skill <- @skills do
+    @external_resource Path.join([@skills_dir, skill, "SKILL.md"])
+  end
+
+  @skill_content (for skill <- @skills, into: %{} do
+                    path = Path.join([@skills_dir, skill, "SKILL.md"])
+                    {skill, File.read!(path)}
+                  end)
+
+  @skill_descriptions (for {name, content} <- @skill_content, into: %{} do
+                         desc =
+                           content
+                           |> String.split("\n")
+                           |> Enum.find(fn line -> String.starts_with?(line, "description:") end)
+                           |> case do
+                             nil -> "Bundled skill."
+                             line -> line |> String.replace_prefix("description:", "") |> String.trim()
+                           end
+
+                         {name, desc}
+                       end)
+
+  @doc "Map of skill name → description (parsed from frontmatter)."
+  def skill_index, do: @skill_descriptions
 
   @doc "Dispatch a resource URI to its content generator."
   def read_resource_content("nexus://guide/tools"), do: {:ok, generate_tool_guide()}
   def read_resource_content("nexus://project/overview"), do: {:ok, generate_overview()}
   def read_resource_content("nexus://project/architecture"), do: {:ok, generate_architecture()}
   def read_resource_content("nexus://project/hotspots"), do: {:ok, generate_hotspots()}
+  def read_resource_content("nexus://skills/index"), do: {:ok, generate_skills_index()}
+
+  def read_resource_content("nexus://skill/" <> name) do
+    case Map.fetch(@skill_content, name) do
+      {:ok, content} -> {:ok, content}
+      :error -> {:error, "Unknown skill: #{name}. Available: #{Enum.join(Map.keys(@skill_descriptions), ", ")}"}
+    end
+  end
+
   def read_resource_content(uri), do: {:error, "Unknown resource: #{uri}"}
+
+  defp generate_skills_index do
+    rows =
+      @skill_descriptions
+      |> Enum.sort()
+      |> Enum.map(fn {name, desc} -> "| `nexus://skill/#{name}` | #{desc} |" end)
+      |> Enum.join("\n")
+
+    """
+    # Bundled Skills
+
+    Domain-specific guidance documents bundled with CodeNexus. Read any individual
+    skill via its `nexus://skill/<name>` URI, or use the `load_resources` tool with
+    that URI.
+
+    | URI | Description |
+    |-----|-------------|
+    #{rows}
+    """
+    |> String.trim()
+  end
 
   defp indexed? do
     ElixirNexus.ChunkCache.count() > 0
