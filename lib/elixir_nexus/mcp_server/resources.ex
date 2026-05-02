@@ -16,9 +16,15 @@ defmodule ElixirNexus.MCPServer.Resources do
   # Track the directory listing so a new/removed skill triggers a recompile.
   @external_resource @skills_dir
 
+  # Only `nexus-client-*` skills are exposed as MCP resources. Those are the
+  # user-facing guides for clients USING this MCP server. Internal-development
+  # skills (nexus-indexing-pipeline, nexus-release, etc.) and generic
+  # Elixir/Phoenix patterns stay in `.agents/skills/` for repo contributors
+  # but aren't surfaced over the wire.
   @skills (case File.ls(@skills_dir) do
              {:ok, entries} ->
                entries
+               |> Enum.filter(&String.starts_with?(&1, "nexus-client-"))
                |> Enum.filter(&File.regular?(Path.join([@skills_dir, &1, "SKILL.md"])))
                |> Enum.sort()
 
