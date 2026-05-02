@@ -326,6 +326,9 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.2.9
+- **Image catch-up release** — rolls up v1.2.8 (test env short-circuit, slim CI triggers), the `vectors_controller` scroll 404 handler, and the `mcp_server_query_tools` flake fix (defensive `Map.get` for optional chunk fields, `on_exit` cache cleanup). No runtime behavior change for non-test code paths; just brings the published image version stamp in sync with main.
+
 ### v1.2.8
 - **Skip real Ollama calls in tests** — `EmbeddingModel.embed_batch/1` short-circuits to `{:error, :test_mode}` when `config :elixir_nexus, env: :test`. Tests that called `Indexer.index_file/1` were previously timing out on `econnrefused` to localhost:11434 in CI (no Ollama service). Existing TF-IDF fallback path handles the error gracefully. CI test runtime drops from ~10min back to ~30s.
 - **Slim CI triggers** — `.github/workflows/ci.yml` no longer runs on tag pushes (releases are local via Makefile). PR + main push still run tests; secret scan stays scheduled weekly.
