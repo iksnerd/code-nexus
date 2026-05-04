@@ -16,12 +16,15 @@ Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector +
 
 ## Quick Start
 
-```bash
-# Start Qdrant + CodeNexus with access to your projects
-WORKSPACE=~/projects docker-compose up -d
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com) running with the embedding model pulled:
 
-# Or pull the pre-built image first
-docker pull iksnerd/code-nexus:latest
+```bash
+ollama pull embeddinggemma:300m
+```
+
+Then start CodeNexus with access to your projects:
+
+```bash
 WORKSPACE=~/projects docker-compose up -d
 ```
 
@@ -60,11 +63,11 @@ This starts three services in a single BEAM instance:
 
 ### Indexing
 
-```bash
-# Via MCP tool (recommended — Claude Code calls this automatically)
-# Use the reindex tool in Claude Code
+Once running, use the `reindex` MCP tool from Claude Code (or any MCP client) — it accepts a path to your project and is the recommended approach. Claude Code will call it automatically when you ask about code.
 
-# Via CLI
+For local dev, a CLI is also available:
+
+```bash
 mix index /path/to/code
 mix index /path/to/file.ex
 mix index --status
@@ -79,7 +82,7 @@ docker-compose up -d qdrant   # Qdrant only
 mix deps.get
 mix phx.server                # Phoenix dashboard on :4100
 mix mcp                       # MCP stdio transport
-mix mcp_http --port 3001      # MCP HTTP transport
+mix mcp_http --port 3002      # MCP HTTP transport
 ```
 
 ## Architecture
@@ -300,7 +303,7 @@ The graph renders up to 500 nodes sorted by connectivity. Hover any node to high
 ## Testing
 
 ```bash
-mix test                        # All tests (~707)
+mix test                        # All tests (~725)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests

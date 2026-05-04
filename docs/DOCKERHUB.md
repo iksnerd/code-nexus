@@ -102,9 +102,13 @@ Add to your project's `.mcp.json`:
 | `WORKSPACE_HOST` | _(unset)_ | Host path mapped to `/workspace` (for path translation) |
 | `WORKSPACE_HOST_2` | _(unset)_ | Host path mapped to `/workspace2` |
 | `WORKSPACE_HOST_3` | _(unset)_ | Host path mapped to `/workspace3` |
+| `WORKSPACE_HOST_4` | _(unset)_ | Host path mapped to `/workspace4` |
+| `WORKSPACE_HOST_5` | _(unset)_ | Host path mapped to `/workspace5` |
 | `WORKSPACE` | _(unset)_ | docker-compose: host dir to mount at `/workspace` |
 | `WORKSPACE_2` | _(unset)_ | docker-compose: host dir to mount at `/workspace2` |
 | `WORKSPACE_3` | _(unset)_ | docker-compose: host dir to mount at `/workspace3` |
+| `WORKSPACE_4` | _(unset)_ | docker-compose: host dir to mount at `/workspace4` |
+| `WORKSPACE_5` | _(unset)_ | docker-compose: host dir to mount at `/workspace5` |
 
 ## Architecture
 
@@ -121,7 +125,15 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.1.0)
+- `latest` — current release (v1.3.4)
+- `v1.3.4` — fix skills wiped at runtime by dev-mode code reload; `MIX_ENV: prod` in docker-compose
+- `v1.3.1` — restrict MCP-exposed skills to user-facing client guides; three new client skills (search recipes, refactoring workflow, onboarding)
+- `v1.3.0` — skills exposed as MCP resources (`nexus://skill/<name>`), embedded at compile time
+- `v1.2.9` — image catch-up release (rolls up v1.2.8 fixes)
+- `v1.2.7` — add Go convention dirs (`cmd/`, `internal/`, `pkg/`) to source detection
+- `v1.2.5` — monorepo source-dir detection (depth-2 fallback for multi-subproject repos)
+- `v1.2.2` — single-project workspace mounts; workspace slots extended to 5
+- `v1.2.0` — default model switched to `embeddinggemma:300m`; fix concurrency race in collection switch; fix cold-start Ollama timeouts
 - `v1.1.0` — multi-workspace Docker mounts (`WORKSPACE_2`/`WORKSPACE_3`), bare project name resolution across all mounts
 - `v1.0.5` — fix Qdrant test collection leak, test splits, qdrant_client.ex reorganisation, 20 new QdrantClient tests (725 total)
 - `v1.0.4` — fix dashboard broken LiveView (missing vendor JS in Docker), static asset tests, graph page tests, test collection cleanup
