@@ -70,10 +70,12 @@ defmodule ElixirNexus.QdrantClient do
         Logger.info("Qdrant is healthy. Default collection: #{coll} (created on first reindex)")
 
         # Tests rely on the default collection existing for setup-free queries.
-        # Production keeps the lazy "create on first reindex" behavior so the
-        # default collection isn't a no-op duplicate of an explicit reindex.
-        if Application.get_env(:elixir_nexus, :env) == :test do
-          Process.send_after(self(), :ensure_collection, 0)
+        # Create it synchronously in init so it's guaranteed to exist before any
+        # test can run. Production keeps lazy "create on first reindex" behavior.
+        # Create the default collection synchronously so tests have it available
+        # immediately. Production keeps lazy "create on first reindex" behavior.
+        if Mix.env() == :test do
+          http_put("#{url}/collections/#{coll}", collection_schema())
         end
 
         {:ok, %{url: url, collection: coll}}
