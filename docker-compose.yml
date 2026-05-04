@@ -23,7 +23,7 @@ services:
       - "4100:4100"
       - "3002:3002"
     environment:
-      MIX_ENV: dev
+      MIX_ENV: prod
       QDRANT_URL: "http://qdrant:6333"
       MCP_HTTP_PORT: "3002"
       OLLAMA_URL: "http://host.docker.internal:11434"

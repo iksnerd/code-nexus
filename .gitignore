@@ -1,6 +1,7 @@
 _build/
 deps/
 .elixir_ls/
+native/tree_sitter_nif/target/
 *.beam
 *.ez
 *.so

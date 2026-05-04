@@ -4,7 +4,7 @@ First off, thank you for considering contributing to CodeNexus! It's people like
 
 ## Code of Conduct
 
-By participating in this project, you are expected to uphold our Code of Conduct. (Link to be added)
+By participating in this project, you are expected to uphold our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## How Can I Contribute?
 
