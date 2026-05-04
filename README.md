@@ -329,6 +329,11 @@ Run with `mix test --include performance`:
 
 ## Changelog
 
+### v1.3.5
+- **OSS prep** — untrack Rust build artifacts (`native/tree_sitter_nif/target/`), set `MIX_ENV: prod` in docker-compose, fix broken `.claude/skills` symlink (relative path survives clone on any machine)
+- **Docs** — README prerequisites, fix indexing section, port, test count; DOCKERHUB.md tags current; remove stale `quickstart.sh` and orphaned `.mmd` files
+- **CI fix** — test collection race condition: `QdrantClient.init/1` now creates the default collection synchronously in test env using `Mix.env() == :test` (prior `Application.get_env` check was always `nil` because `config/test.exs` is not imported by `config/config.exs`)
+
 ### v1.3.4
 - **Fix: skills wiped at runtime by dev-mode code reload** — v1.3.3 baked skills correctly into the builder's `.beam` files, but the runtime stage didn't include `.agents/`. Phoenix's `code_reloader: true` (dev mode in docker-compose.yml) recompiled `MCPServer.Resources` at boot, found `@skills_dir` empty, and overwrote the well-formed `.beam` with an empty `@skill_content`. Fix: also copy `.agents/` into the runtime stage so dev-mode recompile sees the source. Production-mode (no code reloader) wouldn't have this problem, but matching the running config is safer than counting on it.
 

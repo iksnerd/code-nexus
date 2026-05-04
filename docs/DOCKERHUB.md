@@ -125,7 +125,8 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.3.4)
+- `latest` — current release (v1.3.5)
+- `v1.3.5` — OSS prep: untrack Rust build artifacts, `MIX_ENV: prod` in docker-compose, fix `.claude/skills` symlink; docs cleanup; CI fix for test collection race condition
 - `v1.3.4` — fix skills wiped at runtime by dev-mode code reload; `MIX_ENV: prod` in docker-compose
 - `v1.3.1` — restrict MCP-exposed skills to user-facing client guides; three new client skills (search recipes, refactoring workflow, onboarding)
 - `v1.3.0` — skills exposed as MCP resources (`nexus://skill/<name>`), embedded at compile time
