@@ -5,6 +5,16 @@ defmodule ElixirNexus.Application do
   def start(_type, _args) do
     children =
       [
+        # Prometheus metrics (must start early so handlers attach before events fire)
+        ElixirNexus.Telemetry,
+        {:telemetry_poller,
+         measurements: [
+           {:telemetry_poller_builtin, :memory, []},
+           {:telemetry_poller_builtin, :total_run_queue_lengths, []},
+           {:telemetry_poller_builtin, :system_counts, []}
+         ],
+         period: 10_000},
+
         # PubSub for LiveView
         {Phoenix.PubSub, name: ElixirNexus.PubSub},
 

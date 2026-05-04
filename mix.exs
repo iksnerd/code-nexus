@@ -4,7 +4,7 @@ defmodule ElixirNexus.MixProject do
   def project do
     [
       app: :elixir_nexus,
-      version: "1.3.5",
+      version: "1.4.0",
       elixir: "~> 1.14",
       description:
         "Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase",
@@ -58,6 +58,10 @@ defmodule ElixirNexus.MixProject do
       # HTTP client
       {:httpoison, "~> 2.0"},
       {:jason, "~> 1.4"},
+
+      # Observability
+      {:telemetry_metrics_prometheus_core, "~> 1.1"},
+      {:telemetry_poller, "~> 1.0"},
 
       # Utilities
       {:gen_stage, "~> 1.2"},

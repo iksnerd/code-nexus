@@ -216,6 +216,12 @@ MCP is served over HTTP (Streamable HTTP at `/mcp`) via Docker. For local develo
 
 ## REST API
 
+### Observability
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/metrics` | Prometheus metrics (text format 0.0.4) — search latency, indexing throughput, Qdrant ops, BEAM VM stats |
+
 ### Search & Discovery
 
 | Method | Endpoint | Description |
@@ -328,6 +334,9 @@ Run with `mix test --include performance`:
 | PubSub 100 subscribers | 0.17ms max | |
 
 ## Changelog
+
+### v1.4.0
+- **Prometheus metrics** — `GET /metrics` endpoint (Prometheus text format 0.0.4) via `telemetry_metrics_prometheus_core`. Exposes search latency/count, indexing pipeline throughput, Qdrant upsert and hybrid search latency, embed-and-store batch stats, and BEAM VM metrics (memory, run queue, process count). Scrape with any Prometheus-compatible collector.
 
 ### v1.3.5
 - **OSS prep** — untrack Rust build artifacts (`native/tree_sitter_nif/target/`), set `MIX_ENV: prod` in docker-compose, fix broken `.claude/skills` symlink (relative path survives clone on any machine)
