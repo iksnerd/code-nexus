@@ -2,7 +2,7 @@
 name: elixir-testing
 description: ExUnit testing patterns for Elixir, including async strategy, Mox for behaviour mocking, test tags, database sandbox isolation, and performance benchmarking. Use when writing tests, setting up Mox mocks, choosing async: true or false, or structuring test modules.
 metadata:
-  source: hexdocs.pm/ex_unit + usage_rules/:elixir + ElixirNexus codebase
+  source: hexdocs.pm/ex_unit + ElixirNexus codebase
   docs: https://hexdocs.pm/ex_unit/ExUnit.html
 ---
 

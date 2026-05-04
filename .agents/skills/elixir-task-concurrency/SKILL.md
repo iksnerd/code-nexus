@@ -2,7 +2,7 @@
 name: elixir-task-concurrency
 description: Task and Task.Supervisor patterns for concurrent work in Elixir. Use when running work concurrently, processing collections in parallel with Task.async_stream, firing background jobs without awaiting, or handling task timeouts and failures.
 metadata:
-  source: hexdocs.pm/elixir/Task + usage_rules/:otp
+  source: hexdocs.pm/elixir/Task
   docs: https://hexdocs.pm/elixir/Task.html
 ---
 

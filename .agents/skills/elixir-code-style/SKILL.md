@@ -2,7 +2,7 @@
 name: elixir-code-style
 description: Elixir code style, naming conventions, and idiomatic patterns. Use when writing any Elixir code, reviewing style, choosing between approaches, or when asked about naming, pipe operators, pattern matching, error tuples, or functional design principles.
 metadata:
-  source: usage_rules/:elixir + cursor.directory community rules
+  source: cursor.directory community rules + ElixirNexus codebase
 ---
 
 # Elixir Code Style

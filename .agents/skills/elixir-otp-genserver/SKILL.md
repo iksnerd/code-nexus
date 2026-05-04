@@ -2,7 +2,7 @@
 name: elixir-otp-genserver
 description: GenServer patterns for stateful processes in OTP. Use when implementing a GenServer, designing stateful process behavior, choosing between call/cast/info, handling process lifecycle, or debugging a GenServer. Also covers handle_continue, terminate, and client API wrapping.
 metadata:
-  source: hexdocs.pm/elixir/GenServer + usage_rules/:otp
+  source: hexdocs.pm/elixir/GenServer
   docs: https://hexdocs.pm/elixir/GenServer.html
 ---
 
