@@ -4,9 +4,7 @@ defmodule ElixirNexus.Telemetry do
   def child_spec(_opts) do
     %{
       id: __MODULE__,
-      start:
-        {TelemetryMetricsPrometheus.Core, :start_link,
-         [[metrics: metrics(), name: __MODULE__]]}
+      start: {TelemetryMetricsPrometheus.Core, :start_link, [[metrics: metrics(), name: __MODULE__]]}
     }
   end
 
