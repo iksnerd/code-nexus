@@ -2,7 +2,7 @@
 name: elixir-otp-supervisors
 description: OTP Supervisor strategies and supervision tree design. Use when setting up a supervision tree, choosing a restart strategy (one_for_one, one_for_all, rest_for_one), configuring child specs, handling restart intensity, or designing fault-tolerant process hierarchies.
 metadata:
-  source: hexdocs.pm/elixir/Supervisor + usage_rules/:otp
+  source: hexdocs.pm/elixir/Supervisor
   docs: https://hexdocs.pm/elixir/Supervisor.html
 ---
 
