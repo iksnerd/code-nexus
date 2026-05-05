@@ -125,7 +125,8 @@ The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-o
 
 ## Tags
 
-- `latest` — current release (v1.4.1)
+- `latest` — current release (v1.4.2)
+- `v1.4.2` — Dockerfile: `MIX_ENV=prod` build + `mix phx.digest`; fixes missing static manifest on prod image startup
 - `v1.4.1` — block `/app` indexing in Docker mode, filter test collections from UI, Go dead-code false-positive fix, skill bundling tests
 - `v1.4.0` — Prometheus metrics at `GET /metrics` (search latency, indexing throughput, Qdrant ops, BEAM VM stats)
 - `v1.3.5` — OSS prep: untrack Rust build artifacts, `MIX_ENV: prod` in docker-compose, fix `.claude/skills` symlink; docs cleanup; CI fix for test collection race condition

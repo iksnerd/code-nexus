@@ -146,6 +146,10 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.2  | Dockerfile: build with `MIX_ENV=prod` + `mix phx.digest` — fixes missing static manifest when running prod image |
+| v1.4.1  | Block `/app` indexing in Docker mode (MCP + REST); filter `_test` collections from UI; Go dead-code Test*/Benchmark* filter; skill bundling tests; `make docker.publish.fresh` |
+| v1.4.0  | Prometheus metrics at `GET /metrics` — all nexus telemetry events + BEAM VM stats via `telemetry_metrics_prometheus_core` |
+| v1.3.5  | OSS prep: git history cleaned, `MIX_ENV: prod` in docker-compose, `.claude/skills` symlink fixed; CI test collection race condition fixed |
 | v1.3.4  | Fix dev-mode code reloader wiping skill content at runtime (`COPY .agents` added to runtime stage so re-evaluated `@skills_dir` finds the source). Final fix in the v1.3.x skill-bundling chain. |
 | v1.3.3  | Fix `.dockerignore *.md` blocking `SKILL.md` from build context (added `!.agents/**/*.md` exception) |
 | v1.3.2  | First attempt to ship `.agents/` in image — added `COPY .agents .agents` to builder (incomplete: `.dockerignore` still blocked) |

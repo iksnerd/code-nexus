@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# Build in prod mode so the compiled artefacts land in _build/prod/
+# matching what docker-compose.yml sets at runtime (MIX_ENV=prod).
+ENV MIX_ENV=prod
+
 # Copy mix files first for better layer caching
 COPY mix.exs mix.lock ./
 
@@ -53,6 +57,9 @@ RUN rm -f priv/native/tree_sitter_nif.so
 RUN sed -i 's/skip_compilation?: true/skip_compilation?: false/' lib/elixir_nexus/tree_sitter_parser.ex && \
     mix compile --force && \
     sed -i 's/skip_compilation?: false/skip_compilation?: true/' lib/elixir_nexus/tree_sitter_parser.ex
+
+# Generate static asset digest manifest required by Phoenix in prod mode.
+RUN mix phx.digest
 
 # Stage 2: Runtime — slim image without Rust toolchain or build tools
 FROM elixir:1.19.5-otp-27-slim AS runtime

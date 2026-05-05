@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.2
+- **Dockerfile: build in `MIX_ENV=prod`** — compiled artefacts now land in `_build/prod/` matching the runtime env; adds `mix phx.digest` to generate the static asset cache manifest required by Phoenix in prod mode
+
 ## v1.4.1
 - **Block internal codebase indexing** — `reindex` and `POST /api/index` now reject non-workspace paths in Docker mode; no accidental indexing of `/app`
 - **Filter `_test` collections from UI dropdown** — test-run artifacts no longer clutter the project switcher
