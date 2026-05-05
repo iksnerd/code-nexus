@@ -32,12 +32,21 @@ defmodule ElixirNexus.API.SearchController do
   end
 
   def index(conn, %{"path" => path}) do
-    case ElixirNexus.Indexer.index_directory(path) do
-      {:ok, status} ->
-        json(conn, %{success: true, data: status})
+    docker_mode? = System.get_env("MCP_HTTP_PORT") != nil
+    in_workspace? = String.starts_with?(path, "/workspace")
 
-      {:error, reason} ->
-        json(conn, %{success: false, error: inspect(reason)})
+    if docker_mode? and not in_workspace? do
+      conn
+      |> put_status(403)
+      |> json(%{success: false, error: "In Docker mode, only /workspace paths are indexable."})
+    else
+      case ElixirNexus.Indexer.index_directory(path) do
+        {:ok, status} ->
+          json(conn, %{success: true, data: status})
+
+        {:error, reason} ->
+          json(conn, %{success: false, error: inspect(reason)})
+      end
     end
   end
 end

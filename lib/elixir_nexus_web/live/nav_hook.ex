@@ -20,7 +20,7 @@ defmodule ElixirNexusWeb.NavHook do
   defp assign_collections(socket) do
     collections =
       case ElixirNexus.QdrantClient.list_collections() do
-        {:ok, names} -> names
+        {:ok, names} -> filter_collections(names)
         _ -> []
       end
 
@@ -34,7 +34,7 @@ defmodule ElixirNexusWeb.NavHook do
   defp handle_info({:collection_changed, name}, socket) do
     collections =
       case ElixirNexus.QdrantClient.list_collections() do
-        {:ok, names} -> names
+        {:ok, names} -> filter_collections(names)
         _ -> socket.assigns.collections
       end
 
@@ -42,4 +42,8 @@ defmodule ElixirNexusWeb.NavHook do
   end
 
   defp handle_info(_msg, socket), do: {:cont, socket}
+
+  defp filter_collections(names) do
+    Enum.reject(names, &String.ends_with?(&1, "_test"))
+  end
 end

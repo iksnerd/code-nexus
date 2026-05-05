@@ -451,8 +451,11 @@ defmodule ElixirNexus.VectorsLive.Index do
 
         # Switch to first available collection or broadcast nil
         case ElixirNexus.QdrantClient.list_collections() do
-          {:ok, [first | _]} ->
-            ElixirNexus.ProjectSwitcher.switch_project(first)
+          {:ok, names} ->
+            case Enum.reject(names, &String.ends_with?(&1, "_test")) do
+              [first | _] -> ElixirNexus.ProjectSwitcher.switch_project(first)
+              [] -> ElixirNexus.Events.broadcast_collection_changed(nil)
+            end
 
           _ ->
             ElixirNexus.Events.broadcast_collection_changed(nil)
