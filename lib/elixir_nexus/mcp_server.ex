@@ -222,7 +222,7 @@ defmodule ElixirNexus.MCPServer do
         path: %{
           type: "string",
           description:
-            "Project to index. Accepts: bare project name (e.g. 'claude-vision' resolves to /workspace/claude-vision), full host path (e.g. '/Users/you/Documents/project' auto-translated to container path), or container path. Omit to index /app (the CodeNexus repo itself)."
+            "Project to index. Accepts: bare project name (e.g. 'claude-vision' resolves to /workspace/claude-vision), full host path (e.g. '/Users/you/Documents/project' auto-translated to container path), or container path. Required when a WORKSPACE is mounted."
         }
       },
       required: []

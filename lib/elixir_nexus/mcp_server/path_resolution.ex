@@ -22,23 +22,28 @@ defmodule ElixirNexus.MCPServer.PathResolution do
   Resolve path argument to a container-local directory.
 
   Resolution order:
-    nil                        → /app (default, project_root)
+    nil                        → error (workspace mounted) or project_root (local dev only)
     "/workspace/foo"           → passthrough (already container path)
     "/Users/x/Documents/foo"   → translate via WORKSPACE_HOST → /workspace/foo
     "foo" (bare name)          → /workspace/foo if it exists, else error with suggestions
   """
   def resolve_path(nil, project_root) do
-    # When workspace projects are available, require an explicit path.
-    # Omitting it would silently index the ElixirNexus repo itself (/app),
-    # which is almost never what users want.
+    docker_mode? = System.get_env("MCP_HTTP_PORT") != nil
+
     case list_workspace_projects() do
+      [] when docker_mode? ->
+        {:error,
+         "No project path specified and no workspace mounted. " <>
+           "Set WORKSPACE=/path/to/your/projects when starting the container. " <>
+           "See README for setup instructions."}
+
       [] ->
         {:ok, project_root, project_root}
 
       projects ->
         {:error,
-         "No project path specified. Omitting 'path' would index the ElixirNexus repo itself, not your project. " <>
-           "Specify a project name or path. Available workspace projects: #{Enum.join(projects, ", ")}"}
+         "No project path specified. Specify a project name or path. " <>
+           "Available workspace projects: #{Enum.join(projects, ", ")}"}
     end
   end
 
