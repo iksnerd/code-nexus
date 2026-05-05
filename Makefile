@@ -1,6 +1,6 @@
 .PHONY: deps compile test test.all format format.check \
 	build run stop logs \
-	docker.buildx docker.build docker.push docker.publish docker.publish.local \
+	docker.buildx docker.build docker.push docker.publish docker.publish.fresh docker.publish.local \
 	tag release clean
 
 IMAGE := iksnerd/code-nexus
@@ -63,6 +63,17 @@ docker.build: docker.buildx
 docker.publish: docker.buildx
 	@echo "Publishing $(IMAGE):$(TAG) and :latest for $(PLATFORMS)"
 	docker buildx build \
+		--platform $(PLATFORMS) \
+		-t $(IMAGE):$(TAG) \
+		-t $(IMAGE):latest \
+		--push \
+		.
+
+# Full rebuild from scratch — use after Dockerfile, .dockerignore, or .agents/ changes.
+docker.publish.fresh: docker.buildx
+	@echo "Publishing $(IMAGE):$(TAG) and :latest (--no-cache) for $(PLATFORMS)"
+	docker buildx build \
+		--no-cache \
 		--platform $(PLATFORMS) \
 		-t $(IMAGE):$(TAG) \
 		-t $(IMAGE):latest \

@@ -11,6 +11,10 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
     loader action headers links handle
   )
 
+  # Go test runner conventions — functions matching these patterns are called by
+  # `go test`, not user code. Filtering prevents ~38/49 false positives on Go projects.
+  @go_test_prefixes ~w(Test Benchmark Fuzz Example)
+
   # Next.js / SvelteKit / Remix file-based routing conventions.
   # Default exports from these files are called by the framework, not user code.
   @framework_convention_files ~w(
@@ -68,11 +72,14 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             file_path = e.entity["file_path"] || ""
             basename = file_path |> Path.basename() |> String.replace(~r/\.[^.]+$/, "")
 
-            # PascalCase components in convention files are default exports called by the
-            # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
-            js_or_ts?(lang) and
-              (name in @framework_convention_names or
-                 (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files))
+            # Go test runner conventions — Test*, Benchmark*, Fuzz*, Example* are
+            # called by `go test`, not user code.
+            (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
+              # PascalCase components in convention files are default exports called by the
+              # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
+              (js_or_ts?(lang) and
+                 (name in @framework_convention_names or
+                    (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files)))
           end)
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""

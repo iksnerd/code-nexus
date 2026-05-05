@@ -175,4 +175,28 @@ defmodule ElixirNexus.MCPServer.ResourcesTest do
       assert content =~ "No Project Indexed"
     end
   end
+
+  describe "skill resources" do
+    test "skill_index/0 is non-empty — skills are bundled in the image" do
+      # This assertion catches the entire v1.3.0→1.3.4 class of failures where
+      # .agents/ was missing from the Docker build context or runtime stage,
+      # causing compile-time skill embedding to produce an empty map.
+      assert Resources.skill_index() != %{},
+             "skill_index/0 is empty — .agents/skills/ was not bundled at compile time"
+    end
+
+    test "nexus-client-* skills are readable as MCP resources" do
+      Resources.skill_index()
+      |> Map.keys()
+      |> Enum.each(fn name ->
+        assert {:ok, content} = Resources.read_resource_content("nexus://skill/#{name}")
+        assert String.length(content) > 50, "skill #{name} content is suspiciously short"
+      end)
+    end
+
+    test "skills index resource lists all client skills" do
+      assert {:ok, content} = Resources.read_resource_content("nexus://skills/index")
+      assert content =~ "nexus://skill/"
+    end
+  end
 end
