@@ -102,6 +102,7 @@ defmodule ElixirNexus.API.VectorsControllerTest do
       """)
 
       ElixirNexus.Indexer.index_file(Path.join(tmp_dir, "ctrl_test.ex"))
+      :ok = ElixirNexus.Indexer.await_idle()
 
       # Get a real point ID
       point_id =
