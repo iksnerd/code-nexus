@@ -4,7 +4,7 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 
 ## Quick Start
 
-**Prerequisites:** Ollama running on the host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). To use the older default instead, set `OLLAMA_MODEL=nomic-embed-text` and pull that model.
+**Prerequisites:** Ollama running on the host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Alternative: set `OLLAMA_MODEL=nomic-embed-text` and pull that model instead (lighter, faster on CPU).
 
 ```bash
 WORKSPACE=~/Documents docker-compose up -d
