@@ -74,9 +74,9 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
 
             # Go test runner conventions — Test*, Benchmark*, Fuzz*, Example* are
             # called by `go test`, not user code.
+            # PascalCase components in convention files are default exports called by the
+            # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
             (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
-              # PascalCase components in convention files are default exports called by the
-              # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
                     (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files)))

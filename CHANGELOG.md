@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.1
+- **Block internal codebase indexing** — `reindex` and `POST /api/index` now reject non-workspace paths in Docker mode; no accidental indexing of `/app`
+- **Filter `_test` collections from UI dropdown** — test-run artifacts no longer clutter the project switcher
+- **Go dead-code false positives fixed** — `Test*`, `Benchmark*`, `Fuzz*`, `Example*` functions filtered (same pattern as JS/TS framework filter); eliminates ~38/49 false positives on real Go projects
+- **Skill bundling tests** — 3 assertions guard against the v1.3.x class of `.agents/` packaging failures
+- **`make docker.publish.fresh`** — `--no-cache` rebuild variant for structural Dockerfile changes
+
 ## v1.4.0
 - **Prometheus metrics** — `GET /metrics` endpoint (Prometheus text format 0.0.4) via `telemetry_metrics_prometheus_core`. Exposes search latency/count, indexing pipeline throughput, Qdrant upsert and hybrid search latency, embed-and-store batch stats, and BEAM VM metrics (memory, run queue, process count). Scrape with any Prometheus-compatible collector.
 
