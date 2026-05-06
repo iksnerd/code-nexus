@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.4
+- **Fix MCP HTTP 431 disconnect loop** — Cowboy's default `max_header_value_length` of 4096 bytes was too small for Claude Code's MCP client headers, causing repeated HTTP 431 responses that the client interpreted as disconnects. Dockerfile now patches ex_mcp's `server/transport.ex` to set `protocol_options: [max_header_value_length: 32_768]` on the production Cowboy listener.
+
 ## v1.4.3
 - **Fix active collection mismatch on startup** — `QdrantClient.init/1` now auto-resolves to the first available non-test collection when the cwd-derived default doesn't exist in Qdrant (root cause of "searches return nothing" after a container restart with existing indexed data)
 - **NavHook defensive realignment** — if `active_collection` isn't in the Qdrant collection list on any page mount (e.g. externally deleted), silently force-switches the server state to match the dropdown

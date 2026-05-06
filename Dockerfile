@@ -34,7 +34,14 @@ RUN mix deps.compile --no-optional 2>/dev/null; mix deps.compile || true
 # ExMCP 0.9.0 has no config option for this; patch is applied at build time.
 # TODO: remove once https://github.com/cloudwalk/ex_mcp supports configurable timeouts.
 RUN sed -i 's/{:execute_tool, tool_name, arguments}, 10_*000\b/{:execute_tool, tool_name, arguments}, 120_000/' \
-        deps/ex_mcp/lib/ex_mcp/message_processor.ex && \
+        deps/ex_mcp/lib/ex_mcp/message_processor.ex
+
+# Patch ex_mcp Cowboy max_header_value_length (default 4096 -> 32768).
+# Claude Code's MCP HTTP client sends large headers that exceed the Cowboy default,
+# causing HTTP 431 responses and MCP disconnects. Targets only the production
+# cowboy_opts block (no trailing comma = not the test-isolation ranch_ref path).
+RUN sed -z -i 's/ip: parse_host(host)\n      ]/ip: parse_host(host),\n        protocol_options: [max_header_value_length: 32_768]\n      ]/' \
+        deps/ex_mcp/lib/ex_mcp/server/transport.ex && \
     mix deps.compile ex_mcp --force
 
 # Copy native code (Rust NIFs)
