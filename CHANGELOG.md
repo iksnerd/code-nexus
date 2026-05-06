@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.8
+- **Fix container crash on startup** — runtime stage now copies `VERSION` from builder (`COPY --from=builder /app/VERSION`); mix.exs calls `File.read!("VERSION")` at startup and crashed without it
+
 ## v1.4.7
 - **Docker build cache preserved across version bumps** — version moved to standalone `VERSION` file; `mix.exs` reads it with `File.read!("VERSION")`. Dockerfile uses a dummy `0.0.0` VERSION for deps compilation, then overlays the real file before app compile. Deps layer is now stable across releases, saving ~5-10 min per build
 

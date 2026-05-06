@@ -88,7 +88,7 @@ COPY --from=builder /root/.mix /root/.mix
 COPY --from=builder /root/.hex /root/.hex
 
 # Copy compiled application from builder
-COPY --from=builder /app/mix.exs /app/mix.lock ./
+COPY --from=builder /app/mix.exs /app/mix.lock /app/VERSION ./
 COPY --from=builder /app/deps deps
 COPY --from=builder /app/_build _build
 COPY --from=builder /app/lib lib
