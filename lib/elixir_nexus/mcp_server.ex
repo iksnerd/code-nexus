@@ -119,7 +119,7 @@ defmodule ElixirNexus.MCPServer do
       name("get_community_context")
 
       description(
-        "Find files structurally coupled to a given file via call-graph edges. Use to discover which files should be reviewed together or to understand a file's architectural role. Returns {file, coupled_files} sorted by coupling strength with connection details."
+        "Answer 'what other files should I read or edit alongside this one?' — finds files that call into or are called from the given file via AST call-graph edges. Use when starting work in an unfamiliar file to surface related context. Returns {file, coupled_files} sorted by coupling strength with connection details."
       )
     end
 
@@ -191,7 +191,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_dead_code")
 
       description(
-        "Find exported functions/methods with zero callers — proactively flag unused code. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
+        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Optionally filter by file path prefix. Complement with analyze_impact to verify transitively. Returns {dead_functions, total_public, dead_count}."
       )
     end
 
