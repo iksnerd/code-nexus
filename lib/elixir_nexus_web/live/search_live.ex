@@ -42,6 +42,9 @@ defmodule ElixirNexus.SearchLive.Index do
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-semibold text-slate-300">
             <%= length(@results) %> results for '<span class="text-blue-400"><%= @query %></span>'
+            <%= if @active_collection do %>
+              <span class="text-sm font-normal text-slate-500 ml-2">in <span class="font-mono"><%= @active_collection %></span></span>
+            <% end %>
           </h3>
           <%= if @search_time_ms do %>
             <span class="text-sm text-slate-500"><%= @search_time_ms %> ms</span>

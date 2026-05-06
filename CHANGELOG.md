@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.3
+- **Fix active collection mismatch on startup** — `QdrantClient.init/1` now auto-resolves to the first available non-test collection when the cwd-derived default doesn't exist in Qdrant (root cause of "searches return nothing" after a container restart with existing indexed data)
+- **NavHook defensive realignment** — if `active_collection` isn't in the Qdrant collection list on any page mount (e.g. externally deleted), silently force-switches the server state to match the dropdown
+- **Graph auto-refresh on MCP collection switch** — `GraphLive` now reloads when a `reindex(...)` call switches projects via MCP broadcast; previously stayed stale until manual refresh
+- **Show active project in search results** — results header now reads "N results for 'query' in nexus_project" so users always know which project they're searching
+- **Vectors page shows wrong collection name on mount** — was using static `collection_name/0` (cwd-derived); now uses `active_collection/0` matching the actual active project
+- **Nil guard on delete-last-collection** — Vectors stat card now shows "—" instead of rendering `nil` when the last collection is deleted
+
 ## v1.4.2
 - **Dockerfile: build in `MIX_ENV=prod`** — compiled artefacts now land in `_build/prod/` matching the runtime env; adds `mix phx.digest` to generate the static asset cache manifest required by Phoenix in prod mode
 

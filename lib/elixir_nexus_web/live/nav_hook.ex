@@ -26,6 +26,18 @@ defmodule ElixirNexusWeb.NavHook do
 
     active = ElixirNexus.QdrantClient.active_collection()
 
+    # If the server's active collection isn't in the list (e.g. it was deleted externally
+    # or startup defaulted to a non-existent name), silently realign to the first available
+    # collection so the dropdown selection and search results stay in sync.
+    active =
+      if active not in collections and collections != [] do
+        first = hd(collections)
+        ElixirNexus.QdrantClient.switch_collection_force(first)
+        first
+      else
+        active
+      end
+
     socket
     |> assign(:collections, collections)
     |> assign(:active_collection, active)

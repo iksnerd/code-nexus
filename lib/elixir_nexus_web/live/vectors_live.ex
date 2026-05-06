@@ -271,7 +271,7 @@ defmodule ElixirNexus.VectorsLive.Index do
       socket
       |> assign(
         current_path: "/vectors",
-        collection_name: ElixirNexus.QdrantClient.collection_name(),
+        collection_name: ElixirNexus.QdrantClient.active_collection(),
         points_count: 0,
         collection_status: "loading",
         segments_count: 0,
@@ -552,7 +552,7 @@ defmodule ElixirNexus.VectorsLive.Index do
     socket =
       socket
       |> assign(
-        collection_name: name,
+        collection_name: name || "—",
         page: 0,
         offset_stack: [],
         next_offset: nil

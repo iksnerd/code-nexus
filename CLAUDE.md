@@ -60,7 +60,7 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 ## Testing
 
 ```bash
-mix test                    # All tests (~721, 0 compile warnings)
+mix test                    # All tests (~728, 0 compile warnings)
 mix test --trace            # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
@@ -72,7 +72,7 @@ Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
 
 ## Running
 
-**Prerequisites:** Ollama running on host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Override with `OLLAMA_MODEL=nomic-embed-text` for a lighter alternative (faster on CPU).
+**Prerequisites:** Ollama running on host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Override with `OLLAMA_MODEL=nomic-embed-text` if you prefer the older default.
 
 ```bash
 # Docker — starts Phoenix :4100 + MCP Streamable HTTP :3002 in a single BEAM
@@ -81,19 +81,19 @@ WORKSPACE=~/www docker-compose up -d
 
 When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `application.ex` auto-starts the MCP HTTP server alongside Phoenix in a single BEAM instance. Both share ETS caches and PubSub — no sync delay. Requires Qdrant at `http://localhost:6333` (configurable via `QDRANT_URL`) and Ollama at `http://host.docker.internal:11434` (configurable via `OLLAMA_URL`).
 
-**Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `docker-compose build code_nexus`.
+**Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `docker-compose build elixir_nexus`.
 
 ### Workspace mount (Docker)
 
 Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container. Up to four additional mounts are supported via `WORKSPACE_2`…`WORKSPACE_5` (each needs a matching `WORKSPACE_HOST_N` for path translation): `WORKSPACE=~/www WORKSPACE_HOST=~/www WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects WORKSPACE_3=~/WebstormProjects WORKSPACE_HOST_3=~/WebstormProjects docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
 
 **Path resolution order** (`reindex` path argument):
-1. `nil` / omitted → error in Docker mode (requires explicit path); indexes `File.cwd!()` in local dev
+1. `nil` / omitted → indexes `/app` (CodeNexus itself)
 2. Bare project name (e.g. `"claude-vision"`) → `/workspace/claude-vision` if it exists
 3. Full host path (e.g. `"/Users/yourname/Documents/claude-vision"`) → stripped via matching `WORKSPACE_HOST_N` → `/workspaceN/claude-vision`
 4. Container path (e.g. `"/workspace/claude-vision"`) → passthrough
 
-On failure (path not found or no source dirs), the error message lists available projects in `/workspace`. In Docker mode, non-workspace paths are also rejected by `POST /api/index`.
+On failure (path not found or no source dirs), the error message lists available projects in `/workspace`.
 
 ### Local development
 
@@ -116,7 +116,6 @@ In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but no
 - **Indexing Pipeline** — Broadway-based: parse (tree-sitter/sourceror) -> chunk -> embed (Ollama embeddinggemma:300m, 768-dim) -> store (Qdrant + ETS)
 - **ETS Caches** — `ChunkCache` (chunks by file) + `GraphCache` (call graph nodes) — owned by `CacheOwner` GenServer
 - **TF-IDF ETS** — IDF vocabulary in ETS with `read_concurrency: true` for lock-free concurrent embeddings
-- **Telemetry** — `ElixirNexus.Telemetry` starts `TelemetryMetricsPrometheus.Core`; `GET /metrics` serves Prometheus text format 0.0.4. `telemetry_poller` emits VM stats every 10s.
 - **Supervision** — `rest_for_one` strategy: if a dependency crashes, all processes started after it restart
 - **Registry** — `ElixirNexus.Registry` for IndexingProducer PID lookup
 
@@ -193,7 +192,7 @@ Domain-specific guidance documents that ship with the repo. Each skill is a `SKI
 | `nexus-*` (no `-client-`) | Internal only | Repo-contributor docs for code-nexus subsystems |
 | `elixir-*`, `phoenix-*` | Internal only | Generic Elixir/OTP/Phoenix patterns; useful for repo work, not specific to code-nexus |
 
-The `nexus-client-*` filter is enforced in `lib/elixir_nexus/mcp_server/resources.ex` `@skills` — only those get a `defresource` declaration. Skill content is read at compile time via `@external_resource` and embedded in the module binary, so the runtime container doesn't need filesystem access. **The Dockerfile `COPY .agents .agents` must be in BOTH the builder stage AND runtime stage** — required so the runtime stage has the source available if any recompilation occurs (lesson from v1.3.4).
+The `nexus-client-*` filter is enforced in `lib/elixir_nexus/mcp_server/resources.ex` `@skills` — only those get a `defresource` declaration. Skill content is read at compile time via `@external_resource` and embedded in the module binary, so the runtime container doesn't need filesystem access. **The Dockerfile `COPY .agents .agents` must be in BOTH the builder stage AND runtime stage** — Phoenix's dev-mode code reloader recompiles on boot and would otherwise wipe the embedded content (lesson from v1.3.4).
 
 ### Internal nexus skills (subsystem deep-dives)
 
@@ -240,5 +239,3 @@ When adding a new skill, decide visibility by prefix. Don't expose internal-dev 
 | `lib/elixir_nexus/tfidf_embedder.ex` | TF-IDF embedder with ETS-backed IDF for concurrent reads (fallback + sparse) |
 | `lib/elixir_nexus/dirty_tracker.ex` | SHA256-based incremental indexing (polyglot) |
 | `lib/elixir_nexus/qdrant_client.ex` | Qdrant GenServer — collection management, hybrid search, point ops; read-only calls bypass mailbox |
-| `lib/elixir_nexus/telemetry.ex` | Prometheus metrics — starts `TelemetryMetricsPrometheus.Core`, defines all nexus + VM metrics |
-| `lib/elixir_nexus_web/controllers/metrics_controller.ex` | `GET /metrics` — serves Prometheus text format 0.0.4 |

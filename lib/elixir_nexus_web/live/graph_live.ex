@@ -141,6 +141,11 @@ defmodule ElixirNexus.GraphLive.Index do
     {:noreply, socket}
   end
 
+  def handle_info({:collection_changed, _name}, socket) do
+    send(self(), :load_graph)
+    {:noreply, socket}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   @max_graph_nodes 500

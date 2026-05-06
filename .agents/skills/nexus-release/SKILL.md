@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.3  | Fix active collection mismatch on startup (auto-resolve to first Qdrant collection); NavHook defensive realignment; graph auto-refresh on MCP switch; search results show active project; Vectors collection name fix; nil guard on delete-last-collection |
 | v1.4.2  | Dockerfile: build with `MIX_ENV=prod` + `mix phx.digest` — fixes missing static manifest when running prod image |
 | v1.4.1  | Block `/app` indexing in Docker mode (MCP + REST); filter `_test` collections from UI; Go dead-code Test*/Benchmark* filter; skill bundling tests; `make docker.publish.fresh` |
 | v1.4.0  | Prometheus metrics at `GET /metrics` — all nexus telemetry events + BEAM VM stats via `telemetry_metrics_prometheus_core` |

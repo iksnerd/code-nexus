@@ -67,22 +67,50 @@ defmodule ElixirNexus.QdrantClient do
 
     case http_get("#{url}/") do
       {:ok, _} ->
-        Logger.info("Qdrant is healthy. Default collection: #{coll} (created on first reindex)")
-
-        # Tests rely on the default collection existing for setup-free queries.
-        # Create it synchronously in init so it's guaranteed to exist before any
-        # test can run. Production keeps lazy "create on first reindex" behavior.
-        # Create the default collection synchronously so tests have it available
-        # immediately. Production keeps lazy "create on first reindex" behavior.
         if Mix.env() == :test do
+          # Tests rely on the default collection existing for setup-free queries.
+          # Create it synchronously in init so it's guaranteed to exist before any test can run.
           http_put("#{url}/collections/#{coll}", collection_schema())
-        end
+          Logger.info("Qdrant is healthy. Default collection: #{coll}")
+          {:ok, %{url: url, collection: coll}}
+        else
+          # If the default collection doesn't exist in Qdrant (e.g. after a container restart
+          # where the cwd-derived name differs from previously indexed projects), auto-switch
+          # to the first available non-test collection so the UI and searches work immediately.
+          resolved = resolve_startup_collection(url, coll)
 
-        {:ok, %{url: url, collection: coll}}
+          if resolved != coll do
+            Logger.info("Default collection '#{coll}' not found; auto-switching to '#{resolved}'")
+            store_runtime_state(url, resolved)
+          else
+            Logger.info("Qdrant is healthy. Default collection: #{coll} (created on first reindex)")
+          end
+
+          {:ok, %{url: url, collection: resolved}}
+        end
 
       {:error, reason} ->
         Logger.warning("Qdrant health check failed: #{inspect(reason)}. Make sure Qdrant is running at #{url}")
         {:ok, %{url: url, collection: coll}}
+    end
+  end
+
+  # Returns the default collection if it exists in Qdrant, otherwise the first non-test
+  # collection available. Falls back to default if Qdrant has no collections yet.
+  defp resolve_startup_collection(url, default_coll) do
+    case http_get("#{url}/collections/#{default_coll}") do
+      {:ok, _} ->
+        default_coll
+
+      {:error, _} ->
+        case http_get("#{url}/collections") do
+          {:ok, data} ->
+            names = data["result"]["collections"] |> List.wrap() |> Enum.map(& &1["name"])
+            Enum.find(names, default_coll, &(not String.ends_with?(&1, "_test")))
+
+          _ ->
+            default_coll
+        end
     end
   end
 
