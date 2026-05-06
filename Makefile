@@ -4,7 +4,7 @@
 	tag release clean
 
 IMAGE := iksnerd/code-nexus
-VERSION := $(shell grep -E '^\s*version:' mix.exs | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+VERSION := $(shell cat VERSION)
 TAG := v$(VERSION)
 PLATFORMS := linux/amd64,linux/arm64
 BUILDER := nexus-multiarch
