@@ -36,11 +36,14 @@ defmodule ElixirNexus.Search.CallerFinder do
         }
       end)
 
-    # Refine module-level callers to their enclosing function entity where possible
+    # Refine module-level callers to their enclosing function entity where possible,
+    # then deduplicate — refinement can produce an ID already present in results.
     refined =
       case DataFetching.get_all_entities_cached(2000) do
         {:ok, all_entities} ->
-          refine_entities_to_functions(results, entity_name, all_entities)
+          results
+          |> refine_entities_to_functions(entity_name, all_entities)
+          |> Enum.uniq_by(& &1.id)
 
         _ ->
           results

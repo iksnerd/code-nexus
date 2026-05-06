@@ -37,7 +37,11 @@ defmodule ElixirNexus.GraphCache do
     :ets.foldl(
       fn {_id, node} = entry, acc ->
         if Enum.any?(node["calls"] || [], fn call ->
-             String.contains?(String.downcase(call), name_lower)
+             call_lower = String.downcase(call)
+
+             call_lower == name_lower or
+               String.ends_with?(call_lower, "." <> name_lower) or
+               String.ends_with?(name_lower, "." <> call_lower)
            end) do
           [entry | acc]
         else

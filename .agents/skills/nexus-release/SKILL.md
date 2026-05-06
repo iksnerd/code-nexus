@@ -146,6 +146,8 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.11 | Fix 3 call-graph bugs: function definitions leaking into calls lists (`walk_calls` recursed into def signatures); `GraphCache.find_callers` substring matching causing false positives; duplicate entries in `find_all_callers` after entity refinement |
+| v1.4.10 | Sharpen `get_community_context` and `find_dead_code` tool descriptions for agent discoverability |
 | v1.4.9  | Increase Ollama batch size 32→96 (fewer HTTP round trips, ~30% faster indexing); `@external_resource "VERSION"` so version bumps auto-recompile without `--force` |
 | v1.4.8  | Fix container crash — runtime Dockerfile stage now copies VERSION from builder (mix.exs calls File.read!("VERSION") at startup) |
 | v1.4.7  | Move version to standalone `VERSION` file — `mix.exs` reads it so version bumps no longer bust the Docker deps cache layer; saves 5-10 min per release build |

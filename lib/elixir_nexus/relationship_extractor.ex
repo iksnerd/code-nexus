@@ -76,7 +76,20 @@ defmodule ElixirNexus.RelationshipExtractor do
   defp walk_calls({func, _meta, args}, acc) when is_atom(func) and is_list(args) do
     # Skip definition forms and control flow
     if func in [:defmodule, :def, :defp, :defmacro, :if, :case, :cond, :try, :when] do
-      args_calls = Enum.flat_map(args, &walk_calls(&1, []))
+      # For def/defp/defmacro, skip the function signature (first arg) — the signature
+      # `{:func_name, meta, params}` matches the unqualified-call pattern and would
+      # otherwise cause every defined function name to appear in the calls list.
+      recurse_args =
+        if func in [:def, :defp, :defmacro] do
+          case args do
+            [_signature | body_rest] -> body_rest
+            other -> other
+          end
+        else
+          args
+        end
+
+      args_calls = Enum.flat_map(recurse_args, &walk_calls(&1, []))
       args_calls ++ acc
     else
       # Unqualified call: function(args)

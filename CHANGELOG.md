@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.11
+- **Fix function definitions leaking into calls lists** (`relationship_extractor.ex`) — `walk_calls` skipped `:def/:defp/:defmacro` forms but still recursed into the function signature `{:func_name, meta, [params]}`, which matches the unqualified-call AST pattern. Every function *defined* in a module was being added to the module entity's calls list, causing false positives in `find_all_callers` (e.g. the defining module appearing as a caller of its own functions). Fix: skip `args[0]` (the signature) when recursing into def forms.
+- **Fix `GraphCache.find_callers` substring matching** (`graph_cache.ex`) — used `String.contains?` instead of exact/suffix matching, so short names like `get` or `info` matched far too many callers. Now aligned with `RelationshipGraph.find_callers` exact/suffix logic.
+- **Fix duplicate entries in `find_all_callers`** (`caller_finder.ex`) — `Enum.uniq_by/2` ran before `refine_entities_to_functions`, not after. Refinement replaces module entities with enclosing function entities that may already exist in the results as direct callers, producing duplicates. Added dedup step after refinement.
+
+## v1.4.10
+- **Sharpen `get_community_context` and `find_dead_code` tool descriptions** — clearer agent-facing descriptions improve tool discoverability
+
 ## v1.4.9
 - **Increase Ollama batch size 32 → 96** — fewer HTTP round trips per indexing run; 818 chunks: 26 Ollama calls → 9, ~30% faster indexing when warm. Ollama batch efficiency is superlinear (4× chunks = 2.7× latency, not 4×)
 - **`@external_resource "VERSION"`** — Elixir now recompiles `elixir_nexus.ex` automatically when `VERSION` changes, no more manual `--force` needed after version bumps
