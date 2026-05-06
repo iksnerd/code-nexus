@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.5
+- **Fix Phoenix dashboard HTTP 431** — added `protocol_options: [max_header_value_length: 32_768]` to the Phoenix Endpoint http config in `config.exs` and `dev.exs`; the Cowboy default of 4096 bytes was too small for browser/LiveView headers
+- **Fix Ollama cold-start mid-index** — embed requests now include `keep_alive: "30m"` so Ollama keeps the model loaded during long indexing runs instead of unloading it after 5 minutes of perceived inactivity between batches
+
 ## v1.4.4
 - **Fix MCP HTTP 431 disconnect loop** — Cowboy's default `max_header_value_length` of 4096 bytes was too small for Claude Code's MCP client headers, causing repeated HTTP 431 responses that the client interpreted as disconnects. Dockerfile now patches ex_mcp's `server/transport.ex` to set `protocol_options: [max_header_value_length: 32_768]` on the production Cowboy listener.
 

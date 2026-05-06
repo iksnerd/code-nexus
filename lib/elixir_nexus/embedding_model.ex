@@ -50,7 +50,7 @@ defmodule ElixirNexus.EmbeddingModel do
 
   defp do_embed_batch(texts, attempt) do
     url = "#{ollama_url()}/api/embed"
-    body = Jason.encode!(%{model: ollama_model(), input: texts})
+    body = Jason.encode!(%{model: ollama_model(), input: texts, keep_alive: "30m"})
 
     case HTTPoison.post(url, body, [{"Content-Type", "application/json"}], recv_timeout: ollama_timeout()) do
       {:ok, %{status_code: 200, body: resp_body}} ->
