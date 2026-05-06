@@ -21,10 +21,10 @@ If any check fails, fix it before proceeding. Never tag a broken commit.
 
 ## 2 — Bump version
 
-Edit `mix.exs` line 7:
+Edit the `VERSION` file (single source of truth — `mix.exs` reads it at compile time):
 
-```elixir
-version: "X.Y.Z",
+```
+X.Y.Z
 ```
 
 Follow semver:
@@ -133,7 +133,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | File | What to verify |
 |------|----------------|
-| `mix.exs` | Version bumped correctly |
+| `VERSION` | Version bumped correctly (mix.exs reads this file; changing only VERSION preserves Docker deps cache) |
 | `lib/elixir_nexus/mcp_server.ex` | No debug logging left in, tool list accurate |
 | `lib/elixir_nexus/qdrant_client.ex` | No hardcoded collection names or URLs |
 | `docker-compose.yml` | Port, env vars, and image reference current |
@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.7  | Move version to standalone `VERSION` file — `mix.exs` reads it so version bumps no longer bust the Docker deps cache layer; saves 5-10 min per release build |
 | v1.4.6  | Fix Ollama timeout under concurrent load — Broadway embed batcher capped at 2 concurrent workers (was schedulers/2); recv_timeout raised 60s→180s |
 | v1.4.5  | Fix Phoenix dashboard HTTP 431 (`protocol_options` in config.exs/dev.exs); fix Ollama cold-start mid-index (`keep_alive: "30m"` on all embed requests) |
 | v1.4.4  | Fix MCP HTTP 431 disconnect loop — Dockerfile patches ex_mcp Cowboy `max_header_value_length` 4096→32768 so Claude Code's large headers don't trigger repeated disconnects |

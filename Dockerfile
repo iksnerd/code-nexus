@@ -18,8 +18,10 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # matching what docker-compose.yml sets at runtime (MIX_ENV=prod).
 ENV MIX_ENV=prod
 
-# Copy mix files first for better layer caching
+# Copy mix files first for better layer caching.
+# Use a dummy VERSION so version bumps don't bust the deps layer.
 COPY mix.exs mix.lock ./
+RUN echo "0.0.0" > VERSION
 
 # Install Elixir dependencies (limit parallelism to avoid OOM)
 RUN mix local.hex --force && \
@@ -46,6 +48,9 @@ RUN sed -z -i 's/ip: parse_host(host)\n      ]/ip: parse_host(host),\n        pr
 
 # Copy native code (Rust NIFs)
 COPY native native
+
+# Copy real VERSION now (after deps) so version bumps don't bust the deps cache
+COPY VERSION .
 
 # Copy source code and config
 COPY lib lib

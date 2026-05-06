@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.7
+- **Docker build cache preserved across version bumps** — version moved to standalone `VERSION` file; `mix.exs` reads it with `File.read!("VERSION")`. Dockerfile uses a dummy `0.0.0` VERSION for deps compilation, then overlays the real file before app compile. Deps layer is now stable across releases, saving ~5-10 min per build
+
 ## v1.4.6
 - **Fix Ollama timeout under concurrent load** — Broadway embed batcher concurrency capped at 2 (was `schedulers_online / 2`, up to 6 on Apple Silicon); with 6 concurrent Ollama requests each waiting on the previous, the last batch could queue for >6×23s and blow past the 60s timeout. Two concurrent batches is plenty for throughput while keeping Ollama responsive
 - **Raise Ollama recv_timeout 60s → 180s** — gives headroom for cold-start loads and the occasional slow batch without triggering retries
