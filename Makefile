@@ -6,8 +6,8 @@
 IMAGE := iksnerd/code-nexus
 VERSION := $(shell cat VERSION)
 TAG := v$(VERSION)
-PLATFORMS := linux/amd64,linux/arm64
-BUILDER := nexus-multiarch
+PLATFORMS := linux/arm64
+BUILDER := desktop-linux
 
 ## Development
 
@@ -43,12 +43,11 @@ stop:
 logs:
 	docker logs -f code_nexus
 
-## Docker Hub publish (multi-arch via buildx)
+## Docker Hub publish (arm64 via desktop-linux builder)
 
-# Ensure a buildx builder exists for multi-arch builds.
+# desktop-linux is the built-in Docker Desktop builder — always present, no setup needed.
 docker.buildx:
-	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || \
-		docker buildx create --name $(BUILDER) --use --bootstrap
+	@docker buildx inspect $(BUILDER) >/dev/null 2>&1
 
 # Build multi-arch image locally without pushing (verifies the build).
 docker.build: docker.buildx
