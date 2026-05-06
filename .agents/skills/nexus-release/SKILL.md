@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.9  | Increase Ollama batch size 32→96 (fewer HTTP round trips, ~30% faster indexing); `@external_resource "VERSION"` so version bumps auto-recompile without `--force` |
 | v1.4.8  | Fix container crash — runtime Dockerfile stage now copies VERSION from builder (mix.exs calls File.read!("VERSION") at startup) |
 | v1.4.7  | Move version to standalone `VERSION` file — `mix.exs` reads it so version bumps no longer bust the Docker deps cache layer; saves 5-10 min per release build |
 | v1.4.6  | Fix Ollama timeout under concurrent load — Broadway embed batcher capped at 2 concurrent workers (was schedulers/2); recv_timeout raised 60s→180s |

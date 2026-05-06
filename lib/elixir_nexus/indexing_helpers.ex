@@ -5,7 +5,7 @@ defmodule ElixirNexus.IndexingHelpers do
   """
   require Logger
 
-  @batch_size 32
+  @batch_size 96
 
   @elixir_extensions [".ex", ".exs"]
   @polyglot_extensions %{

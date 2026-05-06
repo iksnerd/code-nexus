@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.9
+- **Increase Ollama batch size 32 → 96** — fewer HTTP round trips per indexing run; 818 chunks: 26 Ollama calls → 9, ~30% faster indexing when warm. Ollama batch efficiency is superlinear (4× chunks = 2.7× latency, not 4×)
+- **`@external_resource "VERSION"`** — Elixir now recompiles `elixir_nexus.ex` automatically when `VERSION` changes, no more manual `--force` needed after version bumps
+
 ## v1.4.8
 - **Fix container crash on startup** — runtime stage now copies `VERSION` from builder (`COPY --from=builder /app/VERSION`); mix.exs calls `File.read!("VERSION")` at startup and crashed without it
 
