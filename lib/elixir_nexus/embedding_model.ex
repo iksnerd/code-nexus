@@ -6,7 +6,7 @@ defmodule ElixirNexus.EmbeddingModel do
   require Logger
 
   @default_model "embeddinggemma:300m"
-  @default_timeout 60_000
+  @default_timeout 180_000
   @default_retry_attempts 3
   @default_retry_backoff_ms 1_000
 

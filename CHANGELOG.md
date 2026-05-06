@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.6
+- **Fix Ollama timeout under concurrent load** — Broadway embed batcher concurrency capped at 2 (was `schedulers_online / 2`, up to 6 on Apple Silicon); with 6 concurrent Ollama requests each waiting on the previous, the last batch could queue for >6×23s and blow past the 60s timeout. Two concurrent batches is plenty for throughput while keeping Ollama responsive
+- **Raise Ollama recv_timeout 60s → 180s** — gives headroom for cold-start loads and the occasional slow batch without triggering retries
+
 ## v1.4.5
 - **Fix Phoenix dashboard HTTP 431** — added `protocol_options: [max_header_value_length: 32_768]` to the Phoenix Endpoint http config in `config.exs` and `dev.exs`; the Cowboy default of 4096 bytes was too small for browser/LiveView headers
 - **Fix Ollama cold-start mid-index** — embed requests now include `keep_alive: "30m"` so Ollama keeps the model loaded during long indexing runs instead of unloading it after 5 minutes of perceived inactivity between batches

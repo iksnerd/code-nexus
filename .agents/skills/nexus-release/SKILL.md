@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.4.6  | Fix Ollama timeout under concurrent load — Broadway embed batcher capped at 2 concurrent workers (was schedulers/2); recv_timeout raised 60s→180s |
 | v1.4.5  | Fix Phoenix dashboard HTTP 431 (`protocol_options` in config.exs/dev.exs); fix Ollama cold-start mid-index (`keep_alive: "30m"` on all embed requests) |
 | v1.4.4  | Fix MCP HTTP 431 disconnect loop — Dockerfile patches ex_mcp Cowboy `max_header_value_length` 4096→32768 so Claude Code's large headers don't trigger repeated disconnects |
 | v1.4.3  | Fix active collection mismatch on startup (auto-resolve to first Qdrant collection); NavHook defensive realignment; graph auto-refresh on MCP switch; search results show active project; Vectors collection name fix; nil guard on delete-last-collection |

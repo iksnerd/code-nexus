@@ -28,7 +28,7 @@ defmodule ElixirNexus.IndexingPipeline do
         embed_and_store: [
           batch_size: @batch_size,
           batch_timeout: 1_000,
-          concurrency: System.schedulers_online() |> div(2) |> max(2)
+          concurrency: 2
         ]
       ]
     )
