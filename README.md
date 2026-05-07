@@ -65,6 +65,8 @@ This starts three services in a single BEAM instance:
 
 Once running, use the `reindex` MCP tool from Claude Code (or any MCP client) — it accepts a path to your project and is the recommended approach. Claude Code will call it automatically when you ask about code.
 
+To exclude paths from indexing, add a `.nexusignore` file to your project root (gitignore-style globs). CodeNexus also respects `.gitignore` automatically. A default deny list covers `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar noise.
+
 For local dev, a CLI is also available:
 
 ```bash
@@ -196,7 +198,7 @@ Strategy: `rest_for_one` — if a dependency crashes, all processes started afte
 
 ## MCP Tools
 
-Nine tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
+Ten tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 
 | Tool | Description |
 |------|-------------|
@@ -206,6 +208,7 @@ Nine tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 | **analyze_impact**(entity_name, depth) | Transitive blast radius — walks callers-of-callers AND importers up to `depth` levels |
 | **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph and import edges (bidirectional) |
 | **get_graph_stats**() | Codebase overview: node counts, edge counts, entity types, languages, top connected, critical files (betweenness centrality) |
+| **get_status**() | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
 | **find_module_hierarchy**(entity_name) | Module parents (behaviours/uses) and children — supports file-path and substring matching for TS/React components |
 | **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — proactively flag unused code |
 | **reindex**(path) | Parse and index source files to build the search index and call graph |

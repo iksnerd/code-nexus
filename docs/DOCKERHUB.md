@@ -54,9 +54,14 @@ The `reindex` MCP tool resolves bare project names across all active mounts:
 | `"my-project"` | first mount where `/workspaceN/my-project` exists |
 | `"/Users/you/Documents/my-project"` | `/workspace/my-project` (auto-translated) |
 | `"/workspace/my-project"` | `/workspace/my-project` (passthrough) |
-| _(omitted)_ | `/app` (CodeNexus itself) |
+| _(omitted, one project mounted)_ | that project (auto-selected) |
+| _(omitted, no workspace)_ | `/app` (CodeNexus itself) |
 
 If a project isn't found, the error lists all available projects across all mounts.
+
+### Excluding files
+
+Add a `.nexusignore` file to your project root (gitignore-style globs). CodeNexus also respects `.gitignore` automatically. Defaults already exclude `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, `*.lock`, and similar noise.
 
 ## MCP Tools
 
@@ -71,6 +76,7 @@ If a project isn't found, the error lists all available projects across all moun
 | `find_module_hierarchy` | Module parents (uses/implements) and children |
 | `find_dead_code` | Find exported functions with zero callers |
 | `get_graph_stats` | Structural overview with critical files (betweenness centrality) and current `project_path` |
+| `get_status` | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
 
 ## Supported Languages
 
