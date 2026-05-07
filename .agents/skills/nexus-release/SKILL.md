@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.5.1  | Fix `get_status` `indexed` field — was always `false` for new sessions even when cache populated; now uses `ChunkCache.count() > 0` as fallback |
 | v1.5.0  | `.nexusignore` + `.gitignore` glob pattern support (file-level filtering, pre-compiled regexes, expanded default deny list); `get_status` MCP tool (project, Qdrant health, Ollama, collections); single-project workspace auto-default on `reindex` with no args |
 | v1.4.11 | Fix 3 call-graph bugs: function definitions leaking into calls lists (`walk_calls` recursed into def signatures); `GraphCache.find_callers` substring matching causing false positives; duplicate entries in `find_all_callers` after entity refinement |
 | v1.4.10 | Sharpen `get_community_context` and `find_dead_code` tool descriptions for agent discoverability |

@@ -478,7 +478,7 @@ defmodule ElixirNexus.MCPServer do
       end
 
     status = %{
-      indexed: Map.has_key?(state, :indexed_dirs),
+      indexed: Map.has_key?(state, :indexed_dirs) or ElixirNexus.ChunkCache.count() > 0,
       current_project: current_project,
       file_count: ElixirNexus.ChunkCache.count(),
       qdrant: qdrant,
