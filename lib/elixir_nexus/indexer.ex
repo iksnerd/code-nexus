@@ -337,7 +337,12 @@ defmodule ElixirNexus.Indexer do
         end
       else
         ext = Path.extname(entry)
-        if indexable_extension?(ext), do: [full_path], else: []
+
+        if indexable_extension?(ext) and not IgnoreFilter.ignored_file?(entry, filter) do
+          [full_path]
+        else
+          []
+        end
       end
     end)
   end

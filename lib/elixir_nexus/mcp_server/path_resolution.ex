@@ -40,6 +40,9 @@ defmodule ElixirNexus.MCPServer.PathResolution do
       [] ->
         {:ok, project_root, project_root}
 
+      [single] ->
+        resolve_path(single, project_root)
+
       projects ->
         {:error,
          "No project path specified. Specify a project name or path. " <>

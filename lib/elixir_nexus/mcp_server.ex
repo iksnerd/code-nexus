@@ -297,6 +297,24 @@ defmodule ElixirNexus.MCPServer do
     end
   end
 
+  deftool "get_status" do
+    meta do
+      name("get_status")
+
+      description(
+        "Returns current server status: indexed project path, Qdrant health, Ollama connectivity, " <>
+          "file/chunk counts, available workspace projects, and active collections. " <>
+          "Use to verify what is indexed before querying, or to diagnose setup issues."
+      )
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{},
+      required: []
+    })
+  end
+
   deftool "load_resources" do
     meta do
       name("load_resources")
@@ -440,6 +458,37 @@ defmodule ElixirNexus.MCPServer do
       {:ok, results} -> ResponseFormat.json_reply(ResponseFormat.compact_results(results), state)
       {:error, reason} -> {:error, "Caller search failed: #{inspect(reason)}", state}
     end
+  end
+
+  def handle_tool_call("get_status", _args, state) do
+    current_project =
+      Map.get(state, :project_path) ||
+        Application.get_env(:elixir_nexus, :current_project_path)
+
+    qdrant =
+      case ElixirNexus.QdrantClient.health_check() do
+        {:ok, _} -> "ok"
+        {:error, reason} -> "unreachable: #{inspect(reason)}"
+      end
+
+    collections =
+      case ElixirNexus.QdrantClient.list_collections() do
+        {:ok, names} -> names
+        {:error, _} -> []
+      end
+
+    status = %{
+      indexed: Map.has_key?(state, :indexed_dirs),
+      current_project: current_project,
+      file_count: ElixirNexus.ChunkCache.count(),
+      qdrant: qdrant,
+      collections: collections,
+      ollama_url: ElixirNexus.EmbeddingModel.base_url(),
+      embedding_model: ElixirNexus.EmbeddingModel.model_name(),
+      workspace_projects: PathResolution.list_workspace_projects()
+    }
+
+    ResponseFormat.json_reply(status, state)
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do

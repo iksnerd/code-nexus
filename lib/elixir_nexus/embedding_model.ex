@@ -10,13 +10,16 @@ defmodule ElixirNexus.EmbeddingModel do
   @default_retry_attempts 3
   @default_retry_backoff_ms 1_000
 
-  defp ollama_url do
+  def base_url do
     System.get_env("OLLAMA_URL") || Application.get_env(:elixir_nexus, :ollama_url, "http://localhost:11434")
   end
 
-  defp ollama_model do
+  def model_name do
     System.get_env("OLLAMA_MODEL") || Application.get_env(:elixir_nexus, :ollama_model, @default_model)
   end
+
+  defp ollama_url, do: base_url()
+  defp ollama_model, do: model_name()
 
   defp ollama_timeout, do: Application.get_env(:elixir_nexus, :ollama_timeout, @default_timeout)
   defp retry_attempts, do: Application.get_env(:elixir_nexus, :ollama_retry_attempts, @default_retry_attempts)

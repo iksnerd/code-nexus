@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.5.0  | `.nexusignore` + `.gitignore` glob pattern support (file-level filtering, pre-compiled regexes, expanded default deny list); `get_status` MCP tool (project, Qdrant health, Ollama, collections); single-project workspace auto-default on `reindex` with no args |
 | v1.4.11 | Fix 3 call-graph bugs: function definitions leaking into calls lists (`walk_calls` recursed into def signatures); `GraphCache.find_callers` substring matching causing false positives; duplicate entries in `find_all_callers` after entity refinement |
 | v1.4.10 | Sharpen `get_community_context` and `find_dead_code` tool descriptions for agent discoverability |
 | v1.4.9  | Increase Ollama batch size 32→96 (fewer HTTP round trips, ~30% faster indexing); `@external_resource "VERSION"` so version bumps auto-recompile without `--force` |
