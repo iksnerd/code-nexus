@@ -33,6 +33,7 @@ var menuItems = []list.Item{
 	menuItem{"stats", "Call graph statistics", "", true},
 	menuItem{"status", "Server status and project info", "", true},
 	menuItem{"reindex", "Index or re-index a project directory", "Path (leave blank for default): ", false},
+	menuItem{"update", "Update nexus to the latest release", "", true},
 }
 
 // ── model ────────────────────────────────────────────────────────────────────
