@@ -21,14 +21,14 @@ builds:
 
 archives:
   - id: nexus
-    name_template: "nexus_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "nexus_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
     files:
       - README.md
 
 checksum:
-  name_template: "nexus_{{ .Tag }}_checksums.txt"
+  name_template: "nexus_checksums.txt"
 
 changelog:
   disable: true
@@ -45,18 +45,18 @@ release:
 
     **macOS (Apple Silicon)**
     ```bash
-    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_arm64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_darwin_arm64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```
 
     **macOS (Intel)**
     ```bash
-    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_amd64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_darwin_amd64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```
 
     **Linux (amd64)**
     ```bash
-    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_linux_amd64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_linux_amd64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```

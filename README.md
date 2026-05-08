@@ -69,11 +69,29 @@ To exclude paths from indexing, add a `.nexusignore` file to your project root (
 
 ### CLI
 
-A standalone `nexus` CLI is available for scripting and terminal use — no Elixir required. Download the binary for your platform from the [latest GitHub Release](https://github.com/iksnerd/code-nexus/releases/latest), or build from source:
+A standalone `nexus` CLI is available for scripting and terminal use — no Elixir required.
 
+**macOS (Apple Silicon)**
 ```bash
-cd cli && make build
+curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_darwin_arm64.tar.gz | tar xz
 sudo mv nexus /usr/local/bin/
+```
+
+**macOS (Intel)**
+```bash
+curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_darwin_amd64.tar.gz | tar xz
+sudo mv nexus /usr/local/bin/
+```
+
+**Linux (amd64)**
+```bash
+curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_linux_amd64.tar.gz | tar xz
+sudo mv nexus /usr/local/bin/
+```
+
+Or build from source (requires Go 1.21+):
+```bash
+cd cli && make build && sudo mv nexus /usr/local/bin/
 ```
 
 ```bash
