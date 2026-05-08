@@ -107,12 +107,57 @@ var hierarchyCmd = &cobra.Command{
 			fmt.Println(string(result))
 			return nil
 		}
-		var msg any
-		if err := json.Unmarshal(result, &msg); err != nil {
+
+		var h struct {
+			Name     string `json:"name"`
+			Parents  []struct {
+				Name     string `json:"name"`
+				Resolved bool   `json:"resolved"`
+			} `json:"parents"`
+			Children []struct {
+				Name       string `json:"name"`
+				EntityType string `json:"entity_type"`
+				FilePath   string `json:"file_path"`
+				Resolved   bool   `json:"resolved"`
+			} `json:"children"`
+		}
+		if err := json.Unmarshal(result, &h); err != nil {
 			fmt.Println(string(result))
 			return nil
 		}
-		printJSON(msg)
+
+		fmt.Printf("  %s  %s\n\n", ui.AccentStyle.Render("Hierarchy"), ui.BoldStyle.Render(h.Name))
+
+		if len(h.Parents) > 0 {
+			fmt.Println(ui.MutedStyle.Render("  Parents (uses / extends)"))
+			for _, p := range h.Parents {
+				resolved := ui.MutedStyle.Render("·")
+				if p.Resolved {
+					resolved = ui.SuccessStyle.Render("✓")
+				}
+				fmt.Printf("  %s %s\n", resolved, p.Name)
+			}
+			fmt.Println()
+		}
+
+		if len(h.Children) > 0 {
+			fmt.Println(ui.MutedStyle.Render("  Children (members / functions)"))
+			for _, c := range h.Children {
+				typ := ""
+				if c.EntityType != "" {
+					typ = ui.MutedStyle.Render(" (" + c.EntityType + ")")
+				}
+				fmt.Printf("  %s %s%s\n", ui.AccentStyle.Render("▸"), ui.BoldStyle.Render(c.Name), typ)
+				if c.FilePath != "" {
+					fmt.Printf("    %s\n", ui.MutedStyle.Render(c.FilePath))
+				}
+			}
+			fmt.Println()
+		}
+
+		if len(h.Parents) == 0 && len(h.Children) == 0 {
+			fmt.Println(ui.WarningStyle.Render("  No hierarchy found for " + h.Name))
+		}
 		return nil
 	},
 }
