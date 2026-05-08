@@ -34,8 +34,16 @@ defmodule ElixirNexus.Chunker do
     ]
   end
 
+  # embeddinggemma:300m has a 2048-token context. ~3-4 chars per token in code,
+  # so we cap content at 4000 chars to stay well under the limit even after
+  # the "File: / Type: / Name:" prefix and tokenizer overhead. Truncation
+  # is for embedding only — the full content is preserved in the Qdrant
+  # payload and the sparse keyword vector, so search results aren't lossy.
+  @max_content_chars 4000
+
   @doc """
   Prepare chunk for dense embedding. Combines content with context.
+  Truncates oversized content to keep per-batch Ollama latency bounded.
   """
   def prepare_for_embedding(%{} = chunk) do
     context = [
@@ -45,8 +53,19 @@ defmodule ElixirNexus.Chunker do
     ]
 
     context_str = Enum.join(context, "\n")
-    "#{context_str}\n\n#{chunk.content}"
+    truncated = truncate_content(chunk.content)
+    "#{context_str}\n\n#{truncated}"
   end
+
+  defp truncate_content(content) when is_binary(content) do
+    if byte_size(content) > @max_content_chars do
+      binary_part(content, 0, @max_content_chars)
+    else
+      content
+    end
+  end
+
+  defp truncate_content(other), do: other
 
   @doc """
   Prepare chunk for sparse keyword vector. Heavily weights the entity name
