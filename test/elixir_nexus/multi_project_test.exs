@@ -136,7 +136,7 @@ defmodule ElixirNexus.MultiProjectTest do
     end
   end
 
-  describe "end-to-end smart detection" do
+  describe "end-to-end smart detection (inclusive-first default)" do
     test "detect + index works for Elixir project layout", %{base: base} do
       File.mkdir_p!(Path.join(base, "lib"))
 
@@ -149,7 +149,7 @@ defmodule ElixirNexus.MultiProjectTest do
       """)
 
       dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(base)
-      assert length(dirs) == 1
+      assert dirs == [base]
 
       result = ElixirNexus.Indexer.index_directories(dirs)
       assert {:ok, status} = result
@@ -174,7 +174,7 @@ defmodule ElixirNexus.MultiProjectTest do
       """)
 
       dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(base)
-      assert length(dirs) == 2
+      assert dirs == [base]
 
       result = ElixirNexus.Indexer.index_directories(dirs)
       assert {:ok, status} = result

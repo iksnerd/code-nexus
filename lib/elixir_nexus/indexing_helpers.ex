@@ -24,6 +24,32 @@ defmodule ElixirNexus.IndexingHelpers do
   def polyglot_extensions, do: @polyglot_extensions
   def all_indexable_extensions, do: @elixir_extensions ++ Map.keys(@polyglot_extensions)
 
+  @doc """
+  Map a file extension to its language atom, or `:unknown` if unsupported.
+
+  Used for surfacing a per-language file count in the reindex response so users
+  can confirm Astro/Rust/Swift weren't silently skipped.
+  """
+  def language_for_extension(ext) do
+    cond do
+      ext in @elixir_extensions -> :elixir
+      Map.has_key?(@polyglot_extensions, ext) -> Map.fetch!(@polyglot_extensions, ext)
+      true -> :unknown
+    end
+  end
+
+  @doc """
+  Group a list of file paths by language and return `[%{lang: atom, file_count: integer}]`,
+  sorted by descending file_count. Files with unrecognized extensions are excluded.
+  """
+  def count_languages(files) do
+    files
+    |> Enum.group_by(fn path -> language_for_extension(Path.extname(path)) end)
+    |> Map.delete(:unknown)
+    |> Enum.map(fn {lang, paths} -> %{lang: lang, file_count: length(paths)} end)
+    |> Enum.sort_by(& &1.file_count, :desc)
+  end
+
   @indexable_dirs [
     # Elixir/Ruby
     "lib",
@@ -68,16 +94,26 @@ defmodule ElixirNexus.IndexingHelpers do
   ]
 
   @doc """
-  Detect indexable source directories under a base path. Falls back to base path itself.
+  Detect indexable source directories under a base path.
 
-  Search order:
-    1. Top-level source dirs (lib/, src/, app/, ...) — fast path for single-project repos
-    2. If nothing at depth 1, search depth-2 monorepo layout — e.g. council-hub
-       has `channel-plugin/src`, `mcp-server/cmd`, `ui/lib`. We descend one level
-       so monorepos get indexed without the user having to reindex each subproject.
-    3. If nothing at either level, fall back to the base path itself.
+  Default (inclusive-first): returns `[base_path]` and lets `IgnoreFilter` +
+  extension filters decide what to skip. Repos that don't follow `lib/`/`src/`
+  conventions (e.g. `Source/`, `cmd/`, naked file roots) are no longer
+  silently skipped.
+
+  Opt-in curated mode (`NEXUS_INDEX_STRATEGY=curated`): scans for conventional
+  source dirs (`lib`, `src`, `app`, …) at depth 1, then depth 2 for monorepos,
+  falling back to `[base_path]`. Useful for very large monorepos where
+  pre-pruning to known roots is faster than a full walk.
   """
   def detect_indexable_dirs(base_path) do
+    case System.get_env("NEXUS_INDEX_STRATEGY") do
+      "curated" -> curated_or_fallback(base_path)
+      _ -> [base_path]
+    end
+  end
+
+  defp curated_or_fallback(base_path) do
     top_level =
       @indexable_dirs
       |> Enum.map(&Path.join(base_path, &1))

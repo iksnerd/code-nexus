@@ -62,7 +62,7 @@ defmodule ElixirNexus.MCPServer do
       name("search_code")
 
       description(
-        "Hybrid semantic + keyword search ranked by TF-IDF similarity, name matching, and call-graph centrality. Requires reindex first. Better than Grep for intent-based queries (e.g. 'error handling in HTTP client'). Returns [{entity, score}] with file_path, entity_type, start_line, end_line, parameters, calls."
+        "Hybrid semantic + keyword search ranked by TF-IDF similarity, name matching, and call-graph centrality. Requires reindex first — returns an empty list if nothing is indexed in the current Qdrant collection. Better than Grep for intent-based queries (e.g. 'error handling in HTTP client'). Returns [{entity, score}] with file_path, entity_type, start_line, end_line, parameters, calls."
       )
     end
 
@@ -81,7 +81,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_all_callees")
 
       description(
-        "Find all functions/modules called by a given function — understand dependencies before modifying. Name matching is case-insensitive and supports short names (e.g. 'embed_batch' matches 'ElixirNexus.EmbeddingModel.embed_batch'). Returns resolved entities (file_path, start_line, entity_type) or unresolved names for external calls."
+        "Find all functions/modules called by a given function — understand dependencies before modifying. Requires reindex first; returns an empty list if the entity isn't in the indexed call graph. Name matching is case-insensitive and supports short names (e.g. 'embed_batch' matches 'ElixirNexus.EmbeddingModel.embed_batch'). Returns resolved entities (file_path, start_line, entity_type) or unresolved names for external calls."
       )
     end
 
@@ -100,7 +100,7 @@ defmodule ElixirNexus.MCPServer do
       name("analyze_impact")
 
       description(
-        "Transitive blast radius — walks callers-of-callers up to `depth` levels to find everything affected by a change. Use BEFORE modifying a function to understand what could break (Grep only finds direct references). Returns {root, depth, total_affected, affected_files, impact_tree}."
+        "Transitive blast radius — walks callers-of-callers up to `depth` levels to find everything affected by a change. Use BEFORE modifying a function to understand what could break (Grep only finds direct references). Requires reindex first; returns an empty tree if the entity isn't in the indexed call graph. Returns {root, depth, total_affected, affected_files, impact_tree}."
       )
     end
 
@@ -119,7 +119,7 @@ defmodule ElixirNexus.MCPServer do
       name("get_community_context")
 
       description(
-        "Answer 'what other files should I read or edit alongside this one?' — finds files that call into or are called from the given file via AST call-graph edges. Use when starting work in an unfamiliar file to surface related context. Returns {file, coupled_files} sorted by coupling strength with connection details."
+        "Answer 'what other files should I read or edit alongside this one?' — finds files that call into or are called from the given file via AST call-graph edges. Use when starting work in an unfamiliar file to surface related context. Requires reindex first; returns an empty coupled_files list if the file isn't in the indexed graph. Returns {file, coupled_files} sorted by coupling strength with connection details."
       )
     end
 
@@ -138,7 +138,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_all_callers")
 
       description(
-        "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. Returns caller entities with file_path, entity_type, start_line."
+        "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Requires reindex first; returns an empty list if the entity isn't in the indexed call graph. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. Returns caller entities with file_path, entity_type, start_line."
       )
     end
 
@@ -157,7 +157,7 @@ defmodule ElixirNexus.MCPServer do
       name("get_graph_stats")
 
       description(
-        "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, and top connected modules. No arguments needed."
+        "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, top connected modules, and project_path. Returns zeros / empty distributions when nothing is indexed yet (run reindex first). No arguments needed."
       )
     end
 
@@ -173,7 +173,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_module_hierarchy")
 
       description(
-        "Find a module's parents (uses/implements) and children (contained functions). Use to understand API surface and behavioural contracts (e.g. 'what callbacks does this GenServer implement?'). Returns {name, file_path, parents, children} with resolution status."
+        "Find a module's parents (uses/implements) and children (contained functions). Use to understand API surface and behavioural contracts (e.g. 'what callbacks does this GenServer implement?'). Requires reindex first; returns empty parents/children if the module isn't in the indexed graph. Returns {name, file_path, parents, children} with resolution status."
       )
     end
 
@@ -191,7 +191,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_dead_code")
 
       description(
-        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Optionally filter by file path prefix. Complement with analyze_impact to verify transitively. Returns {dead_functions, total_public, dead_count}."
+        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Requires a fully reindexed call graph; returns an empty dead_functions list if nothing is indexed. False positives are possible for entry points (CLI mains, route handlers) called from outside the indexed code — verify with analyze_impact before deleting. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
       )
     end
 
@@ -212,7 +212,7 @@ defmodule ElixirNexus.MCPServer do
       name("reindex")
 
       description(
-        "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Auto-detects source dirs (lib/, src/, app/, components/, etc.). Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java. Returns {indexed_files, total_chunks}. On failure, lists available workspace projects."
+        "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Indexes the project root inclusively, applying .gitignore + .nexusignore + the built-in deny-list. Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java, Ruby. Returns {indexed_files, total_chunks, languages: [{lang, file_count}], skipped: {default_deny_dirs, gitignore_dirs, nexusignore_dirs, default_deny_files, gitignore_files, nexusignore_files, unsupported_extension}}. The skipped breakdown lets you debug ignore rules — if your .nexusignore patterns aren't excluding what you expect, the counts will show it. On failure, lists available workspace projects."
       )
     end
 
@@ -386,6 +386,8 @@ defmodule ElixirNexus.MCPServer do
                   %{
                     indexed_files: status.indexed_files,
                     total_chunks: status.total_chunks,
+                    languages: Map.get(status, :languages, []),
+                    skipped: Map.get(status, :skipped, %{}),
                     directories: dirs,
                     project_path: display_path
                   }
@@ -461,9 +463,7 @@ defmodule ElixirNexus.MCPServer do
   end
 
   def handle_tool_call("get_status", _args, state) do
-    current_project =
-      Map.get(state, :project_path) ||
-        Application.get_env(:elixir_nexus, :current_project_path)
+    current_project = current_project_path(state)
 
     qdrant =
       case ElixirNexus.QdrantClient.health_check() do
@@ -497,11 +497,7 @@ defmodule ElixirNexus.MCPServer do
 
     case ElixirNexus.Search.get_graph_stats() do
       {:ok, stats} ->
-        project_path =
-          Map.get(state, :project_path) ||
-            Application.get_env(:elixir_nexus, :current_project_path)
-
-        ResponseFormat.json_reply(Map.put(stats, :project_path, project_path), state)
+        ResponseFormat.json_reply(Map.put(stats, :project_path, current_project_path(state)), state)
 
       {:error, reason} ->
         {:error, "Graph stats failed: #{inspect(reason)}", state}
@@ -585,6 +581,30 @@ defmodule ElixirNexus.MCPServer do
 
   def handle_tool_call(name, _args, state) do
     {:error, "Unknown tool: #{name}", state}
+  end
+
+  # Resolve the current project path with three fallbacks so get_graph_stats
+  # and get_status never return null when *something* is indexed:
+  #   1. session-scoped state (set by the most recent reindex in this MCP session)
+  #   2. application env (set by reindex across sessions in the same BEAM)
+  #   3. derived from the active Qdrant collection name (covers cold sessions)
+  defp current_project_path(state) do
+    Map.get(state, :project_path) ||
+      Application.get_env(:elixir_nexus, :current_project_path) ||
+      project_from_active_collection()
+  end
+
+  defp project_from_active_collection do
+    case ElixirNexus.QdrantClient.active_collection() do
+      nil -> nil
+      "" -> nil
+      "nexus_" <> rest -> rest
+      other -> other
+    end
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
   end
 
   defp busy_message(requested_path) do

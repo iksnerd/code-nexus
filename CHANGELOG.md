@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.6.0
+- **Inclusive-first source-dir detection** (#4) — `detect_indexable_dirs/1` now returns `[base_path]` by default and lets `IgnoreFilter` + extension filters do the pruning. Repos that don't follow `lib`/`src`/`app` conventions (e.g. `Source/`, naked file roots) are no longer silently skipped. Set `NEXUS_INDEX_STRATEGY=curated` to opt into the previous curated-dir fast-path for very large monorepos.
+- **`/health` endpoint** (#9) — `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` JSON with HTTP 200 when all deps are healthy and 503 otherwise. Wire it into your own healthchecks for richer container status than the default TCP probe.
+- **`languages` in reindex response** (#10) — reindex now reports `languages: [{lang, file_count}]` so you can confirm which languages were actually picked up (Astro/Rust/Swift no longer silently skipped).
+- **Skip-stats breakdown in reindex response** (#6) — reindex now reports `skipped: {default_deny_dirs, gitignore_dirs, nexusignore_dirs, default_deny_files, gitignore_files, nexusignore_files, unsupported_extension}` so you can debug ignore rules without guessing. `IgnoreFilter` is refactored to track each pattern by source (`:default`/`:gitignore`/`:nexusignore`) via the new `classify_dir/2` and `classify_file/2` functions; the boolean wrappers (`ignored_dir?/2`, `ignored_file?/2`) remain for compat.
+- **Fix `.gitignore`/`.nexusignore` `dir/` patterns silently dropped** (#6) — patterns ending in `/` were rejected by `simple_dir_pattern?` because of the trailing slash, then also failed the glob check, getting dropped from both lists. Pre-strip the trailing slash so `build/` and `build` classify identically. Was masked previously by the default deny-list catching common cases.
+- **`get_graph_stats` `project_path` no longer null** (#8) — a third fallback derives the project name from the active Qdrant collection (stripping the `nexus_` prefix) when neither session state nor the Application env is set.
+- **Tool descriptions state preconditions** (#8) — `search_code`, `find_all_callers`, `find_all_callees`, `analyze_impact`, `get_community_context`, `find_module_hierarchy`, `find_dead_code`, and `get_graph_stats` now explicitly state that they require reindex first and what they return when the index is empty. Helps LLM tool selection avoid running graph queries against a cold index.
+- **Fix Vector Store en-dash literal** (#11) — `lib/elixir_nexus_web/live/vectors_live.ex` rendered `–` verbatim in the table row and detail modal because HEEx doesn't process escapes outside Elixir code blocks. Replaced with `&ndash;`.
+
+## v1.5.1
+- **Fix `get_status` indexed flag** — was always `false` for new MCP sessions even when the cache was populated; now uses `ChunkCache.count() > 0` as a fallback.
+
+## v1.5.0
+- **`.nexusignore` + `.gitignore` glob support** — file-level filtering with pre-compiled regexes; expanded default deny-list.
+- **`get_status` MCP tool** — returns project, Qdrant health, Ollama, collections.
+- **Single-project workspace auto-default** — `reindex` with no args picks the only mounted project automatically.
+
 ## v1.4.11
 - **Fix function definitions leaking into calls lists** (`relationship_extractor.ex`) — `walk_calls` skipped `:def/:defp/:defmacro` forms but still recursed into the function signature `{:func_name, meta, [params]}`, which matches the unqualified-call AST pattern. Every function *defined* in a module was being added to the module entity's calls list, causing false positives in `find_all_callers` (e.g. the defining module appearing as a caller of its own functions). Fix: skip `args[0]` (the signature) when recursing into def forms.
 - **Fix `GraphCache.find_callers` substring matching** (`graph_cache.ex`) — used `String.contains?` instead of exact/suffix matching, so short names like `get` or `info` matched far too many callers. Now aligned with `RelationshipGraph.find_callers` exact/suffix logic.

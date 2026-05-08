@@ -129,7 +129,7 @@ defmodule ElixirNexus.VectorsLive.Index do
                 <%= shorten_path(point.payload["file_path"]) %>
               </td>
               <td class="px-4 py-3 text-slate-500 text-sm">
-                <%= point.payload["start_line"] %>\u2013<%= point.payload["end_line"] %>
+                <%= point.payload["start_line"] %>&ndash;<%= point.payload["end_line"] %>
               </td>
               <td class="px-4 py-3 text-slate-500 text-sm">
                 <%= point.payload["visibility"] || "\u2014" %>
@@ -190,7 +190,7 @@ defmodule ElixirNexus.VectorsLive.Index do
               </div>
               <div>
                 <p class="text-slate-400 text-xs uppercase mb-1">Lines</p>
-                <p class="text-white text-sm"><%= @detail_point["payload"]["start_line"] %> \u2013 <%= @detail_point["payload"]["end_line"] %></p>
+                <p class="text-white text-sm"><%= @detail_point["payload"]["start_line"] %> &ndash; <%= @detail_point["payload"]["end_line"] %></p>
               </div>
               <div>
                 <p class="text-slate-400 text-xs uppercase mb-1">Visibility</p>

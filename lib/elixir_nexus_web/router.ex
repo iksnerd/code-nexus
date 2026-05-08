@@ -32,6 +32,7 @@ defmodule ElixirNexus.Router do
   scope "/", ElixirNexus do
     pipe_through(:api)
     get("/metrics", MetricsController, :index)
+    get("/health", HealthController, :index)
   end
 
   scope "/api", ElixirNexus.API do

@@ -96,4 +96,66 @@ defmodule ElixirNexus.IgnoreFilterTest do
       assert IgnoreFilter.ignored?("/path/to/.secret", filter)
     end
   end
+
+  describe "classify_dir/2" do
+    test "tags default deny-list dirs with :default" do
+      filter = IgnoreFilter.load(@test_dir)
+      assert IgnoreFilter.classify_dir("node_modules", filter) == {:ignored, :default}
+      assert IgnoreFilter.classify_dir("_build", filter) == {:ignored, :default}
+    end
+
+    test "tags .gitignore-only dirs with :gitignore" do
+      File.write!(Path.join(@test_dir, ".gitignore"), "build/\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir("build", filter) == {:ignored, :gitignore}
+    end
+
+    test "tags .nexusignore-only dirs with :nexusignore" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "Documentation/\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir("Documentation", filter) == {:ignored, :nexusignore}
+    end
+
+    test "nexusignore wins when the same name is in multiple sources" do
+      File.write!(Path.join(@test_dir, ".gitignore"), "shared/\n")
+      File.write!(Path.join(@test_dir, ".nexusignore"), "shared/\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir("shared", filter) == {:ignored, :nexusignore}
+    end
+
+    test "tags dotdirs as :default" do
+      filter = IgnoreFilter.load(@test_dir)
+      assert IgnoreFilter.classify_dir(".hidden", filter) == {:ignored, :default}
+    end
+
+    test "returns :include for normal dirs" do
+      filter = IgnoreFilter.load(@test_dir)
+      assert IgnoreFilter.classify_dir("lib", filter) == :include
+      assert IgnoreFilter.classify_dir("src", filter) == :include
+    end
+  end
+
+  describe "classify_file/2" do
+    test "tags default file patterns with :default" do
+      filter = IgnoreFilter.load(@test_dir)
+      assert IgnoreFilter.classify_file("foo.min.js", filter) == {:ignored, :default}
+      assert IgnoreFilter.classify_file("bar.lock", filter) == {:ignored, :default}
+    end
+
+    test "tags nexusignore-only patterns with :nexusignore" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "*.bak\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_file("foo.bak", filter) == {:ignored, :nexusignore}
+    end
+
+    test "returns :include for normal source files" do
+      filter = IgnoreFilter.load(@test_dir)
+      assert IgnoreFilter.classify_file("server.ex", filter) == :include
+      assert IgnoreFilter.classify_file("page.tsx", filter) == :include
+    end
+  end
 end

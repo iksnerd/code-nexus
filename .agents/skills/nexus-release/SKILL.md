@@ -146,6 +146,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 | Version | Key changes |
 |---------|-------------|
+| v1.6.0  | Inclusive-first `detect_indexable_dirs/1` (set `NEXUS_INDEX_STRATEGY=curated` for old fast-path); `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` (200/503); `reindex` response now includes `languages: [{lang, file_count}]` and `skipped: {default_deny_*, gitignore_*, nexusignore_*, unsupported_extension}`; IgnoreFilter source-tagged via `classify_dir/2`/`classify_file/2`; fix `dir/` patterns being silently dropped from .gitignore/.nexusignore parsing; `get_graph_stats.project_path` falls back to active Qdrant collection name; sharper tool descriptions stating preconditions; fix Vector Store en-dash literal in `vectors_live.ex` |
 | v1.5.1  | Fix `get_status` `indexed` field — was always `false` for new sessions even when cache populated; now uses `ChunkCache.count() > 0` as fallback |
 | v1.5.0  | `.nexusignore` + `.gitignore` glob pattern support (file-level filtering, pre-compiled regexes, expanded default deny list); `get_status` MCP tool (project, Qdrant health, Ollama, collections); single-project workspace auto-default on `reindex` with no args |
 | v1.4.11 | Fix 3 call-graph bugs: function definitions leaking into calls lists (`walk_calls` recursed into def signatures); `GraphCache.find_callers` substring matching causing false positives; duplicate entries in `find_all_callers` after entity refinement |

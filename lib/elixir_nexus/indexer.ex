@@ -81,7 +81,8 @@ defmodule ElixirNexus.Indexer do
       errors: [],
       pending_reply: nil,
       pending_file_count: 0,
-      acked_file_count: 0
+      acked_file_count: 0,
+      skip_stats: empty_skip_stats()
     }
 
     if ChunkCache.count() > 0 do
@@ -107,12 +108,13 @@ defmodule ElixirNexus.Indexer do
     Logger.info("Starting Broadway indexing of directory: #{path}")
 
     case collect_files(path) do
-      {:ok, files} when files != [] ->
-        do_index_files(files, from, state)
-
-      {:ok, []} ->
+      {:ok, [], stats} ->
         clean_state = prepare_reindex(state)
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0}}, clean_state}
+
+        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: stats}}, clean_state}
+
+      {:ok, files, stats} ->
+        do_index_files(files, stats, from, state)
 
       {:error, reason} ->
         Logger.error("Failed to read directory #{path}: #{inspect(reason)}")
@@ -127,23 +129,24 @@ defmodule ElixirNexus.Indexer do
   def handle_call({:index_directories, paths}, from, state) do
     Logger.info("Starting Broadway indexing of directories: #{inspect(paths)}")
 
-    all_files =
-      paths
-      |> Enum.flat_map(fn path ->
+    {all_files, combined_stats} =
+      Enum.reduce(paths, {[], empty_skip_stats()}, fn path, {acc_files, acc_stats} ->
         case collect_files(path) do
-          {:ok, files} -> files
-          {:error, _} -> []
+          {:ok, files, stats} -> {acc_files ++ files, merge_skip_stats(acc_stats, stats)}
+          {:error, _} -> {acc_files, acc_stats}
         end
       end)
-      |> Enum.uniq()
 
-    case all_files do
+    unique_files = Enum.uniq(all_files)
+
+    case unique_files do
       [] ->
         clean_state = prepare_reindex(state)
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0}}, clean_state}
+
+        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: combined_stats}}, clean_state}
 
       files ->
-        do_index_files(files, from, state)
+        do_index_files(files, combined_stats, from, state)
     end
   end
 
@@ -256,11 +259,12 @@ defmodule ElixirNexus.Indexer do
         errors: [],
         pending_reply: nil,
         pending_file_count: 0,
-        acked_file_count: 0
+        acked_file_count: 0,
+        skip_stats: empty_skip_stats()
     }
   end
 
-  defp do_index_files(files, from, state) do
+  defp do_index_files(files, skip_stats, from, state) do
     clean_state = prepare_reindex(state)
     ElixirNexus.IndexingProducer.push(files)
 
@@ -271,13 +275,15 @@ defmodule ElixirNexus.Indexer do
          indexed_files: MapSet.new(files),
          pending_reply: from,
          pending_file_count: length(files),
-         acked_file_count: 0
+         acked_file_count: 0,
+         skip_stats: skip_stats
      }}
   end
 
   defp finish_indexing(state) do
     chunk_count = ChunkCache.count()
     file_count = MapSet.size(state.indexed_files)
+    languages = IndexingHelpers.count_languages(MapSet.to_list(state.indexed_files))
     Logger.info("Broadway pipeline complete: #{file_count} files, #{chunk_count} chunks")
 
     # Rebuild graph cache asynchronously to avoid blocking the Indexer GenServer
@@ -303,48 +309,100 @@ defmodule ElixirNexus.Indexer do
         {:noreply, new_state}
 
       from ->
-        GenServer.reply(from, {:ok, %{indexed_files: file_count, total_chunks: chunk_count}})
+        GenServer.reply(
+          from,
+          {:ok,
+           %{
+             indexed_files: file_count,
+             total_chunks: chunk_count,
+             languages: languages,
+             skipped: state.skip_stats
+           }}
+        )
+
         {:noreply, %{new_state | pending_reply: nil}}
     end
   end
 
-  # Collect all indexable files recursively
+  # Collect all indexable files recursively. Returns the list of file paths
+  # plus a skip-stats breakdown so the reindex response can report what was
+  # filtered out and why.
   defp collect_files(path) do
     filter = IgnoreFilter.load(path)
+    initial_stats = empty_skip_stats()
 
     case File.ls(path) do
       {:ok, entries} ->
-        files = collect_files_recursive(path, entries, filter)
-        {:ok, files}
+        {files, stats} = collect_files_recursive(path, entries, filter, [], initial_stats)
+        {:ok, files, stats}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp collect_files_recursive(base_path, entries, filter) do
-    Enum.flat_map(entries, fn entry ->
+  defp collect_files_recursive(base_path, entries, filter, acc_files, acc_stats) do
+    Enum.reduce(entries, {acc_files, acc_stats}, fn entry, {files, stats} ->
       full_path = Path.join(base_path, entry)
 
-      if File.dir?(full_path) do
-        if IgnoreFilter.ignored_dir?(entry, filter) do
-          []
-        else
-          case File.ls(full_path) do
-            {:ok, sub_entries} -> collect_files_recursive(full_path, sub_entries, filter)
-            {:error, _} -> []
-          end
-        end
-      else
-        ext = Path.extname(entry)
+      cond do
+        File.dir?(full_path) ->
+          case IgnoreFilter.classify_dir(entry, filter) do
+            :include ->
+              case File.ls(full_path) do
+                {:ok, sub_entries} ->
+                  collect_files_recursive(full_path, sub_entries, filter, files, stats)
 
-        if indexable_extension?(ext) and not IgnoreFilter.ignored_file?(entry, filter) do
-          [full_path]
-        else
-          []
-        end
+                {:error, _} ->
+                  {files, stats}
+              end
+
+            {:ignored, source} ->
+              # A skipped directory contributes one count per source. We don't
+              # walk the subtree to estimate file counts since that would defeat
+              # the point of skipping it.
+              {files, bump(stats, dir_key(source))}
+          end
+
+        true ->
+          ext = Path.extname(entry)
+
+          if indexable_extension?(ext) do
+            case IgnoreFilter.classify_file(entry, filter) do
+              :include -> {[full_path | files], stats}
+              {:ignored, source} -> {files, bump(stats, file_key(source))}
+            end
+          else
+            {files, bump(stats, :unsupported_extension)}
+          end
       end
     end)
+  end
+
+  defp empty_skip_stats do
+    %{
+      default_deny_dirs: 0,
+      gitignore_dirs: 0,
+      nexusignore_dirs: 0,
+      default_deny_files: 0,
+      gitignore_files: 0,
+      nexusignore_files: 0,
+      unsupported_extension: 0
+    }
+  end
+
+  defp dir_key(:default), do: :default_deny_dirs
+  defp dir_key(:gitignore), do: :gitignore_dirs
+  defp dir_key(:nexusignore), do: :nexusignore_dirs
+
+  defp file_key(:default), do: :default_deny_files
+  defp file_key(:gitignore), do: :gitignore_files
+  defp file_key(:nexusignore), do: :nexusignore_files
+
+  defp bump(stats, key), do: Map.update!(stats, key, &(&1 + 1))
+
+  defp merge_skip_stats(a, b) do
+    Map.merge(a, b, fn _, va, vb -> va + vb end)
   end
 
   defp indexable_extension?(ext) do

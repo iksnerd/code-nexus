@@ -130,7 +130,10 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
       assert decoded["project_path"] == "/workspace/my-project"
     end
 
-    test "project_path is nil when not yet indexed" do
+    test "project_path falls back to active Qdrant collection when state and env are unset" do
+      # Issue #8: get_graph_stats should never return nil project_path when *something*
+      # is indexed. Final fallback derives the project name from the active collection
+      # (stripping the `nexus_` prefix).
       Application.delete_env(:elixir_nexus, :current_project_path)
       state = %{project_root: File.cwd!()}
 
@@ -139,7 +142,9 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
 
       decoded = Jason.decode!(json)
       assert Map.has_key?(decoded, "project_path")
-      assert decoded["project_path"] == nil
+      # In test env the active collection comes from another test's setup; we just
+      # assert it's a non-empty string rather than nil.
+      assert is_binary(decoded["project_path"]) and decoded["project_path"] != ""
     end
 
     test "project_path falls back to Application env when not in state" do
