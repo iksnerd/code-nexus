@@ -189,7 +189,12 @@ defmodule ElixirNexus.IndexingHelpers do
 
   def embed_and_store(chunks) do
     start_time = System.monotonic_time()
-    Logger.info("Embedding and storing #{length(chunks)} chunks in batches of #{@batch_size}...")
+    sub_batch_concurrency = sub_batch_concurrency()
+
+    Logger.info(
+      "Embedding and storing #{length(chunks)} chunks in batches of #{@batch_size} " <>
+        "(sub-batch concurrency: #{sub_batch_concurrency})..."
+    )
 
     try do
       texts = Enum.map(chunks, &ElixirNexus.Chunker.prepare_for_embedding/1)
@@ -200,60 +205,78 @@ defmodule ElixirNexus.IndexingHelpers do
       |> Enum.zip(texts)
       |> Enum.zip(keyword_texts)
       |> Enum.chunk_every(@batch_size)
-      |> Enum.each(fn batch ->
-        batch_texts = Enum.map(batch, fn {{_, text}, _} -> text end)
-        batch_chunks = Enum.map(batch, fn {{chunk, _}, _} -> chunk end)
-        batch_kw_texts = Enum.map(batch, fn {{_, _}, kw} -> kw end)
-
-        embeddings = get_batch_embeddings(batch_texts)
-        sparse_vectors = ElixirNexus.TFIDFEmbedder.sparse_vector_batch(batch_kw_texts)
-
-        points =
-          batch_chunks
-          |> Enum.zip(embeddings)
-          |> Enum.zip(sparse_vectors)
-          |> Enum.map(fn {{chunk, embedding}, sparse_vec} ->
-            chunk_id = chunk.id |> String.slice(0..15) |> String.to_integer(16)
-
-            %{
-              "id" => chunk_id,
-              "vector" => %{
-                "semantic" => embedding,
-                "keywords" => sparse_vec
-              },
-              "payload" => %{
-                "file_path" => chunk.file_path,
-                "entity_type" => Atom.to_string(chunk.entity_type),
-                "name" => chunk.name,
-                "start_line" => chunk.start_line,
-                "end_line" => chunk.end_line,
-                "module_path" => chunk.module_path,
-                "visibility" => chunk.visibility && Atom.to_string(chunk.visibility),
-                "parameters" => chunk.parameters,
-                "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls),
-                "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a),
-                "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains),
-                "content" => chunk.content,
-                "language" => chunk[:language] && Atom.to_string(chunk[:language])
-              }
-            }
-          end)
-
-        case ElixirNexus.QdrantClient.upsert_points(points) do
-          {:ok, _} ->
-            Logger.debug("Stored batch of #{length(points)} chunks")
-
-          {:error, reason} ->
-            Logger.error("Failed to store batch of #{length(points)} chunks: #{inspect(reason)}")
-            :telemetry.execute([:nexus, :qdrant, :upsert_error], %{batch_size: length(points)}, %{reason: reason})
-        end
-      end)
+      |> Task.async_stream(&process_sub_batch/1,
+        max_concurrency: sub_batch_concurrency,
+        ordered: false,
+        timeout: :infinity,
+        on_timeout: :kill_task
+      )
+      |> Stream.run()
 
       duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
       :telemetry.execute([:nexus, :embed_and_store], %{duration_ms: duration_ms, chunk_count: length(chunks)}, %{})
     rescue
       e -> Logger.error("Exception during embedding: #{inspect(e)}")
     end
+  end
+
+  # Embed + sparse-vectorize + Qdrant upsert for one sub-batch (≤ @batch_size chunks).
+  # Runs inside a Task spawned by embed_and_store/1 so multiple sub-batches per
+  # Broadway batch can hit Ollama and Qdrant concurrently.
+  defp process_sub_batch(batch) do
+    batch_texts = Enum.map(batch, fn {{_, text}, _} -> text end)
+    batch_chunks = Enum.map(batch, fn {{chunk, _}, _} -> chunk end)
+    batch_kw_texts = Enum.map(batch, fn {{_, _}, kw} -> kw end)
+
+    embeddings = get_batch_embeddings(batch_texts)
+    sparse_vectors = ElixirNexus.TFIDFEmbedder.sparse_vector_batch(batch_kw_texts)
+
+    points =
+      batch_chunks
+      |> Enum.zip(embeddings)
+      |> Enum.zip(sparse_vectors)
+      |> Enum.map(fn {{chunk, embedding}, sparse_vec} ->
+        chunk_id = chunk.id |> String.slice(0..15) |> String.to_integer(16)
+
+        %{
+          "id" => chunk_id,
+          "vector" => %{
+            "semantic" => embedding,
+            "keywords" => sparse_vec
+          },
+          "payload" => %{
+            "file_path" => chunk.file_path,
+            "entity_type" => Atom.to_string(chunk.entity_type),
+            "name" => chunk.name,
+            "start_line" => chunk.start_line,
+            "end_line" => chunk.end_line,
+            "module_path" => chunk.module_path,
+            "visibility" => chunk.visibility && Atom.to_string(chunk.visibility),
+            "parameters" => chunk.parameters,
+            "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls),
+            "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a),
+            "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains),
+            "content" => chunk.content,
+            "language" => chunk[:language] && Atom.to_string(chunk[:language])
+          }
+        }
+      end)
+
+    case ElixirNexus.QdrantClient.upsert_points(points) do
+      {:ok, _} ->
+        Logger.debug("Stored batch of #{length(points)} chunks")
+
+      {:error, reason} ->
+        Logger.error("Failed to store batch of #{length(points)} chunks: #{inspect(reason)}")
+        :telemetry.execute([:nexus, :qdrant, :upsert_error], %{batch_size: length(points)}, %{reason: reason})
+    end
+  end
+
+  # Configurable sub-batch parallelism. Default 4 — empirically the largest
+  # value that didn't regress Ollama timeouts on Apple Silicon. Tune via
+  # `config :elixir_nexus, :embed_sub_batch_concurrency, N`.
+  defp sub_batch_concurrency do
+    Application.get_env(:elixir_nexus, :embed_sub_batch_concurrency, 4)
   end
 
   @doc "Get embeddings for a batch of texts, falling back to TF-IDF then zeros."

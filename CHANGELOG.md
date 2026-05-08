@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.1
+- **Parallelize embed sub-batches in `IndexingHelpers.embed_and_store/1`** — replaces the sequential `Enum.each` over 96-chunk sub-batches with `Task.async_stream` (default `max_concurrency: 4`, configurable via `config :elixir_nexus, :embed_sub_batch_concurrency`). Ollama benchmarking on Apple Silicon showed ~50 chunks/sec batched throughput vs ~2.3 chunks/sec end-to-end indexing — the gap was the sequential sub-batch loop forcing Ollama into one-at-a-time even though the GPU could absorb more. 2-3× expected speedup on files producing >96 chunks.
+
 ## v1.6.0
 - **Inclusive-first source-dir detection** (#4) — `detect_indexable_dirs/1` now returns `[base_path]` by default and lets `IgnoreFilter` + extension filters do the pruning. Repos that don't follow `lib`/`src`/`app` conventions (e.g. `Source/`, naked file roots) are no longer silently skipped. Set `NEXUS_INDEX_STRATEGY=curated` to opt into the previous curated-dir fast-path for very large monorepos.
 - **`/health` endpoint** (#9) — `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` JSON with HTTP 200 when all deps are healthy and 503 otherwise. Wire it into your own healthchecks for richer container status than the default TCP probe.
