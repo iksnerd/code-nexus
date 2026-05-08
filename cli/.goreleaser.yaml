@@ -9,7 +9,7 @@ builds:
     main: .
     binary: nexus
     ldflags:
-      - -s -w -X github.com/iksnerd/elixir-nexus/cli/cmd.Version={{ .Tag }}
+      - -s -w -X github.com/iksnerd/code-nexus/cli/cmd.Version={{ .Tag }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -45,18 +45,18 @@ release:
 
     **macOS (Apple Silicon)**
     ```bash
-    curl -L https://github.com/iksnerd/elixir-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_arm64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_arm64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```
 
     **macOS (Intel)**
     ```bash
-    curl -L https://github.com/iksnerd/elixir-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_amd64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_darwin_amd64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```
 
     **Linux (amd64)**
     ```bash
-    curl -L https://github.com/iksnerd/elixir-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_linux_amd64.tar.gz | tar xz
+    curl -L https://github.com/iksnerd/code-nexus/releases/download/{{ .Tag }}/nexus_{{ .Tag }}_linux_amd64.tar.gz | tar xz
     sudo mv nexus /usr/local/bin/
     ```
