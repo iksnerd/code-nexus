@@ -129,39 +129,15 @@ Add to your project's `.mcp.json`:
 
 The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-only).
 
+
+[github.com/iksnerd/code-nexus](https://github.com/iksnerd/code-nexus)
+
 ## Tags
 
-- `latest` — current release (v1.5.1)
-- `v1.5.1` — fix `get_status` reporting `indexed: false` for new sessions when cache already populated
-- `v1.5.0` — `.nexusignore` + `.gitignore` glob support; `get_status` MCP tool; single-project workspace auto-default; expanded default deny list
-- `v1.4.2` — Dockerfile: `MIX_ENV=prod` build + `mix phx.digest`; fixes missing static manifest on prod image startup
-- `v1.4.1` — block `/app` indexing in Docker mode, filter test collections from UI, Go dead-code false-positive fix, skill bundling tests
-- `v1.4.0` — Prometheus metrics at `GET /metrics` (search latency, indexing throughput, Qdrant ops, BEAM VM stats)
-- `v1.3.5` — OSS prep: untrack Rust build artifacts, `MIX_ENV: prod` in docker-compose, fix `.claude/skills` symlink; docs cleanup; CI fix for test collection race condition
-- `v1.3.4` — fix skills wiped at runtime by dev-mode code reload; `MIX_ENV: prod` in docker-compose
-- `v1.3.1` — restrict MCP-exposed skills to user-facing client guides; three new client skills (search recipes, refactoring workflow, onboarding)
-- `v1.3.0` — skills exposed as MCP resources (`nexus://skill/<name>`), embedded at compile time
-- `v1.2.9` — image catch-up release (rolls up v1.2.8 fixes)
-- `v1.2.7` — add Go convention dirs (`cmd/`, `internal/`, `pkg/`) to source detection
-- `v1.2.5` — monorepo source-dir detection (depth-2 fallback for multi-subproject repos)
-- `v1.2.2` — single-project workspace mounts; workspace slots extended to 5
-- `v1.2.0` — default model switched to `embeddinggemma:300m`; fix concurrency race in collection switch; fix cold-start Ollama timeouts
-- `v1.1.0` — multi-workspace Docker mounts (`WORKSPACE_2`/`WORKSPACE_3`), bare project name resolution across all mounts
-- `v1.0.5` — fix Qdrant test collection leak, test splits, qdrant_client.ex reorganisation, 20 new QdrantClient tests (725 total)
-- `v1.0.4` — fix dashboard broken LiveView (missing vendor JS in Docker), static asset tests, graph page tests, test collection cleanup
-- `v1.0.3` — rename container `elixir_nexus` → `code_nexus`
-- `v1.0.2` — fix `load_resources` entity type display, 13 new resource tests
-- `v1.0.1` — internal refactor: split large source/test files into focused modules
-- `v1.0.0` — server renamed to `code-nexus`, directive metadata, tsconfig alias resolution, `OLLAMA_MODEL` env var, graph noise filter extended
-- `v0.9.0` — MCP resources, `load_resources` fallback tool, dynamic codebase knowledge
-- `v0.8.0` — concurrent reads, caller refinement, fuzzy callees, `@/` alias resolution
-- `v0.7.1` — Qdrant test collection cleanup
-- `v0.7.0` — skills-based review fixes, Broadway error handling, ETS crash safety
-- `v0.6.0` — CI fixes, callers line info, project_path tracking, Docker multi-stage build (588MB)
-- `v0.5.0` — D3 graph visualization, README overhaul
-- `v0.4.0` — JSX call edges, dead code convention filter, graph noise filter
-- `v0.3.0` — file_path resolution, centrality scoring, dead code conventions
-- `v0.2.0` — CI/CD, Streamable HTTP, Ollama embeddings, Go support
+`latest` tracks the most recent stable release. Specific versions are
+available as `vX.Y.Z` tags. See the [Docker Hub repository page](https://hub.docker.com/r/iksnerd/code-nexus/tags)
+for all tags, and the [GitHub tags page](https://github.com/iksnerd/code-nexus/tags)
+or `git log` for what each one shipped.
 
 ## Source
 

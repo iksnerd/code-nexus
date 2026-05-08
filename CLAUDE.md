@@ -168,7 +168,23 @@ Key node types that must be included:
 
 ### Source directory detection
 
-`IndexingHelpers.detect_indexable_dirs/1` checks for: lib, src, app, pages, components, utils, packages, services, infrastructure, repositories, core, hooks, api, modules, controllers, models, views.
+`IndexingHelpers.detect_indexable_dirs/1` returns `[base_path]` by default and lets `IgnoreFilter` (`.gitignore` + `.nexusignore` + the built-in deny-list) prune the walk. Repos that don't follow `lib/`/`src/`/`app/` conventions are not silently skipped.
+
+Set `NEXUS_INDEX_STRATEGY=curated` to opt into the legacy curated-fast-path that scans only `lib`, `src`, `app`, `pages`, `components`, `utils`, `packages`, `services`, `infrastructure`, `repositories`, `core`, `hooks`, `api`, `modules`, `controllers`, `models`, `views`, `cmd`, `internal`, `pkg` — useful for very large monorepos where pre-pruning is faster than a full walk.
+
+### Embedding pipeline tuning
+
+| Knob | Default | Where | Why |
+|------|---------|-------|-----|
+| `@batch_size` (chunks per Ollama call) | 96 | `IndexingHelpers` | Larger batches saturate Ollama; past 96 hit diminishing returns (v1.4.9). |
+| `@max_content_chars` (truncate before embed) | 4000 | `Chunker` | embeddinggemma's 2048-token context. Truncation is for embedding only — full content stays in payload + sparse vector (v1.7.0). |
+| `:embed_sub_batch_concurrency` | 2 | App env | `Task.async_stream` parallelism inside `embed_and_store/1`. Combined with Broadway's `concurrency: 2` = 4 simultaneous Ollama calls. Higher reproduces the v1.4.6 Ollama-overload regression. |
+| Broadway `embed_and_store.concurrency` | 2 | `IndexingPipeline` | Cap from v1.4.6 — prevents Ollama timeouts under concurrent load. |
+
+### Health & observability
+
+- `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` JSON; HTTP 200 when all deps healthy, 503 otherwise (v1.6.0).
+- `GET /metrics` exposes Prometheus telemetry (v1.4.0). Note: `:summary`-typed metrics currently get dropped by `telemetry_metrics_prometheus_core` — convert to `:distribution` if you need histogram data exposed.
 
 ### Telemetry events
 
