@@ -34,10 +34,13 @@ Follow semver:
 
 ## 3 — Update docs (if needed)
 
-- `README.md` changelog section — add entry for the new version
 - `docs/DOCKERHUB.md` — update if image size, env vars, or setup changed
 - `CLAUDE.md` — update if architecture, build steps, or key files changed
 - `.agents/skills/nexus-release/SKILL.md` — update version history table
+
+The version-history table at the bottom of this skill is the canonical
+release log. Do NOT maintain a separate `CHANGELOG.md` or `README.md`
+changelog section — they drift and duplicate this one.
 
 ## 4 — Commit
 
