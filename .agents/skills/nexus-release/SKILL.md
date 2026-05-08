@@ -142,55 +142,10 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 | `docker-compose.yml` | Port, env vars, and image reference current |
 | `.github/workflows/ci.yml` | Excluded tags (`@tag :nif`, `@tag :file_watcher`) still valid |
 | `priv/static/js/` | Vendor JS (`phoenix.min.js`, `phoenix_live_view.min.js`) must be git-tracked (`git ls-files priv/static/`) — they're in `.gitignore` so won't auto-stage |
-| `README.md` | Changelog entry for new version, test count accurate |
 | `docs/DOCKERHUB.md` | Tags section updated with new version |
 
-## Version history reference
+## Version history
 
-| Version | Key changes |
-|---------|-------------|
-| v1.6.1  | Parallelize embed sub-batches in `IndexingHelpers.embed_and_store/1` via `Task.async_stream` (default `max_concurrency: 4`, configurable). Closes the 20× gap between Ollama batched throughput (~50 chunks/sec) and end-to-end indexing rate (~2.3 chunks/sec) caused by the sequential sub-batch loop |
-| v1.6.0  | Inclusive-first `detect_indexable_dirs/1` (set `NEXUS_INDEX_STRATEGY=curated` for old fast-path); `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` (200/503); `reindex` response now includes `languages: [{lang, file_count}]` and `skipped: {default_deny_*, gitignore_*, nexusignore_*, unsupported_extension}`; IgnoreFilter source-tagged via `classify_dir/2`/`classify_file/2`; fix `dir/` patterns being silently dropped from .gitignore/.nexusignore parsing; `get_graph_stats.project_path` falls back to active Qdrant collection name; sharper tool descriptions stating preconditions; fix Vector Store en-dash literal in `vectors_live.ex` |
-| v1.5.1  | Fix `get_status` `indexed` field — was always `false` for new sessions even when cache populated; now uses `ChunkCache.count() > 0` as fallback |
-| v1.5.0  | `.nexusignore` + `.gitignore` glob pattern support (file-level filtering, pre-compiled regexes, expanded default deny list); `get_status` MCP tool (project, Qdrant health, Ollama, collections); single-project workspace auto-default on `reindex` with no args |
-| v1.4.11 | Fix 3 call-graph bugs: function definitions leaking into calls lists (`walk_calls` recursed into def signatures); `GraphCache.find_callers` substring matching causing false positives; duplicate entries in `find_all_callers` after entity refinement |
-| v1.4.10 | Sharpen `get_community_context` and `find_dead_code` tool descriptions for agent discoverability |
-| v1.4.9  | Increase Ollama batch size 32→96 (fewer HTTP round trips, ~30% faster indexing); `@external_resource "VERSION"` so version bumps auto-recompile without `--force` |
-| v1.4.8  | Fix container crash — runtime Dockerfile stage now copies VERSION from builder (mix.exs calls File.read!("VERSION") at startup) |
-| v1.4.7  | Move version to standalone `VERSION` file — `mix.exs` reads it so version bumps no longer bust the Docker deps cache layer; saves 5-10 min per release build |
-| v1.4.6  | Fix Ollama timeout under concurrent load — Broadway embed batcher capped at 2 concurrent workers (was schedulers/2); recv_timeout raised 60s→180s |
-| v1.4.5  | Fix Phoenix dashboard HTTP 431 (`protocol_options` in config.exs/dev.exs); fix Ollama cold-start mid-index (`keep_alive: "30m"` on all embed requests) |
-| v1.4.4  | Fix MCP HTTP 431 disconnect loop — Dockerfile patches ex_mcp Cowboy `max_header_value_length` 4096→32768 so Claude Code's large headers don't trigger repeated disconnects |
-| v1.4.3  | Fix active collection mismatch on startup (auto-resolve to first Qdrant collection); NavHook defensive realignment; graph auto-refresh on MCP switch; search results show active project; Vectors collection name fix; nil guard on delete-last-collection |
-| v1.4.2  | Dockerfile: build with `MIX_ENV=prod` + `mix phx.digest` — fixes missing static manifest when running prod image |
-| v1.4.1  | Block `/app` indexing in Docker mode (MCP + REST); filter `_test` collections from UI; Go dead-code Test*/Benchmark* filter; skill bundling tests; `make docker.publish.fresh` |
-| v1.4.0  | Prometheus metrics at `GET /metrics` — all nexus telemetry events + BEAM VM stats via `telemetry_metrics_prometheus_core` |
-| v1.3.5  | OSS prep: git history cleaned, `MIX_ENV: prod` in docker-compose, `.claude/skills` symlink fixed; CI test collection race condition fixed |
-| v1.3.4  | Fix dev-mode code reloader wiping skill content at runtime (`COPY .agents` added to runtime stage so re-evaluated `@skills_dir` finds the source). Final fix in the v1.3.x skill-bundling chain. |
-| v1.3.3  | Fix `.dockerignore *.md` blocking `SKILL.md` from build context (added `!.agents/**/*.md` exception) |
-| v1.3.2  | First attempt to ship `.agents/` in image — added `COPY .agents .agents` to builder (incomplete: `.dockerignore` still blocked) |
-| v1.3.1  | Restrict MCP-exposed skills to user-facing `nexus-client-*` only; ship `nexus-client-search-recipes`, `nexus-client-refactoring-workflow`, `nexus-client-onboarding` |
-| v1.3.0  | Skills exposed as MCP resources via `nexus://skill/<name>` + `nexus://skills/index`; compile-time embedding from `.agents/skills/` |
-| v1.2.9  | Image catch-up release (rolled up v1.2.8 + post-tag CI fixes) |
-| v1.2.8  | CI fix: `EmbeddingModel.embed_batch/1` short-circuits in test env (saves ~10min per CI run); slimmed CI triggers (no tag-push) |
-| v1.2.7  | Add Go convention dirs (`cmd/`, `internal/`, `pkg/`) to `@indexable_dirs` so monorepos with Go subprojects index correctly |
-| v1.2.6  | Disambiguate sub-project collection names — `IndexManagement.derive_project_name/2` prefixes parent mount basename for single-project mounts (e.g. `nexus_council_hub__mcp_server` not `nexus_mcp_server`) |
-| v1.2.5  | Monorepo source-dir detection — `detect_indexable_dirs/1` descends to depth 2 when nothing matches at depth 1 |
-| v1.2.4  | Drop boot-time auto-create of default Qdrant collection (was producing a useless `nexus_app` duplicate); test env restores it for setup-free queries |
-| v1.2.3  | Fix collection name for single-project mounts — derive from `display_path` not generic `/workspaceN`; trim trailing underscores |
-| v1.2.2  | Single-project workspace mount support — `resolve_bare_name` matches mount basename when `WORKSPACE_HOST_N` points at a project root |
-| v1.2.1  | Workspace mounts extended to 5 slots (`WORKSPACE_4`/`WORKSPACE_5`); user-friendly "busy" reindex error message naming the running project; quieter boot (`:debug` for expected 409 collection-exists); Docker image build moved from CI to local Makefile (`make docker.publish` multi-arch buildx); healthcheck switched from `curl` to `bash /dev/tcp` |
-| v1.2.0  | Default embedding model switched to `embeddinggemma:300m` (override with `OLLAMA_MODEL`); fix concurrency race where rejected reindex still swapped the active Qdrant collection (`Indexer.busy?/0` pre-check); fix cold-start Ollama timeouts dropping chunks (retries + `warm_up/0` on supervisor start; configurable `:ollama_timeout`/`:ollama_retry_attempts`) |
-| v1.1.0  | Multi-workspace Docker mounts — `WORKSPACE_2`/`WORKSPACE_3` vars + `/workspace2`/`/workspace3` container paths; bare project name resolution across all active mounts |
-| v1.0.5  | Fix Qdrant test collection leak (on_exit cleanup), test splits (mcp_server/relationship_graph/indexer → 8 files), qdrant_client.ex domain sections, 20 new QdrantClient tests; 725 tests |
-| v1.0.4  | Fix dashboard broken LiveView — vendor JS files (`phoenix.min.js`, `phoenix_live_view.min.js`) missing from Docker image; add static asset and graph_live tests; test collection cleanup via `ExUnit.after_suite` |
-| v1.0.2  | Fix `load_resources` resource generators — entity types showing as `"unknown"` due to `"type"` vs `"entity_type"` key mismatch in GraphCache nodes; 13 new resource tests |
-| v1.0.1  | Internal refactor — `queries.ex`, `mcp_server.ex`, `javascript_extractor.ex`, `go_extractor.ex` each split into focused sub-modules; 5 large test files split into 28; direct unit tests for `EntityResolution` and `PathResolution`; 714 tests |
-| v1.0.0  | Server renamed to `code-nexus`, `"use client"`/`"use server"` directive metadata, tsconfig alias resolution, `OLLAMA_MODEL` env var, extended graph noise filter, reindex no-path warning, 3 new project-switching tests |
-| v0.9.0  | MCP resources (4 resources + load_resources fallback tool), dynamic codebase knowledge from ETS |
-| v0.8.0  | Concurrent QdrantClient reads, cross-project isolation, caller refinement to enclosing function, fuzzy callees, @/ alias resolution, reindex warning |
-| v0.7.1  | Qdrant test collection cleanup, `delete_collection/1` added |
-| v0.7.0  | 8 OTP/code quality fixes, Broadway error handling, ETS ownership, 15 agent skills |
-| v0.6.0  | file_path null fix, project_path in stats, Docker 3.28GB → 588MB, CI green |
-| v0.5.0  | D3 force-directed graph visualization |
-| v0.2.0  | CI/CD, Makefile, formatter, Docker Hub publish |
+`git log --oneline --tags` and the body of each `vX.Y.Z` tag commit are the
+source of truth for what shipped. Don't maintain a changelog table here — it
+drifts from git, and we already have the canonical history one `git log` away.

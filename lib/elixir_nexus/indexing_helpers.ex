@@ -272,11 +272,14 @@ defmodule ElixirNexus.IndexingHelpers do
     end
   end
 
-  # Configurable sub-batch parallelism. Default 4 — empirically the largest
-  # value that didn't regress Ollama timeouts on Apple Silicon. Tune via
-  # `config :elixir_nexus, :embed_sub_batch_concurrency, N`.
+  # Configurable sub-batch parallelism. Default 2 — empirically the largest
+  # value that didn't regress Ollama timeouts. Combined with Broadway's
+  # `embed_and_store.concurrency: 2` that's up to 4 simultaneous Ollama
+  # batches. Pushing higher (e.g. 4 sub × 2 Broadway = 8) reproduces the
+  # v1.4.6 regression where Ollama hangs and every request hits the 180s
+  # recv_timeout. Tune via `config :elixir_nexus, :embed_sub_batch_concurrency, N`.
   defp sub_batch_concurrency do
-    Application.get_env(:elixir_nexus, :embed_sub_batch_concurrency, 4)
+    Application.get_env(:elixir_nexus, :embed_sub_batch_concurrency, 2)
   end
 
   @doc "Get embeddings for a batch of texts, falling back to TF-IDF then zeros."
