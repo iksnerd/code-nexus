@@ -36,7 +36,7 @@ changelog:
 release:
   github:
     owner: iksnerd
-    name: elixir-nexus
+    name: code-nexus
   name_template: "CLI {{ .Tag }}"
   header: |
     ## CodeNexus CLI {{ .Tag }}
