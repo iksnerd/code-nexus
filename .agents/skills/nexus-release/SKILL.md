@@ -36,11 +36,9 @@ Follow semver:
 
 - `docs/DOCKERHUB.md` — update if image size, env vars, or setup changed
 - `CLAUDE.md` — update if architecture, build steps, or key files changed
-- `.agents/skills/nexus-release/SKILL.md` — update version history table
+- `cli/README.md` — update if CLI commands, flags, or install steps changed
 
-The version-history table at the bottom of this skill is the canonical
-release log. Do NOT maintain a separate `CHANGELOG.md` or `README.md`
-changelog section — they drift and duplicate this one.
+Do NOT maintain a separate `CHANGELOG.md` — use git log.
 
 ## 4 — Commit
 
@@ -62,10 +60,16 @@ git push origin vX.Y.Z
 ## 6 — Wait for CI green
 
 ```bash
-gh run list --limit 1 --repo iksnerd/code-nexus
+gh run list --limit 3 --repo iksnerd/code-nexus
 ```
 
+Two workflows run on tag push:
+- **CI** — Elixir tests (must pass before Docker build)
+- **Release CLI** — GoReleaser builds `nexus` binaries and publishes a GitHub Release automatically
+
 CI must show `completed / success` before building the Docker image. If it fails, fix the issue, push a new commit, and wait again. Never publish a Docker image from a failing commit.
+
+The CLI GitHub Release is created automatically by GoReleaser — no manual step needed.
 
 ## 7 — Build and push Docker image (multi-arch)
 
@@ -143,6 +147,7 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 | `.github/workflows/ci.yml` | Excluded tags (`@tag :nif`, `@tag :file_watcher`) still valid |
 | `priv/static/js/` | Vendor JS (`phoenix.min.js`, `phoenix_live_view.min.js`) must be git-tracked (`git ls-files priv/static/`) — they're in `.gitignore` so won't auto-stage |
 | `docs/DOCKERHUB.md` | Tags section updated with new version |
+| `cli/README.md` | Install URLs use correct tag format |
 
 ## Version history
 
