@@ -74,13 +74,13 @@ The CLI GitHub Release is created automatically by GoReleaser — no manual step
 ## 7 — Build and push Docker image (multi-arch)
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
+docker buildx build --platform linux/arm64 \
   -t iksnerd/code-nexus:vX.Y.Z \
   -t iksnerd/code-nexus:latest \
   --push .
 ```
 
-**Important:** Always build for both `linux/amd64` and `linux/arm64`. Single-arch amd64 images crash under Rosetta on Apple Silicon Macs (telemetry NIF fails). Multi-arch ensures native execution on both Intel and ARM hosts.
+**Note:** We build `linux/arm64` only — the primary deployment target is Apple Silicon Macs. Add `linux/amd64` back if Linux server deployment is needed (it's slow — cross-compilation via QEMU).
 
 The multi-stage Dockerfile handles NIF compilation automatically for each platform.
 
