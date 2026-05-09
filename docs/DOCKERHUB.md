@@ -4,7 +4,7 @@ Code intelligence MCP server — graph-powered semantic search, call graph trave
 
 ## Quick Start
 
-**Prerequisites:** Ollama running on the host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Alternative: set `OLLAMA_MODEL=nomic-embed-text` and pull that model instead (lighter, faster on CPU).
+**Prerequisites:** Ollama running on the host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Alternative: set `OLLAMA_MODEL=nomic-embed-text` and pull that model instead (lighter, faster on CPU). To skip Ollama entirely, set `EMBEDDING_BACKEND=tfidf` — uses local TF-IDF embeddings (~10× faster indexing, no GPU/Ollama needed).
 
 ```bash
 WORKSPACE=~/Documents docker-compose up -d
@@ -105,6 +105,7 @@ Add to your project's `.mcp.json`:
 | `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
 | `OLLAMA_MODEL` | `embeddinggemma:300m` | Ollama embedding model name (768-dim) |
+| `EMBEDDING_BACKEND` | _(unset)_ | Set to `tfidf` to skip Ollama and use local TF-IDF only (~10× faster indexing, no Ollama required) |
 | `WORKSPACE_HOST` | _(unset)_ | Host path mapped to `/workspace` (for path translation) |
 | `WORKSPACE_HOST_2` | _(unset)_ | Host path mapped to `/workspace2` |
 | `WORKSPACE_HOST_3` | _(unset)_ | Host path mapped to `/workspace3` |
