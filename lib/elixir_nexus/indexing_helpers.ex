@@ -284,15 +284,24 @@ defmodule ElixirNexus.IndexingHelpers do
 
   @doc "Get embeddings for a batch of texts, falling back to TF-IDF then zeros."
   def get_batch_embeddings(texts) do
-    case ElixirNexus.EmbeddingModel.embed_batch(texts) do
-      {:ok, embeddings} ->
-        embeddings
+    if tfidf_backend?() do
+      {:ok, embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
+      embeddings
+    else
+      case ElixirNexus.EmbeddingModel.embed_batch(texts) do
+        {:ok, embeddings} ->
+          embeddings
 
-      {:error, ollama_reason} ->
-        Logger.debug("Ollama embedding failed: #{inspect(ollama_reason)}, using TF-IDF")
-        {:ok, embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
-        embeddings
+        {:error, ollama_reason} ->
+          Logger.debug("Ollama embedding failed: #{inspect(ollama_reason)}, using TF-IDF")
+          {:ok, embeddings} = ElixirNexus.TFIDFEmbedder.embed_batch(texts)
+          embeddings
+      end
     end
+  end
+
+  defp tfidf_backend? do
+    System.get_env("EMBEDDING_BACKEND") == "tfidf"
   end
 
   defp parse_with_tree_sitter(file_path, language) do
