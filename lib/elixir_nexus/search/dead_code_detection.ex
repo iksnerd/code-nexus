@@ -76,10 +76,13 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             # called by `go test`, not user code.
             # PascalCase components in convention files are default exports called by the
             # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
+            # shadcn/ui components in `components/ui/` are library primitives — their
+            # exports are intentional API surface, not user-defined call sites.
             (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
-                    (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files)))
+                    (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files) or
+                    shadcn_ui_export?(file_path)))
           end)
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
@@ -132,5 +135,11 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   defp js_or_ts?(lang) do
     String.contains?(lang, "javascript") or String.contains?(lang, "typescript") or
       lang in ["tsx", "jsx"]
+  end
+
+  # Matches shadcn/ui's canonical install path. Covers both bare `components/ui/`
+  # roots and aliased mounts such as `src/components/ui/` or `apps/web/components/ui/`.
+  defp shadcn_ui_export?(file_path) do
+    String.contains?(file_path, "/components/ui/")
   end
 end

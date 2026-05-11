@@ -17,7 +17,10 @@ defmodule ElixirNexus.IndexingHelpers do
     ".go" => :go,
     ".rs" => :rust,
     ".java" => :java,
-    ".rb" => :ruby
+    ".rb" => :ruby,
+    ".kt" => :kotlin,
+    ".kts" => :kotlin,
+    ".swift" => :swift
   }
 
   def elixir_extensions, do: @elixir_extensions

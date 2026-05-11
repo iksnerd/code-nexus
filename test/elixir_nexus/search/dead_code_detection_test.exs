@@ -440,6 +440,89 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
     end
   end
 
+  describe "find_dead_code/1 - shadcn/ui filter" do
+    @shadcn_chunks [
+      # shadcn/ui primitive in canonical components/ui/ path — should be excluded
+      %{
+        id: "shadcn_button",
+        file_path: "/app/components/ui/button.tsx",
+        entity_type: :function,
+        name: "Button",
+        content: "export function Button() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "Button",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :tsx
+      },
+      # shadcn variant — aliased src/components/ui/ path
+      %{
+        id: "shadcn_input_otp",
+        file_path: "/app/src/components/ui/input-otp.tsx",
+        entity_type: :function,
+        name: "InputOTPSlot",
+        content: "export function InputOTPSlot() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "InputOTPSlot",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :tsx
+      },
+      # User-defined component outside components/ui/ — SHOULD still be flagged
+      %{
+        id: "user_component",
+        file_path: "/app/components/dashboard/widget.tsx",
+        entity_type: :function,
+        name: "DashboardWidget",
+        content: "export function DashboardWidget() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "DashboardWidget",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :tsx
+      }
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@shadcn_chunks)
+      GraphCache.rebuild_from_chunks(@shadcn_chunks)
+      :ok
+    end
+
+    test "excludes components/ui/* exports from dead code" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "Button" in dead_names,
+             "shadcn Button in components/ui/ should not be flagged as dead"
+
+      refute "InputOTPSlot" in dead_names,
+             "shadcn InputOTPSlot in src/components/ui/ should not be flagged as dead"
+    end
+
+    test "still flags user components outside components/ui/" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      assert "DashboardWidget" in dead_names,
+             "user-defined component outside components/ui/ should be flagged as dead"
+    end
+  end
+
   describe "find_dead_code/1 - additional convention files" do
     test "not-found.tsx default export excluded from dead code" do
       chunk = %{

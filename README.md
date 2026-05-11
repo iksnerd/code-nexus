@@ -125,7 +125,8 @@ graph TB
         EX[".ex / .exs"]
         JS[".js / .ts / .tsx"]
         PY[".py"]
-        OTHER[".go / .rs / .java"]
+        GORS[".go / .rs / .java"]
+        OTHER[".rb / .kt / .swift"]
     end
 
     subgraph Parsing["Parsing Layer"]
@@ -138,7 +139,9 @@ graph TB
         JSE["JavaScriptExtractor<br/>JS/TS imports, exports, calls"]
         PYE["PythonExtractor<br/>imports, decorators, calls"]
         GOE["GoExtractor<br/>calls, imports, structs"]
-        GE["GenericExtractor<br/>Rust, Java"]
+        RUE["RustExtractor<br/>use, impl, macro calls"]
+        JAE["JavaExtractor<br/>imports, methods, classes"]
+        GE["GenericExtractor<br/>Ruby, Kotlin, Swift"]
     end
 
     subgraph Indexing["Indexing Pipeline (Broadway)"]
@@ -162,9 +165,10 @@ graph TB
     EX --> SR --> RE
     JS --> TS --> JSE
     PY --> TS --> PYE
-    OTHER --> TS --> GOE & GE
+    GORS --> TS --> GOE & RUE & JAE
+    OTHER --> TS --> GE
 
-    RE & JSE & PYE & GOE & GE --> CH
+    RE & JSE & PYE & GOE & RUE & JAE & GE --> CH
     CH --> OL & TFIDF
     OL & TFIDF --> QD
     CH --> CC --> GC
@@ -278,35 +282,40 @@ MCP is served over HTTP (Streamable HTTP at `/mcp`) via Docker. For local develo
 
 Elixir files are parsed via Sourceror (richer metadata). Other languages use Tree-sitter via a Rustler NIF, with language-specific extractors:
 
-| Language | Extension | Parser | Extractor |
-|----------|-----------|--------|-----------|
+| Language | Extensions | Parser | Extractor |
+|----------|------------|--------|-----------|
 | Elixir | `.ex`, `.exs` | Sourceror | RelationshipExtractor |
-| JavaScript | `.js`, `.jsx` | Tree-sitter | JavaScriptExtractor |
+| JavaScript | `.js`, `.jsx`, `.mjs` | Tree-sitter | JavaScriptExtractor |
 | TypeScript | `.ts`, `.tsx` | Tree-sitter | JavaScriptExtractor |
 | Python | `.py` | Tree-sitter | PythonExtractor |
 | Go | `.go` | Tree-sitter | GoExtractor |
+| Rust | `.rs` | Tree-sitter | RustExtractor |
+| Java | `.java` | Tree-sitter | JavaExtractor |
 | Ruby | `.rb` | Tree-sitter | GenericExtractor |
-| Rust | `.rs` | Tree-sitter | GenericExtractor |
-| Java | `.java` | Tree-sitter | GenericExtractor |
+| Kotlin | `.kt`, `.kts` | Tree-sitter | GenericExtractor |
+| Swift | `.swift` | Tree-sitter | GenericExtractor |
 
 **Extractor capabilities:**
 
-| Feature | JS/TS | Python | Go | Generic |
-|---------|-------|--------|----|---------|
-| Functions/classes/methods | Y | Y | Y | Y |
-| Import extraction | Y | Y | Y | Y |
-| Export extraction | Y | - | - | - |
-| Decorator extraction | - | Y | - | - |
-| Call graph | Y | Y | Y | Y |
-| Package-qualified calls | Y | - | Y | - |
-| Receiver methods | - | - | Y | - |
-| Struct/interface extraction | - | - | Y | - |
-| Arrow function classification | Y | - | - | - |
-| Barrel file resolution | Y | - | - | - |
-| Visibility (Go uppercase convention) | - | - | Y | - |
-| Visibility (_private convention) | - | Y | - | - |
+| Feature | JS/TS | Python | Go | Rust | Java | Generic (Ruby/Kotlin/Swift) |
+|---------|-------|--------|----|------|------|---------|
+| Functions/classes/methods | Y | Y | Y | Y | Y | Y |
+| Import extraction | Y | Y | Y | Y | Y | partial |
+| Export extraction | Y | - | - | - | - | - |
+| Decorator extraction | - | Y | - | - | - | - |
+| Call graph | Y | Y | Y | Y | Y | partial |
+| Package-qualified calls | Y | - | Y | Y (`::`) | Y (`.`) | - |
+| Receiver/method extraction | - | - | Y | Y (`impl`) | Y | - |
+| Struct/interface extraction | - | - | Y | Y | Y | - |
+| Macro call detection | - | - | - | Y (`name!`) | - | - |
+| Arrow function classification | Y | - | - | - | - | - |
+| Barrel file resolution | Y | - | - | - | - | - |
+| Visibility (uppercase convention) | - | - | Y | - | - | - |
+| Visibility (`_private` convention) | - | Y | - | - | - | - |
+| Visibility (`pub` modifier) | - | - | - | Y | - | - |
+| Visibility (`public`/`private`/`protected` modifier) | - | - | - | - | Y | - |
 
-Tree-sitter support requires the Rust toolchain. Without it, only Elixir files are indexed.
+The NIF ships pre-built in the Docker image. Local development requires the Rust toolchain to compile the NIF — see `CLAUDE.md` for instructions. Without it, only Elixir files are indexed.
 
 ### Embedding Strategy
 

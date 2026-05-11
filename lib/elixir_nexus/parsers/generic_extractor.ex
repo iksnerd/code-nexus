@@ -15,6 +15,9 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
     struct_item struct_declaration
     interface_declaration type_declaration
     impl_item module_definition
+    method singleton_method class module
+    object_declaration property_declaration
+    protocol_declaration extension_declaration init_declaration
   )
 
   @doc "Extract code entities from a tree-sitter AST."

@@ -5,7 +5,14 @@ defmodule ElixirNexus.TreeSitterParser do
   """
   require Logger
 
-  alias ElixirNexus.Parsers.{JavaScriptExtractor, PythonExtractor, GoExtractor, GenericExtractor}
+  alias ElixirNexus.Parsers.{
+    JavaScriptExtractor,
+    PythonExtractor,
+    GoExtractor,
+    RustExtractor,
+    JavaExtractor,
+    GenericExtractor
+  }
 
   # Language detection by file extension
   @extension_map %{
@@ -19,6 +26,9 @@ defmodule ElixirNexus.TreeSitterParser do
     ".rs" => :rust,
     ".java" => :java,
     ".rb" => :ruby,
+    ".kt" => :kotlin,
+    ".kts" => :kotlin,
+    ".swift" => :swift,
     ".ex" => :elixir,
     ".exs" => :elixir
   }
@@ -62,6 +72,8 @@ defmodule ElixirNexus.TreeSitterParser do
   defp get_extractor(:tsx), do: JavaScriptExtractor
   defp get_extractor(:python), do: PythonExtractor
   defp get_extractor(:go), do: GoExtractor
+  defp get_extractor(:rust), do: RustExtractor
+  defp get_extractor(:java), do: JavaExtractor
   defp get_extractor(_language), do: GenericExtractor
 
   # NIF placeholder — will be replaced by Rustler at compile time if native code is available

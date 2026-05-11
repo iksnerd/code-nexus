@@ -35,6 +35,9 @@ fn get_language(lang: &str) -> Option<tree_sitter::Language> {
         "rust" | "rs" => Some(tree_sitter_rust::LANGUAGE.into()),
         "java" => Some(tree_sitter_java::LANGUAGE.into()),
         "elixir" | "ex" => Some(tree_sitter_elixir::LANGUAGE.into()),
+        "ruby" | "rb" => Some(tree_sitter_ruby::LANGUAGE.into()),
+        "kotlin" | "kt" | "kts" => Some(tree_sitter_kotlin_ng::LANGUAGE.into()),
+        "swift" => Some(tree_sitter_swift::LANGUAGE.into()),
         _ => None,
     }
 }
@@ -221,6 +224,69 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "short_var_declaration"
         || kind == "composite_literal"
         || kind == "lexical_binding"
+        // Rust-specific
+        || kind == "visibility_modifier"
+        || kind == "macro_invocation"
+        || kind == "use_declaration"
+        || kind == "use_list"
+        || kind == "use_as_clause"
+        || kind == "scoped_identifier"
+        || kind == "scoped_use_list"
+        || kind == "scoped_type_identifier"
+        || kind == "field_expression"
+        || kind == "field_identifier"
+        || kind == "function_item"
+        || kind == "impl_item"
+        || kind == "trait_item"
+        || kind == "struct_item"
+        || kind == "enum_item"
+        || kind == "mod_item"
+        || kind == "declaration_list"
+        || kind == "self_parameter"
+        // Ruby-specific
+        || kind == "method"
+        || kind == "singleton_method"
+        || kind == "class"
+        || kind == "module"
+        || kind == "do_block"
+        || kind == "block"
+        || kind == "begin"
+        || kind == "rescue"
+        || kind == "ensure"
+        || kind == "when"
+        || kind == "method_call"
+        || kind == "constant"
+        || kind == "simple_symbol"
+        || kind == "scope_resolution"
+        || kind == "body_statement"
+        || kind == "block_body"
+        // Kotlin-specific (tree-sitter-kotlin-ng)
+        || kind == "function_declaration"
+        || kind == "class_declaration"
+        || kind == "object_declaration"
+        || kind == "property_declaration"
+        || kind == "secondary_constructor"
+        || kind == "primary_constructor"
+        || kind == "class_body"
+        || kind == "function_body"
+        || kind == "call_suffix"
+        || kind == "navigation_suffix"
+        || kind == "navigation_expression"
+        || kind == "import_header"
+        || kind == "package_header"
+        || kind == "type_reference"
+        || kind == "user_type"
+        || kind == "simple_identifier"
+        // Swift-specific
+        || kind == "protocol_declaration"
+        || kind == "extension_declaration"
+        || kind == "init_declaration"
+        || kind == "deinit_declaration"
+        || kind == "subscript_declaration"
+        || kind == "import_declaration"
+        || kind == "type_identifier"
+        || kind == "navigation_suffix"
+        || kind == "value_arguments"
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
