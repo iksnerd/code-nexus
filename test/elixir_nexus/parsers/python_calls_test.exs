@@ -400,6 +400,43 @@ defmodule ElixirNexus.Parsers.PythonCallsTest do
       assert "direct_call" in func.calls
     end
 
+    test "deeply nested call missed by NIF is recovered from content (content-enrichment)" do
+      # Simulates _run_pipeline calling render_variant inside a try/for block —
+      # the NIF depth limit filters it from the AST. Only the import_from_statement
+      # node is present. The content-enrichment pass must add the qualified call.
+      ast =
+        make_node("module",
+          children: [
+            make_node("import_from_statement",
+              start_row: 0,
+              children: [make_node("identifier", text: "render_variant")]
+            ),
+            make_node("function_definition",
+              name: "_run_pipeline",
+              start_row: 2,
+              end_row: 5,
+              children: [
+                make_node("parameters", children: []),
+                # block has NO call node (simulates NIF depth filtering)
+                make_node("block", children: [])
+              ]
+            )
+          ]
+        )
+
+      # Source contains the bare symbol in the function body
+      source =
+        "from meta_ads.postprocess import render_variant\n\ndef _run_pipeline():\n    result = render_variant(ad_id=1)\n    return result"
+
+      entities = PythonExtractor.extract_entities("ad_render.py", ast, source)
+      func = Enum.find(entities, &(&1.name == "_run_pipeline"))
+
+      assert func != nil
+
+      assert "meta_ads.postprocess.render_variant" in func.calls,
+             "content enrichment should add qualified call, got: #{inspect(func.calls)}"
+    end
+
     test "parenthesized multi-line import qualifies calls correctly" do
       # Simulates: from meta_ads.postprocess import (
       #   render_variant,

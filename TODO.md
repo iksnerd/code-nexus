@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.11.3 (Python multi-line parenthesized import fix)
-**Status:** v1.11.3 image live on Docker Hub (arm64), 758 tests green
+**Current version:** v1.11.4 (Python content-enrichment for NIF depth-filtered calls)
+**Status:** v1.11.4 image live on Docker Hub (arm64), 759 tests green
 
 ---
 
@@ -96,6 +96,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-18 (v1.11.4 shipped):** Python extractor: content-enrichment pass for NIF depth-filtered calls — same fix as JS M1 but for Python: after AST extraction, checks each function's source content for bare from-imported symbols and adds the qualified call (mod.sym) when found. Fixes `render_variant` and other deeply nested calls (inside try/for) that the NIF misses at depth 20+. 759 tests.
 
 **2026-05-18 (v1.11.3 shipped):** Python extractor: source-text fallback for parenthesized multi-line `from X import (a, b, c)` imports — `import_list` nodes are filtered by the NIF, so the AST path returned empty symbols; now reads raw source lines from `start_row` to closing `)` to recover them. Verified against `meta-ads-analysis`: `render_variant` callers now resolve correctly.
 

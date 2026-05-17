@@ -22,6 +22,13 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
         %{entity | is_a: Enum.uniq(entity.is_a ++ module_paths)}
       end)
 
+    # Attribute from-imported symbols to the functions that use them.
+    # The NIF's depth limits can prevent deeply nested calls (e.g. inside
+    # try/for blocks) from appearing in the AST. We supplement by checking
+    # each function's source content for bare symbol names and adding the
+    # qualified call (module.symbol) when found.
+    declarations = enrich_calls_from_import_table(declarations, qual_table)
+
     # Create a file-level module entity if there are any imports
     file_entity =
       if module_paths != [] do
@@ -341,6 +348,34 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
     else
       []
     end
+  end
+
+  defp enrich_calls_from_import_table(entities, qual_table) when map_size(qual_table) == 0,
+    do: entities
+
+  defp enrich_calls_from_import_table(entities, qual_table) do
+    Enum.map(entities, fn entity ->
+      if entity.entity_type in [:function, :method] and is_binary(entity.content) and
+           entity.content != "" do
+        existing = MapSet.new(entity.calls)
+
+        extra =
+          Enum.flat_map(qual_table, fn {sym, mod} ->
+            qualified = "#{mod}.#{sym}"
+
+            if not MapSet.member?(existing, qualified) and
+                 Regex.match?(~r/\b#{Regex.escape(sym)}\b/, entity.content) do
+              [qualified]
+            else
+              []
+            end
+          end)
+
+        if extra == [], do: entity, else: %{entity | calls: entity.calls ++ extra}
+      else
+        entity
+      end
+    end)
   end
 
   # Extract the locally-bound symbol names from an import_from_statement node,
