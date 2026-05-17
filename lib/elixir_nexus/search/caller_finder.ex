@@ -39,14 +39,16 @@ defmodule ElixirNexus.Search.CallerFinder do
     # Refine module-level callers to their enclosing function entity where possible,
     # then deduplicate — refinement can produce an ID already present in results.
     refined =
-      case DataFetching.get_all_entities_cached(2000) do
+      case DataFetching.get_all_entities_cached(10_000) do
         {:ok, all_entities} ->
           results
           |> refine_entities_to_functions(entity_name, all_entities)
           |> Enum.uniq_by(& &1.id)
+          |> drop_module_callers_with_function_sibling()
 
         _ ->
           results
+          |> drop_module_callers_with_function_sibling()
       end
 
     {:ok, refined}
@@ -120,5 +122,22 @@ defmodule ElixirNexus.Search.CallerFinder do
           List.first(candidates)
         end
     end
+  end
+
+  # Drop module-type callers when a function/method caller from the same file is
+  # already present. This prevents the file-level module entity (which aggregates
+  # all imports as calls) from appearing alongside its enclosing function.
+  defp drop_module_callers_with_function_sibling(results) do
+    function_files =
+      results
+      |> Enum.filter(fn r ->
+        (r.entity["entity_type"] || "") in ["function", "method"]
+      end)
+      |> MapSet.new(fn r -> r.entity["file_path"] end)
+
+    Enum.reject(results, fn r ->
+      (r.entity["entity_type"] || "") == "module" and
+        MapSet.member?(function_files, r.entity["file_path"])
+    end)
   end
 end
