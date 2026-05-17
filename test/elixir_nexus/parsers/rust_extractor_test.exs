@@ -38,6 +38,7 @@ defmodule ElixirNexus.Parsers.RustExtractorTest do
       func = Enum.find(entities, &(&1.name == "greet"))
 
       assert func != nil
+
       assert "self" in func.parameters,
              "Expected 'self' in params for self_parameter, got: #{inspect(func.parameters)}"
     end

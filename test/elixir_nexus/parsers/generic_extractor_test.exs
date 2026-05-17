@@ -390,6 +390,7 @@ defmodule ElixirNexus.Parsers.GenericExtractorTest do
       assert length(entities) == 1
       entity = hd(entities)
       assert entity.name == "g"
+
       assert entity.entity_type == :variable,
              "property_declaration should be :variable, not :function — got: #{entity.entity_type}"
     end
