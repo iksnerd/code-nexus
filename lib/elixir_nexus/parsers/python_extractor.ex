@@ -8,23 +8,29 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
 
   @doc "Extract code entities from a tree-sitter AST."
   def extract_entities(file_path, ast, source) do
+    {qual_table, module_paths} = analyze_imports(ast, source)
+
     declarations =
       ast
       |> walk_ast(nil, [])
-      |> Enum.map(&to_code_schema(file_path, &1, source))
+      |> Enum.map(&to_code_schema(file_path, &1, source, qual_table))
       |> Enum.reject(&is_nil/1)
 
-    imports = extract_imports(ast)
-
-    # Enrich declarations with import info
+    # Enrich declarations with import module paths
     declarations =
       Enum.map(declarations, fn entity ->
-        %{entity | is_a: Enum.uniq(entity.is_a ++ imports)}
+        %{entity | is_a: Enum.uniq(entity.is_a ++ module_paths)}
       end)
 
-    # Create a file-level module entity if there are imports
+    # Create a file-level module entity if there are any imports
     file_entity =
-      if imports != [] do
+      if module_paths != [] do
+        # Qualified calls: "module_path.symbol" for every from-import
+        imported_calls =
+          qual_table
+          |> Enum.map(fn {sym, mod} -> "#{mod}.#{sym}" end)
+          |> Enum.uniq()
+
         [
           %CodeSchema{
             file_path: file_path,
@@ -35,8 +41,8 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
             end_line: 1,
             parameters: [],
             visibility: :public,
-            calls: extract_imported_names(ast),
-            is_a: imports,
+            calls: imported_calls,
+            is_a: module_paths,
             contains: declarations |> Enum.map(& &1.name) |> Enum.reject(&is_nil/1),
             language: :python
           }
@@ -77,7 +83,7 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
 
   defp walk_ast(_, _, acc), do: acc
 
-  defp to_code_schema(file_path, {node, parent_class}, source) do
+  defp to_code_schema(file_path, {node, parent_class}, source, import_table) do
     kind = node["kind"]
     name = node["name"]
     start_line = (node["start_row"] || 0) + 1
@@ -122,7 +128,7 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
         module_path: parent_class,
         parameters: extract_params(node),
         visibility: visibility,
-        calls: extract_calls(node),
+        calls: extract_calls(node, import_table),
         is_a: extract_bases(node) ++ decorators,
         contains: extract_contains(node),
         language: :python
@@ -152,13 +158,23 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
 
   defp extract_params(_), do: []
 
-  defp extract_calls(%{"children" => children}) do
-    children
-    |> Enum.flat_map(&find_calls/1)
+  defp extract_calls(node, import_table) do
+    node
+    |> do_extract_calls()
+    |> Enum.map(fn call ->
+      case Map.get(import_table, call) do
+        nil -> call
+        mod -> "#{mod}.#{call}"
+      end
+    end)
     |> Enum.uniq()
   end
 
-  defp extract_calls(_), do: []
+  defp do_extract_calls(%{"children" => children}) do
+    Enum.flat_map(children, &find_calls/1)
+  end
+
+  defp do_extract_calls(_), do: []
 
   defp find_calls(%{"kind" => "call", "name" => name}) when is_binary(name), do: [name]
 
@@ -243,6 +259,74 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
 
   defp extract_decorator_name(_), do: nil
 
+  # --- Import analysis (source-text based) ---
+
+  # Returns {qual_table, module_paths}:
+  #   qual_table:   %{local_name => "module.path"} for from-imports
+  #   module_paths: unique list of all imported module paths (for is_a edges)
+  defp analyze_imports(ast, source) do
+    source_lines = String.split(source, "\n")
+
+    ast
+    |> find_nodes(["import_from_statement", "import_statement"])
+    |> Enum.reduce({%{}, []}, fn node, {table, paths} ->
+      case node["kind"] do
+        "import_from_statement" ->
+          mod = extract_module_path_from_source(node, source_lines)
+
+          if mod do
+            syms = extract_import_symbols(node, mod)
+            new_table = Enum.reduce(syms, table, &Map.put(&2, &1, mod))
+            {new_table, [mod | paths]}
+          else
+            {table, paths}
+          end
+
+        "import_statement" ->
+          mod = extract_import_source(node)
+          if mod, do: {table, [mod | paths]}, else: {table, paths}
+      end
+    end)
+    |> then(fn {table, paths} -> {table, Enum.uniq(paths)} end)
+  end
+
+  # Read the module path from the source line (handles dotted paths that the NIF filters out).
+  defp extract_module_path_from_source(node, source_lines) do
+    row = node["start_row"] || 0
+    line = Enum.at(source_lines, row, "")
+
+    case Regex.run(~r/^\s*from\s+([\w.]+)\s+import/, line) do
+      [_, module_path] -> module_path
+      _ -> nil
+    end
+  end
+
+  # Extract the locally-bound symbol names from an import_from_statement node,
+  # excluding the module name itself (for bare-identifier imports like `from os import getcwd`).
+  defp extract_import_symbols(node, module_path) do
+    (node["children"] || [])
+    |> Enum.filter(&(&1["kind"] in ["identifier", "import_list", "aliased_import"]))
+    |> Enum.flat_map(fn
+      %{"kind" => "identifier", "text" => t} when is_binary(t) and t != "" ->
+        [t]
+
+      %{"kind" => "identifier", "name" => n} when is_binary(n) and n != "" ->
+        [n]
+
+      %{"kind" => "import_list", "children" => kids} ->
+        Enum.flat_map(kids, fn
+          %{"kind" => "identifier", "text" => t} when is_binary(t) and t != "" -> [t]
+          %{"kind" => "identifier", "name" => n} when is_binary(n) and n != "" -> [n]
+          %{"kind" => "aliased_import", "name" => n} when is_binary(n) and n != "" -> [n]
+          _ -> []
+        end)
+
+      _ ->
+        []
+    end)
+    |> Enum.reject(&(&1 == module_path || &1 == ""))
+  end
+
   # --- Import extraction ---
 
   @doc false
@@ -301,62 +385,6 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
   end
 
   defp extract_import_source(_), do: nil
-
-  # Extract imported names for the file-level module's calls list
-  defp extract_imported_names(ast) do
-    ast
-    |> find_nodes(["import_statement", "import_from_statement"])
-    |> Enum.flat_map(&extract_import_identifiers/1)
-    |> Enum.uniq()
-  end
-
-  defp extract_import_identifiers(%{"kind" => "import_from_statement", "children" => children}) do
-    # from X import a, b, c — extract a, b, c
-    children
-    |> Enum.filter(&(&1["kind"] in ["identifier", "import_list", "aliased_import"]))
-    |> Enum.flat_map(fn
-      %{"kind" => "identifier", "text" => text} when is_binary(text) ->
-        [text]
-
-      %{"kind" => "identifier", "name" => name} when is_binary(name) ->
-        [name]
-
-      %{"kind" => "import_list", "children" => list_children} ->
-        list_children
-        |> Enum.filter(&(&1["kind"] in ["identifier", "aliased_import"]))
-        |> Enum.map(fn
-          %{"kind" => "identifier", "text" => text} -> text
-          %{"kind" => "identifier", "name" => name} -> name
-          %{"kind" => "aliased_import", "name" => name} -> name
-          _ -> nil
-        end)
-        |> Enum.reject(&is_nil/1)
-
-      _ ->
-        []
-    end)
-    # Filter out the module name itself (first identifier is usually the source module)
-    |> Enum.reject(fn name ->
-      Enum.any?(children, fn child ->
-        child["kind"] in ["dotted_name", "relative_import"] and
-          (child["text"] == name or child["name"] == name)
-      end)
-    end)
-  end
-
-  defp extract_import_identifiers(%{"kind" => "import_statement", "children" => children}) do
-    # import X — the module itself is what's imported
-    children
-    |> Enum.filter(&(&1["kind"] in ["dotted_name", "identifier"]))
-    |> Enum.map(fn
-      %{"text" => text} when is_binary(text) -> text
-      %{"name" => name} when is_binary(name) -> name
-      _ -> nil
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp extract_import_identifiers(_), do: []
 
   # --- AST helpers ---
 

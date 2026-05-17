@@ -197,8 +197,8 @@ defmodule ElixirNexus.Parsers.PythonImportsTest do
 
       assert mod != nil
       assert "collections" in mod.is_a
-      # The aliased import identifier should be extracted
-      assert "OD" in mod.calls
+      # Aliased import is qualified: "module.alias"
+      assert "collections.OD" in mod.calls
     end
   end
 
@@ -231,8 +231,8 @@ defmodule ElixirNexus.Parsers.PythonImportsTest do
 
       assert mod != nil
       assert "typing" in mod.is_a
-      # Imported names should be in module calls (excluding the source module name)
-      assert "List" in mod.calls or "Dict" in mod.calls
+      # Imported names are qualified: "module.name"
+      assert "typing.List" in mod.calls or "typing.Dict" in mod.calls
     end
   end
 
@@ -275,7 +275,8 @@ defmodule ElixirNexus.Parsers.PythonImportsTest do
 
       assert mod != nil
       assert "typing" in mod.is_a
-      assert "List" in mod.calls or "DT" in mod.calls
+      # Qualified names for both plain and aliased imports
+      assert "typing.List" in mod.calls or "typing.DT" in mod.calls
     end
   end
 

@@ -256,6 +256,112 @@ defmodule ElixirNexus.Parsers.PythonCallsTest do
     end
   end
 
+  describe "import-qualified call extraction" do
+    test "call to from-imported symbol is qualified with module path" do
+      ast =
+        make_node("module",
+          children: [
+            make_node("import_from_statement",
+              start_row: 0,
+              children: [
+                make_node("identifier", text: "render_variant")
+              ]
+            ),
+            make_node("function_definition",
+              name: "create_ad",
+              children: [
+                make_node("parameters", children: []),
+                make_node("block",
+                  children: [
+                    make_node("expression_statement",
+                      children: [
+                        make_node("call",
+                          children: [
+                            make_node("identifier", text: "render_variant")
+                          ]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      source = "from meta_ads.postprocess import render_variant\ndef create_ad():\n    render_variant()"
+
+      entities = PythonExtractor.extract_entities("ad_render.py", ast, source)
+      func = Enum.find(entities, &(&1.name == "create_ad" && &1.entity_type == :function))
+
+      assert func != nil
+      assert "meta_ads.postprocess.render_variant" in func.calls
+      refute "render_variant" in func.calls
+    end
+
+    test "calls to non-imported symbols are kept bare" do
+      ast =
+        make_node("module",
+          children: [
+            make_node("function_definition",
+              name: "main",
+              children: [
+                make_node("parameters", children: []),
+                make_node("block",
+                  children: [
+                    make_node("expression_statement",
+                      children: [
+                        make_node("call",
+                          children: [
+                            make_node("identifier", text: "print")
+                          ]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      source = "def main():\n    print()"
+      entities = PythonExtractor.extract_entities("test.py", ast, source)
+      func = Enum.find(entities, &(&1.name == "main" && &1.entity_type == :function))
+
+      assert func != nil
+      assert "print" in func.calls
+    end
+
+    test "module entity calls list uses qualified names" do
+      ast =
+        make_node("module",
+          children: [
+            make_node("import_from_statement",
+              start_row: 0,
+              children: [
+                make_node("import_list",
+                  children: [
+                    make_node("identifier", text: "render_variant"),
+                    make_node("identifier", text: "assemble_video")
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      source = "from meta_ads.video import render_variant, assemble_video"
+      entities = PythonExtractor.extract_entities("app.py", ast, source)
+      mod = Enum.find(entities, &(&1.entity_type == :module))
+
+      assert mod != nil
+      assert "meta_ads.video.render_variant" in mod.calls
+      assert "meta_ads.video.assemble_video" in mod.calls
+      assert mod.is_a == ["meta_ads.video"]
+    end
+  end
+
   describe "call with name field" do
     test "call expression with direct name field" do
       ast =

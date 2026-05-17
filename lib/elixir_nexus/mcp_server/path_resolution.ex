@@ -60,7 +60,9 @@ defmodule ElixirNexus.MCPServer.PathResolution do
         if File.dir?(root) do
           {:ok, root, path}
         else
-          {:error, "Path '#{path}' not found (resolved to '#{root}')." <> workspace_hint()}
+          bare = Path.basename(path)
+          did_you_mean = if resolve_bare_name(bare), do: " Did you mean '#{bare}'?", else: ""
+          {:error, "Path '#{path}' not found (resolved to '#{root}').#{did_you_mean}" <> workspace_hint()}
         end
 
       # Bare project name — resolve against any active workspace mount
