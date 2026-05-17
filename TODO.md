@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.11.0 (M1 callers fix, Rust self_parameter, Swift property_declaration, docker-compose workspace mounts)
-**Status:** v1.11.0 image live on Docker Hub (arm64), 754 tests green
+**Current version:** v1.11.2 (Python qualified-call import tracking, CallerFinder module-sibling filter, DataFetching limit 10k)
+**Status:** v1.11.2 image live on Docker Hub (arm64), 757 tests green
 
 ---
 
@@ -96,6 +96,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-17 (v1.11.2 shipped):** Python extractor: `from X.Y import Z` now emits qualified calls (`X.Y.Z`) and correct `is_a` edges — fixes ~40/45 false-positive dead-code hits on projects using from-import chains. CallerFinder: drops module callers when function sibling is already present; DataFetching limit raised to 10k. 757 tests green.
 
 **2026-05-17 (v1.11.0 shipped):** M1 fix — JS extractor now enriches function entities' calls with imported names that appear in source content (word-boundary regex). Rust `self_parameter` → `"self"` in params. GenericExtractor `property_declaration` → `:variable`. docker-compose hardened: `restart: unless-stopped`, Hub image only, 4 workspace mounts via `.env`. 754 tests green.
 
