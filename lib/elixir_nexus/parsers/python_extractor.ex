@@ -276,6 +276,15 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
 
           if mod do
             syms = extract_import_symbols(node, mod)
+
+            # Fallback: parenthesized multi-line imports produce an import_list
+            # node that the NIF filters out, so AST-based extraction returns [].
+            # Read the raw source lines to recover the symbol names.
+            syms =
+              if syms == [],
+                do: extract_import_symbols_from_source(node, source_lines, mod),
+                else: syms
+
             new_table = Enum.reduce(syms, table, &Map.put(&2, &1, mod))
             {new_table, [mod | paths]}
           else
@@ -298,6 +307,39 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
     case Regex.run(~r/^\s*from\s+([\w.]+)\s+import/, line) do
       [_, module_path] -> module_path
       _ -> nil
+    end
+  end
+
+  # Fallback for parenthesized multi-line imports whose import_list node is filtered
+  # by the NIF. Reads raw source lines from start_row until the closing ')' and
+  # extracts identifier tokens from the captured text.
+  defp extract_import_symbols_from_source(node, source_lines, module_path) do
+    start_row = node["start_row"] || 0
+    first_line = Enum.at(source_lines, start_row, "")
+
+    if String.contains?(first_line, "(") do
+      block =
+        source_lines
+        |> Enum.slice(start_row, 30)
+        |> Enum.reduce_while([], fn line, acc ->
+          acc = [line | acc]
+          if String.contains?(line, ")"), do: {:halt, acc}, else: {:cont, acc}
+        end)
+        |> Enum.reverse()
+        |> Enum.join(" ")
+
+      case Regex.run(~r/import\s*\(([^)]*)\)/, block) do
+        [_, inner] ->
+          inner
+          |> String.replace(~r/#[^\n]*/, "")
+          |> String.split(~r/[\s,]+/)
+          |> Enum.reject(&(&1 == "" or &1 == module_path))
+
+        _ ->
+          []
+      end
+    else
+      []
     end
   end
 

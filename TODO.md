@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.11.2 (Python qualified-call import tracking, CallerFinder module-sibling filter, DataFetching limit 10k)
-**Status:** v1.11.2 image live on Docker Hub (arm64), 757 tests green
+**Current version:** v1.11.3 (Python multi-line parenthesized import fix)
+**Status:** v1.11.3 image live on Docker Hub (arm64), 758 tests green
 
 ---
 
@@ -96,6 +96,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-18 (v1.11.3 shipped):** Python extractor: source-text fallback for parenthesized multi-line `from X import (a, b, c)` imports — `import_list` nodes are filtered by the NIF, so the AST path returned empty symbols; now reads raw source lines from `start_row` to closing `)` to recover them. Verified against `meta-ads-analysis`: `render_variant` callers now resolve correctly.
 
 **2026-05-17 (v1.11.2 shipped):** Python extractor: `from X.Y import Z` now emits qualified calls (`X.Y.Z`) and correct `is_a` edges — fixes ~40/45 false-positive dead-code hits on projects using from-import chains. CallerFinder: drops module callers when function sibling is already present; DataFetching limit raised to 10k. 757 tests green.
 

@@ -399,5 +399,55 @@ defmodule ElixirNexus.Parsers.PythonCallsTest do
       assert func != nil
       assert "direct_call" in func.calls
     end
+
+    test "parenthesized multi-line import qualifies calls correctly" do
+      # Simulates: from meta_ads.postprocess import (
+      #   render_variant,
+      #   assemble_video,
+      # )
+      # import_list node is filtered by NIF — only the import_from_statement node
+      # is present, with no identifier children. The source-text fallback must
+      # extract render_variant and assemble_video.
+      ast =
+        make_node("module",
+          children: [
+            # NIF provides only the statement node, children stripped (no import_list)
+            make_node("import_from_statement",
+              start_row: 0,
+              children: []
+            ),
+            make_node("function_definition",
+              name: "render",
+              children: [
+                make_node("parameters", children: []),
+                make_node("block",
+                  children: [
+                    make_node("expression_statement",
+                      children: [
+                        make_node("call",
+                          children: [make_node("identifier", text: "render_variant")]
+                        )
+                      ]
+                    )
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      source =
+        "from meta_ads.postprocess import (\n    render_variant,\n    assemble_video,\n)\ndef render():\n    render_variant()"
+
+      entities = PythonExtractor.extract_entities("ad_render.py", ast, source)
+      func = Enum.find(entities, &(&1.name == "render" && &1.entity_type == :function))
+
+      assert func != nil
+
+      assert "meta_ads.postprocess.render_variant" in func.calls,
+             "expected qualified call, got: #{inspect(func.calls)}"
+
+      refute "render_variant" in func.calls
+    end
   end
 end
