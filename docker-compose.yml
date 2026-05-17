@@ -2,6 +2,7 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
+    restart: unless-stopped
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -17,8 +18,8 @@ services:
 
   code_nexus:
     image: iksnerd/code-nexus:latest
-    build: .
     container_name: code_nexus
+    restart: unless-stopped
     ports:
       - "4100:4100"
       - "3002:3002"

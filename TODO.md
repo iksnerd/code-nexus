@@ -1,7 +1,16 @@
-# CodeNexus TODO — v1.11.0 Roadmap
+# CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.10.0 (Ruby NIF fix, Kotlin + Swift, dedicated Rust + Java extractors, shadcn/ui dead-code filter)
-**Status:** v1.10.0 image live on Docker Hub (arm64), 749 tests green
+**Current version:** v1.11.0 (M1 callers fix, Rust self_parameter, Swift property_declaration, docker-compose workspace mounts)
+**Status:** v1.11.0 image live on Docker Hub (arm64), 754 tests green
+
+---
+
+## ✅ Shipped in v1.11.0
+
+- [x] **M1: Callers resolve to enclosing function** — JS extractor enriches function entities' `calls` with imported names that appear in their source content; fixes `find_all_callers` returning the file-level module at `start_line: 0` instead of the enclosing function on React/TSX codebases
+- [x] **Rust `self_parameter` fix** — `&self` / `&mut self` now correctly produces `"self"` in the parameters list (was silently empty before)
+- [x] **Swift `property_declaration` fix** — GenericExtractor now classifies `property_declaration` as `:variable` instead of `:function`; eliminates false-positive function entities for top-level `let g = ...` bindings
+- [x] **docker-compose workspace mounts** — `www`, `WebstormProjects`, `PyCharmProjects`, `GolandProjects` wired via `.env`; `restart: unless-stopped` added; `build: .` removed (Hub image only)
 
 ---
 
@@ -18,25 +27,7 @@
 
 ---
 
-## 🔴 v1.11.0 — High Priority
-
-### M1: Callers resolve to module, not enclosing function
-**Impact:** High — `find_all_callers` and `analyze_impact` return overly coarse results
-**Status:** Open since v0.6.0
-**Details:**
-- `find_all_callers("FileExplorer")` returns `page` module at `start_line: 0, end_line: 0` instead of `TorrentDetailsPage` at line 60
-- Same issue in `analyze_impact` — impact nodes show module root instead of enclosing function
-- Chunking-level refactor needed: attribute call edges to their enclosing function entity at parse stage
-- Would unlock major usability upgrade for impact analysis on React/TSX codebases
-
-**Files to change:**
-- `lib/elixir_nexus/chunker.ex` — attribute calls to enclosing function instead of module
-- `lib/elixir_nexus/search/entity_resolution.ex` — post-hoc function refinement as fallback
-- Tests: `find_all_callers` and `analyze_impact` should return function-level results
-
----
-
-## 🟡 v1.11.0 — Medium Priority
+## 🟡 v1.12.0 — Medium Priority
 
 ### LiveComponent extraction (DX improvement)
 - [ ] Split `lib/elixir_nexus_web/live/dashboard_live.ex` (448 lines) into smaller units
@@ -54,7 +45,7 @@
 - [ ] If still broken, fix `GoExtractor` to surface imports in graph stats correctly
 
 ### Rust + Java extractor follow-ups
-- [ ] Rust `extract_params` — currently misses some patterns (self_parameter handling)
+- [x] Rust `extract_params` — `self_parameter` fix shipped in v1.11.0
 - [ ] Java `extends_interfaces` super-interfaces extraction — verify on real Spring projects
 - [ ] Promote Kotlin to dedicated `KotlinExtractor` if real-world usage shows GenericExtractor is too coarse
 
@@ -66,7 +57,7 @@
 - [ ] Quick-start dry run: verify `WORKSPACE=~/Documents docker-compose up -d` works end-to-end
 - [ ] Framework convention internal functions filter (suppress `getMeta`/`getTorrent` in Next.js convention files)
 - [ ] Variable/constant search boost in `search_code` (constants buried below functions in results)
-- [ ] Swift extractor — current GenericExtractor over-extracts top-level bindings (e.g. `let g = ...` produces a `g` function entity)
+- [x] Swift extractor — `property_declaration` now classified as `:variable`; shipped in v1.11.0
 
 ---
 
@@ -105,6 +96,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-17 (v1.11.0 shipped):** M1 fix — JS extractor now enriches function entities' calls with imported names that appear in source content (word-boundary regex). Rust `self_parameter` → `"self"` in params. GenericExtractor `property_declaration` → `:variable`. docker-compose hardened: `restart: unless-stopped`, Hub image only, 4 workspace mounts via `.env`. 754 tests green.
 
 **2026-05-12 (v1.10.0 shipped):** Multi-arch image `iksnerd/code-nexus:v1.10.0` live. Live-verified Ruby/Kotlin/Swift/Rust/Java end-to-end against the rebuilt NIF — 5 langs, 26 chunks, 12 imports, 16 calls, 14 contains edges in a polyglot test fixture. Council hub `elixir-nexus-issues` updated (#019e18bb).
 

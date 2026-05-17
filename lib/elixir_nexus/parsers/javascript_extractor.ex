@@ -18,6 +18,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
     imports = ImportsExports.extract_imports(ast)
     exports = ImportsExports.extract_exports(ast)
     directive = ImportsExports.extract_directive(source)
+    imported_names = ImportsExports.extract_imported_names(ast)
 
     # Enrich declarations with import/export info
     exported_names = MapSet.new(exports)
@@ -32,6 +33,13 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
             %{entity | is_a: Enum.uniq(entity.is_a ++ imports)}
         end
       end)
+
+    # Attribute imported names to the functions that actually use them.
+    # The NIF's depth limits can prevent JSX component renders (e.g. <FileExplorer />)
+    # from appearing in a function entity's call list. We supplement by checking which
+    # imported names appear in each function's source content — this ensures
+    # find_all_callers returns the enclosing function, not the file-level module entity.
+    declarations = enrich_calls_from_imports(declarations, imported_names)
 
     # Create a file-level module entity if there are imports, exports, or a directive.
     # For barrel files (index.ts/index.js), use parent directory name as module name.
@@ -71,6 +79,32 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       end
 
     file_entity ++ declarations
+  end
+
+  defp enrich_calls_from_imports(entities, []), do: entities
+
+  defp enrich_calls_from_imports(entities, imported_names) do
+    Enum.map(entities, fn entity ->
+      if entity.entity_type in [:function, :method] and is_binary(entity.content) and
+           entity.content != "" do
+        existing = MapSet.new(entity.calls)
+
+        extra =
+          Enum.filter(imported_names, fn name ->
+            is_binary(name) and name != "" and
+              not MapSet.member?(existing, name) and
+              content_references_name?(entity.content, name)
+          end)
+
+        if extra == [], do: entity, else: %{entity | calls: entity.calls ++ extra}
+      else
+        entity
+      end
+    end)
+  end
+
+  defp content_references_name?(content, name) do
+    Regex.match?(~r/\b#{Regex.escape(name)}\b/, content)
   end
 
   # Keep these delegations for backward compat (called from tests)

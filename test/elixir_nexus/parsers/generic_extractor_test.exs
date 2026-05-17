@@ -370,4 +370,28 @@ defmodule ElixirNexus.Parsers.GenericExtractorTest do
       assert hd(entities).name == "valid"
     end
   end
+
+  describe "extract_entities/3 - Swift property_declaration" do
+    test "property_declaration is classified as variable, not function" do
+      ast = %{
+        "kind" => "source_file",
+        "children" => [
+          %{
+            "kind" => "property_declaration",
+            "name" => "g",
+            "start_row" => 0,
+            "end_row" => 0,
+            "children" => []
+          }
+        ]
+      }
+
+      entities = GenericExtractor.extract_entities("Foo.swift", ast, "let g = 42")
+      assert length(entities) == 1
+      entity = hd(entities)
+      assert entity.name == "g"
+      assert entity.entity_type == :variable,
+             "property_declaration should be :variable, not :function — got: #{entity.entity_type}"
+    end
+  end
 end

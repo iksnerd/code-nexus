@@ -545,4 +545,104 @@ defmodule ElixirNexus.Parsers.JavaScriptEntitiesTest do
       assert iface.entity_type == :interface
     end
   end
+
+  describe "import-based call enrichment" do
+    test "function entity gains calls for imported names used in its content" do
+      source = """
+      import FileExplorer from './FileExplorer';
+
+      function TorrentDetailsPage() {
+        return <FileExplorer />;
+      }
+      """
+
+      import_node =
+        make_node("import_statement",
+          children: [
+            make_node("import_clause",
+              children: [make_node("identifier", name: "FileExplorer", text: "FileExplorer")]
+            ),
+            make_node("string",
+              children: [make_node("string_fragment", text: "./FileExplorer")]
+            )
+          ]
+        )
+
+      func_node =
+        make_node("function_declaration",
+          name: "TorrentDetailsPage",
+          start_row: 2,
+          end_row: 4,
+          children: [
+            make_node("formal_parameters", children: []),
+            make_node("statement_block", children: [])
+          ]
+        )
+
+      ast = make_node("program", children: [import_node, func_node])
+      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, source)
+
+      func = Enum.find(entities, &(&1.name == "TorrentDetailsPage"))
+      assert func != nil
+
+      assert "FileExplorer" in func.calls,
+             "Expected FileExplorer in function calls (import enrichment), got: #{inspect(func.calls)}"
+    end
+
+    test "imported name not in function content is not added to calls" do
+      source = """
+      import FileExplorer from './FileExplorer';
+      import Button from './Button';
+
+      function TorrentDetailsPage() {
+        return <FileExplorer />;
+      }
+      """
+
+      import_node1 =
+        make_node("import_statement",
+          children: [
+            make_node("import_clause",
+              children: [make_node("identifier", name: "FileExplorer", text: "FileExplorer")]
+            ),
+            make_node("string",
+              children: [make_node("string_fragment", text: "./FileExplorer")]
+            )
+          ]
+        )
+
+      import_node2 =
+        make_node("import_statement",
+          children: [
+            make_node("import_clause",
+              children: [make_node("identifier", name: "Button", text: "Button")]
+            ),
+            make_node("string",
+              children: [make_node("string_fragment", text: "./Button")]
+            )
+          ]
+        )
+
+      func_node =
+        make_node("function_declaration",
+          name: "TorrentDetailsPage",
+          start_row: 3,
+          end_row: 5,
+          children: [
+            make_node("formal_parameters", children: []),
+            make_node("statement_block", children: [])
+          ]
+        )
+
+      ast = make_node("program", children: [import_node1, import_node2, func_node])
+      entities = JavaScriptExtractor.extract_entities("page.tsx", ast, source)
+
+      func = Enum.find(entities, &(&1.name == "TorrentDetailsPage"))
+      assert func != nil
+      assert "FileExplorer" in func.calls
+
+      refute "Button" in func.calls,
+             "Button should not be in calls — it is not used in the function content"
+    end
+  end
 end

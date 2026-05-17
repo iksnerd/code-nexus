@@ -82,6 +82,7 @@ defmodule ElixirNexus.Parsers.GenericExtractor do
         String.contains?(kind, "interface") -> :interface
         String.contains?(kind, "impl") -> :module
         String.contains?(kind, "module") -> :module
+        String.contains?(kind, "property") -> :variable
         String.contains?(kind, "function") -> :function
         true -> :function
       end

@@ -175,12 +175,16 @@ defmodule ElixirNexus.Parsers.RustExtractor do
     |> Enum.flat_map(fn params ->
       (params["children"] || [])
       |> Enum.filter(&(&1["kind"] in ["parameter", "self_parameter"]))
-      |> Enum.flat_map(fn p ->
-        (p["children"] || [])
-        |> Enum.filter(&(&1["kind"] == "identifier"))
-        |> Enum.map(&(&1["text"] || &1["name"] || ""))
+      |> Enum.flat_map(fn
+        %{"kind" => "self_parameter"} ->
+          ["self"]
+
+        p ->
+          (p["children"] || [])
+          |> Enum.filter(&(&1["kind"] == "identifier"))
+          |> Enum.map(&(&1["text"] || &1["name"] || ""))
+          |> Enum.reject(&(&1 == ""))
       end)
-      |> Enum.reject(&(&1 == ""))
     end)
   end
 
