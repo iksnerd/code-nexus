@@ -395,6 +395,23 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
         is_a: [],
         contains: [],
         language: :typescript
+      },
+      # Data-fetching helper in a convention file (getMeta pattern) — should NOT be dead code
+      %{
+        id: "conv_get_meta",
+        file_path: "/app/app/users/page.tsx",
+        entity_type: :function,
+        name: "getMeta",
+        content: "export async function getMeta() {}",
+        start_line: 10,
+        end_line: 10,
+        module_path: "getMeta",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
       }
     ]
 
@@ -437,6 +454,14 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
 
       assert "unusedHelper" in dead_names,
              "named export in page.tsx should still appear as dead if not called"
+    end
+
+    test "excludes data-fetching helpers (getMeta pattern) from convention files" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "getMeta" in dead_names,
+             "data-fetching helper in page.tsx should not be dead code"
     end
   end
 

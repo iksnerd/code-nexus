@@ -1,7 +1,16 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.11.4 (Python content-enrichment for NIF depth-filtered calls)
-**Status:** v1.11.4 image live on Docker Hub (arm64), 759 tests green
+**Current version:** v1.11.5 (search quality + dead code filter fixes)
+**Status:** v1.11.5 ready to tag, 753 tests green
+
+---
+
+## ✅ Shipped in v1.11.5
+
+- [x] **Keyword fallback deduplication** — `keyword_search_fallback` was returning raw ChunkCache results without dedup; fixed by applying `Scoring.deduplicate` + sort + limit (same as main path steps 4/6). Fixes scheduled CI failure on fresh Qdrant.
+- [x] **Variable/constant search boost** — 1.15× score multiplier for `variable`/`constant` entities in final sort; constants no longer buried below functions.
+- [x] **Convention-file data-fetching filter** — `getMeta`/`getTorrent`/`fetch*`/`load*`/`generate*` helpers in Next.js convention files now excluded from `find_dead_code` (same as PascalCase default exports). Generic helpers like `unusedHelper` still flagged.
+- [x] **CI Node.js 24 opt-in** — `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` added before June 2 forced migration.
 
 ---
 
@@ -55,8 +64,8 @@
 
 - [ ] History squash decision: squash v1.3.0–v1.3.3 into one commit (breaks orphaned tags, cleaner history)
 - [ ] Quick-start dry run: verify `WORKSPACE=~/Documents docker-compose up -d` works end-to-end
-- [ ] Framework convention internal functions filter (suppress `getMeta`/`getTorrent` in Next.js convention files)
-- [ ] Variable/constant search boost in `search_code` (constants buried below functions in results)
+- [x] Framework convention internal functions filter (suppress `getMeta`/`getTorrent` in Next.js convention files)
+- [x] Variable/constant search boost in `search_code` (constants buried below functions in results)
 - [x] Swift extractor — `property_declaration` now classified as `:variable`; shipped in v1.11.0
 
 ---
@@ -96,6 +105,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-18 (v1.11.5 shipped):** Search quality + dead code filter fixes — keyword fallback dedup (fixes scheduled CI failure), variable/constant 1.15× score boost, getMeta/getTorrent convention-file filter for find_dead_code, CI Node.js 24 opt-in. 753 tests green.
 
 **2026-05-18 (v1.11.4 shipped):** Python extractor: content-enrichment pass for NIF depth-filtered calls — same fix as JS M1 but for Python: after AST extraction, checks each function's source content for bare from-imported symbols and adds the qualified call (mod.sym) when found. Fixes `render_variant` and other deeply nested calls (inside try/for) that the NIF misses at depth 20+. 759 tests.
 

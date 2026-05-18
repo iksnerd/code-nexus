@@ -101,6 +101,12 @@ defmodule ElixirNexus.Search do
       |> Enum.uniq_by(fn r ->
         {Map.get(r.entity, "name", ""), Map.get(r.entity, "entity_type", "")}
       end)
+      |> Enum.map(fn r ->
+        case r.entity["entity_type"] do
+          t when t in ["variable", "constant"] -> %{r | score: r.score * 1.15}
+          _ -> r
+        end
+      end)
       |> Enum.sort_by(& &1.score, :desc)
       |> Enum.take(limit)
 
@@ -162,7 +168,16 @@ defmodule ElixirNexus.Search do
   end
 
   defp keyword_search_fallback(query, limit) do
-    ElixirNexus.Indexer.search_chunks(query, limit)
+    case ElixirNexus.Indexer.search_chunks(query, limit) do
+      {:ok, results} ->
+        deduped =
+          results
+          |> Scoring.deduplicate()
+          |> Enum.sort_by(& &1.score, :desc)
+          |> Enum.take(limit)
+
+        {:ok, deduped}
+    end
   rescue
     _ -> {:ok, []}
   end

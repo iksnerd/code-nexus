@@ -81,7 +81,9 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
-                    (Regex.match?(~r/^[A-Z]/, name) and basename in @framework_convention_files) or
+                    (basename in @framework_convention_files and
+                       (Regex.match?(~r/^[A-Z]/, name) or
+                          Regex.match?(~r/^(get|fetch|load|generate)[A-Z]/, name))) or
                     shadcn_ui_export?(file_path)))
           end)
           |> Enum.filter(fn e ->
