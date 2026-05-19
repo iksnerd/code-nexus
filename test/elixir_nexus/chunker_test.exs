@@ -81,7 +81,7 @@ defmodule ElixirNexus.ChunkerTest do
       assert chunk1.id == chunk2.id
     end
 
-    test "returns [] for tiny content under 50 chars" do
+    test "returns [] for tiny content under 30 chars" do
       tiny = %{@sample_entity | content: "def foo(x), do: x"}
       assert Chunker.chunk_entity(tiny) == []
     end

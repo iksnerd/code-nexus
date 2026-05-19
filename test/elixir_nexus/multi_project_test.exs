@@ -1,6 +1,8 @@
 defmodule ElixirNexus.MultiProjectTest do
   use ExUnit.Case
 
+  @moduletag :multi_project
+
   @moduledoc """
   Tests for multi-project onboarding: index_directories/1 and MCP reindex smart defaults.
   """
