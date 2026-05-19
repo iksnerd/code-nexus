@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
 **Current version:** v1.11.5 (search quality + dead code filter fixes)
-**Status:** v1.11.5 ready to tag, 753 tests green
+**Status:** v1.11.5 tagged, 768 tests green (32 excluded)
 
 ---
 
@@ -44,9 +44,8 @@
 - **No functional changes** — purely code organization
 
 ### `find_module_hierarchy` children for function entities
-- [ ] Populate `children` field with JSX renders (now tracked since v0.8.0) and nested function declarations
-- [ ] Currently only works for module-level entities; should work for components too
-- **Files:** `lib/elixir_nexus/search/queries.ex` (find_module_hierarchy/2)
+- [x] JSX renders now appear in children for function/method entities — PascalCase `calls` are resolved at query time; no reindex needed. Nested function declarations still open.
+- **Files:** `lib/elixir_nexus/search/module_hierarchy.ex`
 
 ### Go imports stats verification
 - [ ] Council Hub feedback reported `{imports: 0, calls: 538}` on Go projects
@@ -55,6 +54,7 @@
 
 ### Rust + Java extractor follow-ups
 - [x] Rust `extract_params` — `self_parameter` fix shipped in v1.11.0
+- [x] Go receiver type in method names — already done (Storage.WritePiece) since v1.10.0
 - [ ] Java `extends_interfaces` super-interfaces extraction — verify on real Spring projects
 - [ ] Promote Kotlin to dedicated `KotlinExtractor` if real-world usage shows GenericExtractor is too coarse
 
@@ -67,6 +67,10 @@
 - [x] Framework convention internal functions filter (suppress `getMeta`/`getTorrent` in Next.js convention files)
 - [x] Variable/constant search boost in `search_code` (constants buried below functions in results)
 - [x] Swift extractor — `property_declaration` now classified as `:variable`; shipped in v1.11.0
+- [x] Prometheus `:summary` → `:distribution` (with `reporter_options: [buckets: [...]]`) — latency histograms now appear in `/metrics`
+- [x] Skip-tiny-chunks filter — `chunk_entity/1` returns `[]` for content < 50 chars; removes one-liners/aliases with no semantic value
+- [x] `.nexusignore` path normalization — `docs/internal` patterns now matched root-relative via `classify_dir_path/2`; indexer passes relative paths
+- [x] Go struct module hierarchy — `GoExtractor` post-processes method entities to populate struct `contains` with receiver methods; `find_module_hierarchy("Storage")` now returns its methods as children
 
 ---
 
@@ -105,6 +109,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-05-19 (session fixes):** 5 backlog items cleared — Prometheus summary→distribution histograms with buckets; Chunker skip-tiny (<50 chars) filter; .nexusignore path normalization (root-relative classify_dir_path/2); Go struct module hierarchy (GoExtractor enriches struct contains with receiver methods); find_module_hierarchy JSX children for function entities (PascalCase calls resolved at query time). 771 tests, 0 failures (32 excluded).
 
 **2026-05-18 (v1.11.5 shipped):** Search quality + dead code filter fixes — keyword fallback dedup (fixes scheduled CI failure), variable/constant 1.15× score boost, getMeta/getTorrent convention-file filter for find_dead_code, CI Node.js 24 opt-in. 753 tests green.
 

@@ -29,6 +29,7 @@ var menuItems = []list.Item{
 	menuItem{"callees", "What does this function call?", "Entity name: ", false},
 	menuItem{"impact", "Transitive blast radius of a change", "Entity name: ", false},
 	menuItem{"hierarchy", "Module hierarchy for an entity", "Entity name: ", false},
+	menuItem{"community", "Structurally coupled files", "File path: ", false},
 	menuItem{"dead-code", "Exported functions with no callers", "", true},
 	menuItem{"stats", "Call graph statistics", "", true},
 	menuItem{"status", "Server status and project info", "", true},

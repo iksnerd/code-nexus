@@ -13,6 +13,11 @@ defmodule ElixirNexus.Chunker do
   Convert a CodeSchema entity into one or more chunks.
   A single function = one chunk. A module = multiple chunks (one per function + one for module itself).
   """
+  @min_content_chars 50
+
+  def chunk_entity(%ElixirNexus.CodeSchema{content: c}) when is_binary(c) and byte_size(c) < @min_content_chars, do: []
+  def chunk_entity(%ElixirNexus.CodeSchema{content: nil}), do: []
+
   def chunk_entity(%ElixirNexus.CodeSchema{} = entity) do
     [
       %{

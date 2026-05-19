@@ -270,5 +270,88 @@ defmodule ElixirNexus.Search.ModuleHierarchyTest do
         assert button_parent.file_path == "/app/src/components/ui/button.tsx"
       end
     end
+
+    test "PascalCase calls appear as children for function entities" do
+      {:ok, result} = Queries.find_module_hierarchy("HomePage")
+
+      child_names = Enum.map(result.children, & &1[:name])
+
+      assert "Button" in child_names,
+             "Expected Button JSX render in children, got: #{inspect(child_names)}"
+    end
+  end
+
+  describe "find_module_hierarchy/1 - JSX children for function entities" do
+    setup do
+      card_chunk = %{
+        id: "card_chunk",
+        file_path: "/app/components/card.tsx",
+        entity_type: :function,
+        name: "Card",
+        content: "export function Card() { return <div /> }",
+        start_line: 1,
+        end_line: 3,
+        module_path: "Card",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      icon_chunk = %{
+        id: "icon_chunk",
+        file_path: "/app/components/icon.tsx",
+        entity_type: :function,
+        name: "Icon",
+        content: "export function Icon() { return <svg /> }",
+        start_line: 1,
+        end_line: 3,
+        module_path: "Icon",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      page_chunk = %{
+        id: "dashboard_chunk",
+        file_path: "/app/pages/dashboard.tsx",
+        entity_type: :function,
+        name: "Dashboard",
+        content: "export function Dashboard() { return <><Card /><Icon /></> }",
+        start_line: 1,
+        end_line: 5,
+        module_path: "Dashboard",
+        visibility: :public,
+        parameters: [],
+        calls: ["Card", "Icon", "someHelper"],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+
+      ChunkCache.insert_many([card_chunk, icon_chunk, page_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+      :ok
+    end
+
+    test "resolves PascalCase calls to children" do
+      {:ok, result} = Queries.find_module_hierarchy("Dashboard")
+
+      child_names = Enum.map(result.children, & &1[:name])
+      assert "Card" in child_names
+      assert "Icon" in child_names
+    end
+
+    test "does not include unresolved camelCase/lowercase calls as children" do
+      {:ok, result} = Queries.find_module_hierarchy("Dashboard")
+
+      child_names = Enum.map(result.children, & &1[:name])
+      refute "someHelper" in child_names
+    end
   end
 end

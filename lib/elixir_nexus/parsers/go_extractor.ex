@@ -25,6 +25,21 @@ defmodule ElixirNexus.Parsers.GoExtractor do
         %{entity | is_a: Enum.uniq(entity.is_a ++ imports)}
       end)
 
+    # Enrich struct/interface entities with their receiver methods as children.
+    # Go methods are named "ReceiverType.MethodName" — link them back to the struct
+    # so find_module_hierarchy("Storage") returns its methods in :children.
+    method_map = build_method_map(declarations)
+
+    declarations =
+      Enum.map(declarations, fn entity ->
+        if entity.entity_type in [:struct, :interface] do
+          methods = Map.get(method_map, entity.name, [])
+          %{entity | contains: Enum.uniq(entity.contains ++ methods)}
+        else
+          entity
+        end
+      end)
+
     # Create a file-level module entity
     exported_names =
       declarations
@@ -62,4 +77,20 @@ defmodule ElixirNexus.Parsers.GoExtractor do
   # Keep these delegations for backward compat (called from tests)
   @doc false
   defdelegate extract_imports(ast), to: ImportsPackage
+
+  # Build a map of receiver_type -> [method_names] from method entities.
+  # Methods are named "ReceiverType.MethodName" by the entities extractor.
+  defp build_method_map(entities) do
+    entities
+    |> Enum.filter(&(&1.entity_type == :method))
+    |> Enum.reduce(%{}, fn entity, acc ->
+      case String.split(entity.name, ".", parts: 2) do
+        [receiver, method_name] ->
+          Map.update(acc, receiver, [method_name], &[method_name | &1])
+
+        _ ->
+          acc
+      end
+    end)
+  end
 end

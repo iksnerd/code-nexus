@@ -454,5 +454,61 @@ defmodule ElixirNexus.Parsers.GoTypesTest do
       assert "http" in mod.calls
       assert "mux" in mod.calls
     end
+
+    test "struct contains its receiver methods" do
+      ast =
+        wrap_program([
+          make_node("type_declaration",
+            children: [
+              make_node("type_spec",
+                name: "Storage",
+                children: [
+                  make_node("struct_type", children: [])
+                ]
+              )
+            ]
+          ),
+          make_node("method_declaration",
+            start_row: 3,
+            end_row: 5,
+            children: [
+              make_node("parameter_list",
+                children: [
+                  make_node("parameter_declaration",
+                    children: [make_node("type_identifier", text: "Storage")]
+                  )
+                ]
+              ),
+              make_node("field_identifier", text: "WritePiece"),
+              make_node("parameter_list", children: []),
+              make_node("block", children: [])
+            ]
+          ),
+          make_node("method_declaration",
+            start_row: 7,
+            end_row: 9,
+            children: [
+              make_node("parameter_list",
+                children: [
+                  make_node("parameter_declaration",
+                    children: [make_node("type_identifier", text: "Storage")]
+                  )
+                ]
+              ),
+              make_node("field_identifier", text: "Preallocate"),
+              make_node("parameter_list", children: []),
+              make_node("block", children: [])
+            ]
+          )
+        ])
+
+      source = "type Storage struct {}\nfunc (s Storage) WritePiece() {}\nfunc (s Storage) Preallocate() {}"
+      entities = GoExtractor.extract_entities("storage.go", ast, source)
+      struct_entity = Enum.find(entities, &(&1.name == "Storage" && &1.entity_type == :struct))
+
+      assert struct_entity != nil
+      assert "WritePiece" in struct_entity.contains
+      assert "Preallocate" in struct_entity.contains
+    end
   end
 end

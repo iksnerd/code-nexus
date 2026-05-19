@@ -1,6 +1,9 @@
 defmodule ElixirNexus.Telemetry do
   import Telemetry.Metrics
 
+  # Latency buckets in milliseconds — covers fast (1ms) to slow (30s) operations.
+  @latency_buckets [1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000]
+
   def child_spec(_opts) do
     %{
       id: __MODULE__,
@@ -11,9 +14,10 @@ defmodule ElixirNexus.Telemetry do
   def metrics do
     [
       # ── Search ────────────────────────────────────────────────────────────
-      summary("nexus.search.query.duration_ms",
+      distribution("nexus.search.query.duration_ms",
         unit: :millisecond,
-        description: "Hybrid search query latency"
+        description: "Hybrid search query latency",
+        reporter_options: [buckets: @latency_buckets]
       ),
       counter("nexus.search.query.count",
         event_name: [:nexus, :search, :query],
@@ -25,9 +29,10 @@ defmodule ElixirNexus.Telemetry do
       ),
 
       # ── Indexing pipeline ─────────────────────────────────────────────────
-      summary("nexus.pipeline.file_parsed.duration_ms",
+      distribution("nexus.pipeline.file_parsed.duration_ms",
         unit: :millisecond,
-        description: "File parse + chunk latency"
+        description: "File parse + chunk latency",
+        reporter_options: [buckets: @latency_buckets]
       ),
       counter("nexus.pipeline.file_parsed.count",
         event_name: [:nexus, :pipeline, :file_parsed],
@@ -44,27 +49,30 @@ defmodule ElixirNexus.Telemetry do
       ),
 
       # ── Embedding + storage ───────────────────────────────────────────────
-      summary("nexus.embed_and_store.duration_ms",
+      distribution("nexus.embed_and_store.duration_ms",
         unit: :millisecond,
-        description: "Embed batch + Qdrant upsert latency"
+        description: "Embed batch + Qdrant upsert latency",
+        reporter_options: [buckets: @latency_buckets]
       ),
       sum("nexus.embed_and_store.chunk_count",
         description: "Total chunks embedded and stored"
       ),
 
       # ── Qdrant ────────────────────────────────────────────────────────────
-      summary("nexus.qdrant.hybrid_search.duration_ms",
+      distribution("nexus.qdrant.hybrid_search.duration_ms",
         unit: :millisecond,
-        description: "Qdrant hybrid search latency"
+        description: "Qdrant hybrid search latency",
+        reporter_options: [buckets: @latency_buckets]
       ),
       counter("nexus.qdrant.hybrid_search.count",
         event_name: [:nexus, :qdrant, :hybrid_search],
         measurement: :duration_ms,
         description: "Total Qdrant hybrid search calls"
       ),
-      summary("nexus.qdrant.upsert.duration_ms",
+      distribution("nexus.qdrant.upsert.duration_ms",
         unit: :millisecond,
-        description: "Qdrant batch upsert latency"
+        description: "Qdrant batch upsert latency",
+        reporter_options: [buckets: @latency_buckets]
       ),
       sum("nexus.qdrant.upsert.point_count",
         description: "Total points upserted to Qdrant"

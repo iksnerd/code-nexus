@@ -333,7 +333,7 @@ defmodule ElixirNexus.Indexer do
 
     case File.ls(path) do
       {:ok, entries} ->
-        {files, stats} = collect_files_recursive(path, entries, filter, [], initial_stats)
+        {files, stats} = collect_files_recursive(path, path, entries, filter, [], initial_stats)
         {:ok, files, stats}
 
       {:error, reason} ->
@@ -341,17 +341,19 @@ defmodule ElixirNexus.Indexer do
     end
   end
 
-  defp collect_files_recursive(base_path, entries, filter, acc_files, acc_stats) do
+  defp collect_files_recursive(root_path, base_path, entries, filter, acc_files, acc_stats) do
     Enum.reduce(entries, {acc_files, acc_stats}, fn entry, {files, stats} ->
       full_path = Path.join(base_path, entry)
 
       cond do
         File.dir?(full_path) ->
-          case IgnoreFilter.classify_dir(entry, filter) do
+          relative_path = Path.relative_to(full_path, root_path)
+
+          case IgnoreFilter.classify_dir_path(relative_path, filter) do
             :include ->
               case File.ls(full_path) do
                 {:ok, sub_entries} ->
-                  collect_files_recursive(full_path, sub_entries, filter, files, stats)
+                  collect_files_recursive(root_path, full_path, sub_entries, filter, files, stats)
 
                 {:error, _} ->
                   {files, stats}

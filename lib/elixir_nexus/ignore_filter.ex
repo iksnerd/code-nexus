@@ -25,6 +25,7 @@ defmodule ElixirNexus.IgnoreFilter do
           default_dirs: MapSet.t(),
           gitignore_dirs: MapSet.t(),
           nexusignore_dirs: MapSet.t(),
+          nexusignore_path_patterns: [String.t()],
           default_file_regexes: [Regex.t()],
           gitignore_file_regexes: [Regex.t()],
           nexusignore_file_regexes: [Regex.t()]
@@ -33,6 +34,7 @@ defmodule ElixirNexus.IgnoreFilter do
   defstruct default_dirs: MapSet.new(),
             gitignore_dirs: MapSet.new(),
             nexusignore_dirs: MapSet.new(),
+            nexusignore_path_patterns: [],
             default_file_regexes: [],
             gitignore_file_regexes: [],
             nexusignore_file_regexes: []
@@ -40,12 +42,15 @@ defmodule ElixirNexus.IgnoreFilter do
   @doc "Load ignore patterns from defaults, .gitignore, and .nexusignore if present."
   def load(project_root) do
     {git_dirs, git_patterns} = parse_ignore_file(Path.join(project_root, ".gitignore"))
-    {nexus_dirs, nexus_patterns} = parse_ignore_file(Path.join(project_root, ".nexusignore"))
+
+    {nexus_dirs, nexus_path_patterns, nexus_patterns} =
+      parse_ignore_file_extended(Path.join(project_root, ".nexusignore"))
 
     %__MODULE__{
       default_dirs: MapSet.new(@default_dirs),
       gitignore_dirs: MapSet.new(git_dirs),
       nexusignore_dirs: MapSet.new(nexus_dirs),
+      nexusignore_path_patterns: nexus_path_patterns,
       default_file_regexes: Enum.flat_map(@default_file_patterns, &compile_glob/1),
       gitignore_file_regexes: Enum.flat_map(git_patterns, &compile_glob/1),
       nexusignore_file_regexes: Enum.flat_map(nexus_patterns, &compile_glob/1)
@@ -89,6 +94,24 @@ defmodule ElixirNexus.IgnoreFilter do
     end
   end
 
+  @doc """
+  Classify a directory by its path relative to the project root.
+
+  Checks nexusignore path patterns (e.g. `docs/internal`) before falling
+  back to the basename-only `classify_dir/2` check.  Pass the relative
+  path so patterns like `vendor/generated` are matched correctly.
+  """
+  @spec classify_dir_path(String.t(), t()) :: classification()
+  def classify_dir_path(relative_path, %__MODULE__{} = filter) do
+    if Enum.any?(filter.nexusignore_path_patterns, fn pattern ->
+         relative_path == pattern or String.starts_with?(relative_path, pattern <> "/")
+       end) do
+      {:ignored, :nexusignore}
+    else
+      classify_dir(Path.basename(relative_path), filter)
+    end
+  end
+
   @doc "Check if a directory name or file path should be ignored."
   def ignored?(path, %__MODULE__{} = filter) do
     basename = Path.basename(path)
@@ -105,25 +128,28 @@ defmodule ElixirNexus.IgnoreFilter do
     classify_file(filename, filter) != :include
   end
 
+  # Like parse_ignore_file/1 but also returns path patterns (patterns with an
+  # internal slash, no globs) as a separate list for root-relative matching.
+  defp parse_ignore_file_extended(path) do
+    case File.read(path) do
+      {:ok, content} ->
+        stripped = normalize_ignore_lines(content)
+        dirs = stripped |> Enum.filter(&simple_dir_pattern?/1) |> Enum.map(&Path.basename/1)
+        path_patterns = Enum.filter(stripped, &path_only_pattern?/1)
+        glob_patterns = Enum.filter(stripped, &glob_pattern?/1)
+        {dirs, path_patterns, glob_patterns}
+
+      {:error, _} ->
+        {[], [], []}
+    end
+  end
+
   defp parse_ignore_file(path) do
     case File.read(path) do
       {:ok, content} ->
-        # Strip trailing slashes up front so `build/` and `build` both classify
-        # as a simple directory pattern rather than getting silently dropped.
-        stripped =
-          content
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#") or String.starts_with?(&1, "!")))
-          |> Enum.map(&String.trim_trailing(&1, "/"))
-
-        dirs =
-          stripped
-          |> Enum.filter(&simple_dir_pattern?/1)
-          |> Enum.map(&Path.basename/1)
-
+        stripped = normalize_ignore_lines(content)
+        dirs = stripped |> Enum.filter(&simple_dir_pattern?/1) |> Enum.map(&Path.basename/1)
         patterns = Enum.filter(stripped, &glob_pattern?/1)
-
         {dirs, patterns}
 
       {:error, _} ->
@@ -131,10 +157,28 @@ defmodule ElixirNexus.IgnoreFilter do
     end
   end
 
+  defp normalize_ignore_lines(content) do
+    # Strip trailing slashes up front so `build/` and `build` both classify
+    # as a simple directory pattern rather than getting silently dropped.
+    content
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#") or String.starts_with?(&1, "!")))
+    |> Enum.map(&String.trim_trailing(&1, "/"))
+  end
+
   defp simple_dir_pattern?(pattern) do
     not String.contains?(pattern, "*") and
       not String.contains?(pattern, "?") and
       not String.contains?(pattern, "/")
+  end
+
+  # Patterns like `docs/internal` — has a slash but no wildcards.
+  # Matched root-relative by classify_dir_path/2.
+  defp path_only_pattern?(pattern) do
+    String.contains?(pattern, "/") and
+      not String.contains?(pattern, "*") and
+      not String.contains?(pattern, "?")
   end
 
   defp glob_pattern?(pattern) do

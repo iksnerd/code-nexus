@@ -138,6 +138,45 @@ defmodule ElixirNexus.IgnoreFilterTest do
     end
   end
 
+  describe "classify_dir_path/2" do
+    test "matches path patterns from .nexusignore" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "docs/internal\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir_path("docs/internal", filter) == {:ignored, :nexusignore}
+    end
+
+    test "matches subtrees of a path pattern" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "vendor/generated\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir_path("vendor/generated", filter) == {:ignored, :nexusignore}
+      assert IgnoreFilter.classify_dir_path("vendor/generated/deep", filter) == {:ignored, :nexusignore}
+    end
+
+    test "does not match sibling dirs of a path pattern" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "docs/internal\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir_path("docs/public", filter) == :include
+    end
+
+    test "falls back to basename classify_dir for non-path-pattern dirs" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "docs/internal\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir_path("node_modules", filter) == {:ignored, :default}
+      assert IgnoreFilter.classify_dir_path("src/lib", filter) == :include
+    end
+
+    test "path pattern with trailing slash works" do
+      File.write!(Path.join(@test_dir, ".nexusignore"), "docs/internal/\n")
+      filter = IgnoreFilter.load(@test_dir)
+
+      assert IgnoreFilter.classify_dir_path("docs/internal", filter) == {:ignored, :nexusignore}
+    end
+  end
+
   describe "classify_file/2" do
     test "tags default file patterns with :default" do
       filter = IgnoreFilter.load(@test_dir)

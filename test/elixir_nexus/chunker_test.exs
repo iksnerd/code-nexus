@@ -8,9 +8,9 @@ defmodule ElixirNexus.ChunkerTest do
     file_path: "lib/test.ex",
     entity_type: :function,
     name: "process_data",
-    content: "def process_data(input), do: transform(input)",
+    content: "def process_data(input) do\n  input |> validate() |> transform()\nend",
     start_line: 10,
-    end_line: 10,
+    end_line: 12,
     parameters: ["input"],
     visibility: :public,
     calls: ["transform"],
@@ -79,6 +79,16 @@ defmodule ElixirNexus.ChunkerTest do
       [chunk1] = Chunker.chunk_entity(@sample_entity)
       [chunk2] = Chunker.chunk_entity(@sample_entity)
       assert chunk1.id == chunk2.id
+    end
+
+    test "returns [] for tiny content under 50 chars" do
+      tiny = %{@sample_entity | content: "def foo(x), do: x"}
+      assert Chunker.chunk_entity(tiny) == []
+    end
+
+    test "returns [] for nil content" do
+      empty = %{@sample_entity | content: nil}
+      assert Chunker.chunk_entity(empty) == []
     end
   end
 

@@ -26,6 +26,27 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
             parents = EntityResolution.resolve_names(parent_names, all_entities)
             children = EntityResolution.resolve_names(child_names, all_entities)
 
+            # For function/method entities, supplement children with PascalCase calls.
+            # JSX component renders (<Button />, <FileExplorer />) land in :calls with
+            # PascalCase names — they won't appear in :contains, which is only populated
+            # for class/module-level entities by the extractors.
+            children =
+              if target.entity["entity_type"] in ["function", "method"] do
+                jsx_names =
+                  (target.entity["calls"] || [])
+                  |> Enum.filter(&Regex.match?(~r/^[A-Z]/, &1))
+                  |> Enum.uniq()
+
+                jsx_children =
+                  EntityResolution.resolve_names(jsx_names, all_entities)
+                  |> Enum.filter(& &1.resolved)
+
+                (children ++ jsx_children)
+                |> Enum.uniq_by(&{&1[:name], &1[:file_path]})
+              else
+                children
+              end
+
             {:ok,
              %{
                name: target.entity["name"],
