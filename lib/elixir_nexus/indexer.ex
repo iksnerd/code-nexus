@@ -265,6 +265,13 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_index_files(files, skip_stats, from, state) do
+    # On the first reindex after a container restart, DirtyTracker is empty even
+    # though Qdrant already has vectors from the last session. Seed it now from the
+    # stored file_sha values so the dirty check below can skip unchanged files.
+    if ElixirNexus.DirtyTracker.empty?() do
+      seed_dirty_tracker_from_qdrant()
+    end
+
     # Fast path: if DirtyTracker was seeded from Qdrant (container restart with
     # existing data), check whether any files actually changed. If none did, the
     # existing Qdrant vectors and ETS caches are already correct — skip re-embedding.
@@ -443,5 +450,33 @@ defmodule ElixirNexus.Indexer do
   defp indexable_extension?(ext) do
     ext in IndexingHelpers.elixir_extensions() or
       Map.has_key?(IndexingHelpers.polyglot_extensions(), ext)
+  end
+
+  # Scroll Qdrant for file_sha values and seed DirtyTracker.
+  # Lightweight: reads payload metadata only, no embeddings or cache rebuilds.
+  defp seed_dirty_tracker_from_qdrant do
+    sha_map = collect_file_shas(nil, %{})
+
+    if map_size(sha_map) > 0 do
+      ElixirNexus.DirtyTracker.seed_from_map(sha_map)
+    end
+  end
+
+  defp collect_file_shas(offset, acc) do
+    case ElixirNexus.QdrantClient.scroll_points(200, offset) do
+      {:ok, %{"result" => %{"points" => points, "next_page_offset" => next}}}
+      when is_list(points) and points != [] ->
+        new_acc =
+          Enum.reduce(points, acc, fn p, a ->
+            path = get_in(p, ["payload", "file_path"])
+            sha = get_in(p, ["payload", "file_sha"])
+            if is_binary(path) and is_binary(sha), do: Map.put(a, path, sha), else: a
+          end)
+
+        if next, do: collect_file_shas(next, new_acc), else: new_acc
+
+      _ ->
+        acc
+    end
   end
 end
