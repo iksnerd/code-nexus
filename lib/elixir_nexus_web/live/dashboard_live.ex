@@ -8,173 +8,13 @@ defmodule ElixirNexus.DashboardLive.Index do
 
   def render(assigns) do
     ~H"""
-    <!-- System Status Bar -->
-    <div class="flex flex-wrap items-center gap-3 mb-6">
-      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
-        <span class="text-slate-400 text-xs">Qdrant</span>
-        <.status_indicator status={@qdrant_health} />
-      </div>
-      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
-        <span class="text-slate-400 text-xs">Embeddings</span>
-        <span class={"text-xs font-medium px-2 py-0.5 rounded #{if @ollama_available, do: "bg-emerald-900/50 text-emerald-300", else: "bg-amber-900/50 text-amber-300"}"}>
-          <%= if @ollama_available, do: "Ollama", else: "TF-IDF" %>
-        </span>
-      </div>
-      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
-        <span class="text-slate-400 text-xs">Watcher</span>
-        <span class="text-xs text-slate-300"><%= @watcher_watching %> dirs</span>
-        <%= if @watcher_pending > 0 do %>
-          <span class="text-xs text-amber-400">(<%= @watcher_pending %> pending)</span>
-        <% end %>
-      </div>
-      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
-        <span class="text-slate-400 text-xs">Indexer</span>
-        <.status_indicator status={@indexer_status} />
-      </div>
-    </div>
-
-    <!-- Primary Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <.stat_card label="Indexed Files" value={@indexed_files} color="blue" animated />
-      <.stat_card label="Total Chunks" value={@total_chunks} color="emerald" animated />
-      <.stat_card label="Graph Nodes" value={@graph_node_count} color="violet" animated />
-      <.stat_card label="Vocabulary" value={@vocab_size} color="amber" subtitle="unique words" animated />
-    </div>
-
-    <!-- Entity Breakdown + Language Distribution -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-      <!-- Entity Type Counts -->
-      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-        <h3 class="text-sm font-semibold text-slate-300 mb-4">Entity Types</h3>
-        <div class="space-y-3">
-          <%= for {type, count} <- @entity_breakdown do %>
-            <div class="flex items-center gap-3">
-              <.entity_badge type={type} />
-              <div class="flex-1">
-                <div class="bg-slate-700/50 rounded-full h-2 overflow-hidden">
-                  <div
-                    class={"h-full rounded-full #{bar_color(type)}"}
-                    style={"width: #{bar_width(count, @graph_node_count)}%"}
-                  ></div>
-                </div>
-              </div>
-              <span class="text-slate-400 text-xs font-mono w-10 text-right"><%= count %></span>
-            </div>
-          <% end %>
-        </div>
-      </div>
-
-      <!-- Language Distribution -->
-      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-        <h3 class="text-sm font-semibold text-slate-300 mb-4">Languages</h3>
-        <div class="space-y-3">
-          <%= for {lang, count} <- @language_distribution do %>
-            <div class="flex items-center gap-3">
-              <.language_badge language={lang} />
-              <div class="flex-1">
-                <div class="bg-slate-700/50 rounded-full h-2 overflow-hidden">
-                  <div
-                    class="h-full rounded-full bg-blue-500/70"
-                    style={"width: #{bar_width(count, @total_chunks)}%"}
-                  ></div>
-                </div>
-              </div>
-              <span class="text-slate-400 text-xs font-mono w-10 text-right"><%= count %></span>
-            </div>
-          <% end %>
-        </div>
-      </div>
-    </div>
-
-    <!-- Relationship Overview -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <.stat_card label="Call Edges" value={@calls_count} color="blue" />
-      <.stat_card label="Import Edges" value={@imports_count} color="violet" />
-      <.stat_card label="Contains Edges" value={@contains_count} color="emerald" />
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
-        <p class="text-slate-400 text-sm mb-2">Top Connected</p>
-        <div class="space-y-1">
-          <%= for {name, degree} <- Enum.take(@top_connected, 5) do %>
-            <div class="flex justify-between items-center">
-              <span class="text-xs text-slate-300 truncate mr-2"><%= name %></span>
-              <span class="text-xs text-slate-500 font-mono"><%= degree %></span>
-            </div>
-          <% end %>
-          <%= if @top_connected == [] do %>
-            <p class="text-xs text-slate-500">No data yet</p>
-          <% end %>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-      <!-- Live Activity Feed -->
-      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-        <h3 class="text-sm font-semibold text-slate-300 mb-3">Activity</h3>
-        <div class="max-h-96 overflow-y-auto">
-          <%= if @activity == [] do %>
-            <p class="text-xs text-slate-500 py-4 text-center">No recent activity</p>
-          <% else %>
-            <%= for event <- @activity do %>
-              <.activity_item event={event} />
-            <% end %>
-          <% end %>
-        </div>
-      </div>
-
-      <!-- Error Panel -->
-      <div>
-        <.error_panel errors={@errors} expanded={@errors_expanded} />
-        <%= if @errors == [] do %>
-          <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-            <p class="text-sm text-slate-400">No errors</p>
-          </div>
-        <% end %>
-      </div>
-    </div>
-
-    <!-- MCP Tools -->
-    <h3 class="text-sm font-semibold text-slate-300 mb-3">MCP Tools</h3>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <a href="/search" class="group bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
-        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-blue-400">search_code</h4>
-        <p class="text-slate-500 text-xs">Hybrid semantic + keyword search with graph re-ranking</p>
-      </a>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_callees</h4>
-        <p class="text-slate-500 text-xs">All functions called by a given function</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_callers</h4>
-        <p class="text-slate-500 text-xs">All functions that call a given function</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">analyze_impact</h4>
-        <p class="text-slate-500 text-xs">Transitive blast radius via callers-of-callers</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">get_community_context</h4>
-        <p class="text-slate-500 text-xs">Structurally coupled files via call-graph edges</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_module_hierarchy</h4>
-        <p class="text-slate-500 text-xs">Module parents and contained functions</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">get_graph_stats</h4>
-        <p class="text-slate-500 text-xs">Codebase overview: nodes, edges, languages</p>
-      </div>
-      <a href="/vectors" class="group bg-slate-800/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
-        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-emerald-400">reindex</h4>
-        <p class="text-slate-500 text-xs">Parse and index source files for search + call graph</p>
-      </a>
-    </div>
-
-    <!-- Footer -->
-    <div class="border-t border-slate-700/50 pt-4 mt-4 flex items-center justify-between">
-      <span class="text-xs text-slate-600">CodeNexus v<%= ElixirNexus.version() %></span>
-      <span class="text-xs text-slate-600">Elixir/OTP + Ollama + Qdrant + Tree-sitter</span>
-    </div>
+    <.status_bar {assigns} />
+    <.primary_stats {assigns} />
+    <.entity_language_grid {assigns} />
+    <.relationship_overview {assigns} />
+    <.activity_errors_section {assigns} />
+    <.mcp_tools_grid {assigns} />
+    <.page_footer {assigns} />
     """
   end
 
@@ -270,6 +110,196 @@ defmodule ElixirNexus.DashboardLive.Index do
     {:noreply, socket}
   end
 
+  # --- Render components ---
+
+  defp status_bar(assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-3 mb-6">
+      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
+        <span class="text-slate-400 text-xs">Qdrant</span>
+        <.status_indicator status={@qdrant_health} />
+      </div>
+      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
+        <span class="text-slate-400 text-xs">Embeddings</span>
+        <span class={"text-xs font-medium px-2 py-0.5 rounded #{if @ollama_available, do: "bg-emerald-900/50 text-emerald-300", else: "bg-amber-900/50 text-amber-300"}"}>
+          <%= if @ollama_available, do: "Ollama", else: "TF-IDF" %>
+        </span>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
+        <span class="text-slate-400 text-xs">Watcher</span>
+        <span class="text-xs text-slate-300"><%= @watcher_watching %> dirs</span>
+        <%= if @watcher_pending > 0 do %>
+          <span class="text-xs text-amber-400">(<%= @watcher_pending %> pending)</span>
+        <% end %>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
+        <span class="text-slate-400 text-xs">Indexer</span>
+        <.status_indicator status={@indexer_status} />
+      </div>
+    </div>
+    """
+  end
+
+  defp primary_stats(assigns) do
+    ~H"""
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <.stat_card label="Indexed Files" value={@indexed_files} color="blue" animated />
+      <.stat_card label="Total Chunks" value={@total_chunks} color="emerald" animated />
+      <.stat_card label="Graph Nodes" value={@graph_node_count} color="violet" animated />
+      <.stat_card label="Vocabulary" value={@vocab_size} color="amber" subtitle="unique words" animated />
+    </div>
+    """
+  end
+
+  defp entity_language_grid(assigns) do
+    ~H"""
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
+        <h3 class="text-sm font-semibold text-slate-300 mb-4">Entity Types</h3>
+        <div class="space-y-3">
+          <%= for {type, count} <- @entity_breakdown do %>
+            <div class="flex items-center gap-3">
+              <.entity_badge type={type} />
+              <div class="flex-1">
+                <div class="bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                  <div
+                    class={"h-full rounded-full #{bar_color(type)}"}
+                    style={"width: #{bar_width(count, @graph_node_count)}%"}
+                  ></div>
+                </div>
+              </div>
+              <span class="text-slate-400 text-xs font-mono w-10 text-right"><%= count %></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
+        <h3 class="text-sm font-semibold text-slate-300 mb-4">Languages</h3>
+        <div class="space-y-3">
+          <%= for {lang, count} <- @language_distribution do %>
+            <div class="flex items-center gap-3">
+              <.language_badge language={lang} />
+              <div class="flex-1">
+                <div class="bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                  <div
+                    class="h-full rounded-full bg-blue-500/70"
+                    style={"width: #{bar_width(count, @total_chunks)}%"}
+                  ></div>
+                </div>
+              </div>
+              <span class="text-slate-400 text-xs font-mono w-10 text-right"><%= count %></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp relationship_overview(assigns) do
+    ~H"""
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <.stat_card label="Call Edges" value={@calls_count} color="blue" />
+      <.stat_card label="Import Edges" value={@imports_count} color="violet" />
+      <.stat_card label="Contains Edges" value={@contains_count} color="emerald" />
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
+        <p class="text-slate-400 text-sm mb-2">Top Connected</p>
+        <div class="space-y-1">
+          <%= for {name, degree} <- Enum.take(@top_connected, 5) do %>
+            <div class="flex justify-between items-center">
+              <span class="text-xs text-slate-300 truncate mr-2"><%= name %></span>
+              <span class="text-xs text-slate-500 font-mono"><%= degree %></span>
+            </div>
+          <% end %>
+          <%= if @top_connected == [] do %>
+            <p class="text-xs text-slate-500">No data yet</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp activity_errors_section(assigns) do
+    ~H"""
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
+        <h3 class="text-sm font-semibold text-slate-300 mb-3">Activity</h3>
+        <div class="max-h-96 overflow-y-auto">
+          <%= if @activity == [] do %>
+            <p class="text-xs text-slate-500 py-4 text-center">No recent activity</p>
+          <% else %>
+            <%= for event <- @activity do %>
+              <.activity_item event={event} />
+            <% end %>
+          <% end %>
+        </div>
+      </div>
+
+      <div>
+        <.error_panel errors={@errors} expanded={@errors_expanded} />
+        <%= if @errors == [] do %>
+          <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
+            <p class="text-sm text-slate-400">No errors</p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  defp mcp_tools_grid(assigns) do
+    ~H"""
+    <h3 class="text-sm font-semibold text-slate-300 mb-3">MCP Tools</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <a href="/search" class="group bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
+        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-blue-400">search_code</h4>
+        <p class="text-slate-500 text-xs">Hybrid semantic + keyword search with graph re-ranking</p>
+      </a>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">find_callees</h4>
+        <p class="text-slate-500 text-xs">All functions called by a given function</p>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">find_callers</h4>
+        <p class="text-slate-500 text-xs">All functions that call a given function</p>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">analyze_impact</h4>
+        <p class="text-slate-500 text-xs">Transitive blast radius via callers-of-callers</p>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">get_community_context</h4>
+        <p class="text-slate-500 text-xs">Structurally coupled files via call-graph edges</p>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">find_module_hierarchy</h4>
+        <p class="text-slate-500 text-xs">Module parents and contained functions</p>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-white mb-1">get_graph_stats</h4>
+        <p class="text-slate-500 text-xs">Codebase overview: nodes, edges, languages</p>
+      </div>
+      <a href="/vectors" class="group bg-slate-800/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
+        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-emerald-400">reindex</h4>
+        <p class="text-slate-500 text-xs">Parse and index source files for search + call graph</p>
+      </a>
+    </div>
+    """
+  end
+
+  defp page_footer(assigns) do
+    ~H"""
+    <div class="border-t border-slate-700/50 pt-4 mt-4 flex items-center justify-between">
+      <span class="text-xs text-slate-600">CodeNexus v<%= ElixirNexus.version() %></span>
+      <span class="text-xs text-slate-600">Elixir/OTP + Ollama + Qdrant + Tree-sitter</span>
+    </div>
+    """
+  end
+
+  # --- Private helpers ---
+
   defp schedule_tick do
     Process.send_after(self(), :tick, @tick_interval)
   end
@@ -289,7 +319,6 @@ defmodule ElixirNexus.DashboardLive.Index do
         _ -> "error"
       end
 
-    # Entity breakdown
     entity_breakdown =
       graph_nodes
       |> Map.values()
@@ -297,13 +326,10 @@ defmodule ElixirNexus.DashboardLive.Index do
       |> Enum.map(fn {type, nodes} -> {type, length(nodes)} end)
       |> Enum.sort_by(fn {_, count} -> -count end)
 
-    # Language distribution from chunks
     language_distribution = compute_language_distribution()
 
-    # Relationship counts
     {calls, imports, contains} = count_relationships(graph_nodes)
 
-    # Top connected entities
     top_connected =
       graph_nodes
       |> Map.values()
@@ -325,8 +351,6 @@ defmodule ElixirNexus.DashboardLive.Index do
         _ -> "ready"
       end
 
-    # Derive indexed file count from ChunkCache (survives process restarts, shared via ETS)
-    # Falls back to Indexer's in-memory count if cache is empty
     cached_file_count =
       try do
         ElixirNexus.ChunkCache.all()

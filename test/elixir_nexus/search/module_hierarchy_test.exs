@@ -354,4 +354,75 @@ defmodule ElixirNexus.Search.ModuleHierarchyTest do
       refute "someHelper" in child_names
     end
   end
+
+  describe "find_module_hierarchy/1 - nested function declarations" do
+    setup do
+      outer_chunk = %{
+        id: "outer_chunk",
+        file_path: "/app/utils/helpers.js",
+        entity_type: :function,
+        name: "outerFunction",
+        content: "function outerFunction() { function innerHelper() {} }",
+        start_line: 1,
+        end_line: 20,
+        module_path: "outerFunction",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      }
+
+      inner_chunk = %{
+        id: "inner_chunk",
+        file_path: "/app/utils/helpers.js",
+        entity_type: :function,
+        name: "innerHelper",
+        content: "function innerHelper() { return 42; }",
+        start_line: 5,
+        end_line: 15,
+        module_path: "innerHelper",
+        visibility: :private,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      }
+
+      sibling_chunk = %{
+        id: "sibling_chunk",
+        file_path: "/app/utils/helpers.js",
+        entity_type: :function,
+        name: "siblingFunction",
+        content: "function siblingFunction() {}",
+        start_line: 25,
+        end_line: 35,
+        module_path: "siblingFunction",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :javascript
+      }
+
+      ChunkCache.insert_many([outer_chunk, inner_chunk, sibling_chunk])
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+      :ok
+    end
+
+    test "includes nested functions as children" do
+      {:ok, result} = Queries.find_module_hierarchy("outerFunction")
+      child_names = Enum.map(result.children, & &1[:name])
+      assert "innerHelper" in child_names
+    end
+
+    test "excludes sibling functions outside the line range" do
+      {:ok, result} = Queries.find_module_hierarchy("outerFunction")
+      child_names = Enum.map(result.children, & &1[:name])
+      refute "siblingFunction" in child_names
+    end
+  end
 end

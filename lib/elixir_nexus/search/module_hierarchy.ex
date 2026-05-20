@@ -26,10 +26,11 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
             parents = EntityResolution.resolve_names(parent_names, all_entities)
             children = EntityResolution.resolve_names(child_names, all_entities)
 
-            # For function/method entities, supplement children with PascalCase calls.
-            # JSX component renders (<Button />, <FileExplorer />) land in :calls with
-            # PascalCase names — they won't appear in :contains, which is only populated
-            # for class/module-level entities by the extractors.
+            # For function/method entities, supplement children with:
+            # 1. PascalCase calls — JSX component renders (<Button />, <FileExplorer />)
+            #    land in :calls; they won't appear in :contains (class/module-level only).
+            # 2. Nested declarations — inner functions whose line range falls entirely
+            #    within the parent's range (not tracked by extractors in :contains).
             children =
               if target.entity["entity_type"] in ["function", "method"] do
                 jsx_names =
@@ -41,7 +42,33 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
                   EntityResolution.resolve_names(jsx_names, all_entities)
                   |> Enum.filter(& &1.resolved)
 
-                (children ++ jsx_children)
+                parent_file = target.entity["file_path"]
+                parent_start = target.entity["start_line"] || 0
+                parent_end = target.entity["end_line"] || 0
+
+                nested_children =
+                  if parent_end > parent_start do
+                    all_entities
+                    |> Enum.filter(fn e ->
+                      e.entity["file_path"] == parent_file and
+                        e.entity["entity_type"] in ["function", "method"] and
+                        (e.entity["start_line"] || 0) > parent_start and
+                        (e.entity["end_line"] || 0) <= parent_end and
+                        e.entity["name"] != target.entity["name"]
+                    end)
+                    |> Enum.map(fn e ->
+                      %{
+                        name: e.entity["name"],
+                        file_path: e.entity["file_path"],
+                        entity_type: e.entity["entity_type"],
+                        resolved: true
+                      }
+                    end)
+                  else
+                    []
+                  end
+
+                (children ++ jsx_children ++ nested_children)
                 |> Enum.uniq_by(&{&1[:name], &1[:file_path]})
               else
                 children

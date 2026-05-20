@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
 **Current version:** v1.12.0 (JSX hierarchy, Go struct children, nexus community, quality fixes)
-**Status:** v1.12.0 tagged + Docker Hub pushed, 761 tests green (42 excluded)
+**Status:** v1.12.0 tagged + Docker Hub pushed, 763 tests green (42 excluded)
 
 ---
 
@@ -38,19 +38,20 @@
 
 ## 🟡 v1.12.0 — Medium Priority
 
-### LiveComponent extraction (DX improvement)
-- [ ] Split `lib/elixir_nexus_web/live/dashboard_live.ex` (448 lines) into smaller units
-- [ ] Split `lib/elixir_nexus_web/live/vectors_live.ex` (664 lines) into smaller units
-- **No functional changes** — purely code organization
+### LiveComponent extraction (DX improvement) ✅
 
-### `find_module_hierarchy` children for function entities
-- [x] JSX renders now appear in children for function/method entities — PascalCase `calls` are resolved at query time; no reindex needed. Nested function declarations still open.
+- [x] Split `dashboard_live.ex` render (170 lines → 10) into 7 private function components: `status_bar`, `primary_stats`, `entity_language_grid`, `relationship_overview`, `activity_errors_section`, `mcp_tools_grid`, `page_footer`
+- [x] Split `vectors_live.ex` render (260 lines → 10) into 8 private function components: `collection_stats`, `entity_type_dist_bar`, `actions_bar`, `filter_bar`, `points_table`, `pagination_controls`, `detail_modal`, `flash_notice`
+
+**No functional changes** — purely code organization
+
+### `find_module_hierarchy` children for function entities ✅
+- [x] JSX renders now appear in children for function/method entities — PascalCase `calls` are resolved at query time; no reindex needed.
+- [x] Nested function declarations — inner functions whose line range falls within the parent's range are now resolved as children at query time; no reindex needed.
 - **Files:** `lib/elixir_nexus/search/module_hierarchy.ex`
 
-### Go imports stats verification
-- [ ] Council Hub feedback reported `{imports: 0, calls: 538}` on Go projects
-- [ ] Code path through `is_a` looks correct; needs reproduction on a real Go codebase
-- [ ] If still broken, fix `GoExtractor` to surface imports in graph stats correctly
+### Go imports stats verification ✅
+- [x] Traced full pipeline: GoExtractor → Chunker → GraphCache → graph_stats. `is_a` is populated and preserved at every stage; `filter_ast_noise` does not touch Go import paths. No bug found — code path is correct.
 
 ### Rust + Java extractor follow-ups
 - [x] Rust `extract_params` — `self_parameter` fix shipped in v1.11.0
@@ -77,7 +78,7 @@
 ## 📋 Earlier Backlog (v1.12.0+)
 
 ### Cross-language support gaps
-- [ ] **Go module hierarchy:** Method receivers not treated as parent-child relationships
+- [x] **Go module hierarchy:** Method receivers linked as struct children — shipped v1.11.0
 - [ ] **Path aliases:** `@/` and tsconfig `paths` resolution (partially done; needs alias expansion)
 
 ### Graph visualization (D3)
@@ -87,7 +88,7 @@
 ### Upstream / OSS
 - [ ] ExMCP timeout patch: upstream configurable timeout support or remove `sed` patch
 - [ ] Secret audit: run `gitleaks` in CI (scheduled weekly — already wired)
-- [ ] GitHub topics: verify `mcp`, `code-intelligence`, `tree-sitter`, `qdrant` are set
+- [x] GitHub topics: `mcp`, `code-intelligence`, `tree-sitter`, `qdrant` + 10 more — already set
 
 ---
 
@@ -102,13 +103,15 @@ mix test --exclude performance --exclude multi_project  # Tests pass
 
 **Full test suite:**
 ```bash
-mix test                           # All 761+ tests
+mix test                           # All 763+ tests
 mix test --include performance     # + 32 benchmarks
 ```
 
 ---
 
 ## Session Notes
+
+**2026-05-20 (quick wins):** GitHub topics already set. Go module hierarchy backlog item marked done (shipped v1.11.0). Nested function declarations added to find_module_hierarchy — inner functions whose line range falls within parent's range now appear as children at query time; no reindex needed. 2 new tests, 763 total, 0 failures.
 
 **2026-05-19 (session fixes):** 5 backlog items cleared — Prometheus summary→distribution histograms with buckets; Chunker skip-tiny (<50 chars) filter; .nexusignore path normalization (root-relative classify_dir_path/2); Go struct module hierarchy (GoExtractor enriches struct contains with receiver methods); find_module_hierarchy JSX children for function entities (PascalCase calls resolved at query time). 771 tests, 0 failures (32 excluded).
 
