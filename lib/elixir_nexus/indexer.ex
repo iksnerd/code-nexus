@@ -296,8 +296,8 @@ defmodule ElixirNexus.Indexer do
             skipped: skip_stats
           }}, state}
       else
-        Logger.info("Incremental reindex: #{length(dirty)}/#{length(files)} files changed, full re-embed")
-        do_full_reindex(files, skip_stats, from, state)
+        Logger.info("Incremental reindex: #{length(dirty)}/#{length(files)} files changed, re-embedding dirty only")
+        do_partial_reindex(dirty, files, skip_stats, from, state)
       end
     else
       do_full_reindex(files, skip_stats, from, state)
@@ -318,6 +318,31 @@ defmodule ElixirNexus.Indexer do
          acked_file_count: 0,
          skip_stats: skip_stats
      }}
+  end
+
+  # Partial reindex: only dirty files get re-embedded. Clean files keep their
+  # existing Qdrant vectors and ETS entries. No collection reset.
+  defp do_partial_reindex(dirty_files, all_files, skip_stats, from, state) do
+    # Remove stale Qdrant points and ETS entries for each dirty file
+    Enum.each(dirty_files, fn path ->
+      ElixirNexus.QdrantClient.delete_points_by_file(path)
+      ChunkCache.delete_by_file(path)
+    end)
+
+    ElixirNexus.IndexingProducer.push(dirty_files)
+
+    clean_state = %{
+      state
+      | status: :indexing,
+        indexed_files: MapSet.new(all_files),
+        errors: [],
+        pending_reply: from,
+        pending_file_count: length(dirty_files),
+        acked_file_count: 0,
+        skip_stats: skip_stats
+    }
+
+    {:noreply, clean_state}
   end
 
   defp finish_indexing(state) do
