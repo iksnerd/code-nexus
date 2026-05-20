@@ -265,6 +265,39 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_index_files(files, skip_stats, from, state) do
+    # Fast path: if DirtyTracker was seeded from Qdrant (container restart with
+    # existing data), check whether any files actually changed. If none did, the
+    # existing Qdrant vectors and ETS caches are already correct — skip re-embedding.
+    if not ElixirNexus.DirtyTracker.empty?() do
+      dirty =
+        Enum.filter(files, fn path ->
+          case ElixirNexus.DirtyTracker.dirty?(path) do
+            {true, _sha} -> true
+            _ -> false
+          end
+        end)
+
+      if dirty == [] do
+        Logger.info("Incremental reindex: all #{length(files)} files unchanged, skipping embed")
+
+        {:reply,
+         {:ok,
+          %{
+            indexed_files: length(files),
+            total_chunks: ChunkCache.count(),
+            languages: IndexingHelpers.count_languages(files),
+            skipped: skip_stats
+          }}, state}
+      else
+        Logger.info("Incremental reindex: #{length(dirty)}/#{length(files)} files changed, full re-embed")
+        do_full_reindex(files, skip_stats, from, state)
+      end
+    else
+      do_full_reindex(files, skip_stats, from, state)
+    end
+  end
+
+  defp do_full_reindex(files, skip_stats, from, state) do
     clean_state = prepare_reindex(state)
     ElixirNexus.IndexingProducer.push(files)
 

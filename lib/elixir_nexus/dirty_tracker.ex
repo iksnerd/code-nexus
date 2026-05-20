@@ -54,6 +54,20 @@ defmodule ElixirNexus.DirtyTracker do
     GenServer.call(__MODULE__, :reset)
   end
 
+  @doc "True when no checksums are stored (fresh start or after reset)."
+  def empty? do
+    GenServer.call(__MODULE__, :empty?)
+  end
+
+  @doc """
+  Bulk-seed checksums from a map of file_path => sha256.
+  Used at startup to restore state from Qdrant so the first reindex
+  can skip re-embedding unchanged files.
+  """
+  def seed_from_map(sha_map) when is_map(sha_map) do
+    GenServer.call(__MODULE__, {:seed_from_map, sha_map})
+  end
+
   @impl true
   def init(_opts) do
     Logger.info("DirtyTracker started")
@@ -143,6 +157,16 @@ defmodule ElixirNexus.DirtyTracker do
   def handle_call(:reset, _from, _state) do
     Logger.info("DirtyTracker reset: all files marked for re-indexing")
     {:reply, :ok, %{}}
+  end
+
+  def handle_call(:empty?, _from, state) do
+    {:reply, map_size(state) == 0, state}
+  end
+
+  def handle_call({:seed_from_map, sha_map}, _from, state) do
+    new_state = Map.merge(state, sha_map)
+    Logger.info("DirtyTracker seeded: #{map_size(sha_map)} file SHAs loaded from Qdrant")
+    {:reply, :ok, new_state}
   end
 
   @ignored_dirs ~w(node_modules .next dist build .expo .turbo coverage __generated__ .cache vendor _build deps .elixir_ls .git)

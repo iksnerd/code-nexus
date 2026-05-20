@@ -68,6 +68,18 @@ defmodule ElixirNexus.ProjectSwitcher do
         texts = chunks |> Enum.map(& &1.content) |> Enum.reject(&(&1 == ""))
         if texts != [], do: ElixirNexus.TFIDFEmbedder.update_vocabulary(texts)
 
+        # Seed DirtyTracker from stored file SHAs so the next reindex can skip
+        # re-embedding unchanged files (survives container restarts).
+        sha_map =
+          Enum.reduce(points, %{}, fn p, acc ->
+            payload = p["payload"] || %{}
+            path = payload["file_path"]
+            sha = payload["file_sha"]
+            if is_binary(path) and is_binary(sha), do: Map.put(acc, path, sha), else: acc
+          end)
+
+        if map_size(sha_map) > 0, do: DirtyTracker.seed_from_map(sha_map)
+
         Logger.info("Reloaded #{length(chunks)} chunks from Qdrant into ETS caches (vocab: #{length(texts)} docs)")
 
       _ ->

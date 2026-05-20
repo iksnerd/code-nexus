@@ -33,9 +33,13 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
             #    within the parent's range (not tracked by extractors in :contains).
             children =
               if target.entity["entity_type"] in ["function", "method"] do
+                # JSX component names are bare PascalCase (no dots): Button, FileExplorer.
+                # Elixir/Go module calls also start uppercase but contain dots: Logger.info.
                 jsx_names =
                   (target.entity["calls"] || [])
-                  |> Enum.filter(&Regex.match?(~r/^[A-Z]/, &1))
+                  |> Enum.filter(fn n ->
+                    Regex.match?(~r/^[A-Z]/, n) and not String.contains?(n, ".")
+                  end)
                   |> Enum.uniq()
 
                 jsx_children =

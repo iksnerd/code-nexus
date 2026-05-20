@@ -234,6 +234,20 @@ defmodule ElixirNexus.IndexingHelpers do
     embeddings = get_batch_embeddings(batch_texts)
     sparse_vectors = ElixirNexus.TFIDFEmbedder.sparse_vector_batch(batch_kw_texts)
 
+    sha_cache =
+      batch_chunks
+      |> Enum.map(& &1.file_path)
+      |> Enum.uniq()
+      |> Map.new(fn path ->
+        sha =
+          case File.read(path) do
+            {:ok, content} -> :crypto.hash(:sha256, content) |> Base.encode16()
+            _ -> nil
+          end
+
+        {path, sha}
+      end)
+
     points =
       batch_chunks
       |> Enum.zip(embeddings)
@@ -249,6 +263,7 @@ defmodule ElixirNexus.IndexingHelpers do
           },
           "payload" => %{
             "file_path" => chunk.file_path,
+            "file_sha" => Map.get(sha_cache, chunk.file_path),
             "entity_type" => Atom.to_string(chunk.entity_type),
             "name" => chunk.name,
             "start_line" => chunk.start_line,

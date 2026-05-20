@@ -15,6 +15,18 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   # `go test`, not user code. Filtering prevents ~38/49 false positives on Go projects.
   @go_test_prefixes ~w(Test Benchmark Fuzz Example)
 
+  # OTP, Phoenix LiveView, and Broadway callback names — dispatched by the framework,
+  # never by explicit user call sites. Filtering prevents ~100 false positives on
+  # Elixir projects where every GenServer/LiveView/Broadway module looks "dead".
+  @elixir_framework_callbacks ~w(
+    init terminate code_change
+    handle_call handle_cast handle_info handle_continue
+    handle_demand handle_subscribe handle_cancel handle_events handle_notify
+    handle_message handle_batch handle_failed
+    mount render update handle_params handle_event handle_async
+    on_mount
+  )
+
   # Next.js / SvelteKit / Remix file-based routing conventions.
   # Default exports from these files are called by the framework, not user code.
   @framework_convention_files ~w(
@@ -78,7 +90,8 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
             # shadcn/ui components in `components/ui/` are library primitives — their
             # exports are intentional API surface, not user-defined call sites.
-            (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
+            (lang == "elixir" and name in @elixir_framework_callbacks) or
+              (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
                     (basename in @framework_convention_files and
