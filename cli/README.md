@@ -58,6 +58,7 @@ Run `nexus` with no arguments for an interactive command picker.
 | `nexus callers <entity>` | Find all callers of a function |
 | `nexus callees <entity>` | Find all functions called by an entity |
 | `nexus impact <entity>` | Transitive blast radius of a change |
+| `nexus community <file>` | Structurally coupled files (shared call/import edges) |
 | `nexus dead-code` | Exported functions with no callers |
 | `nexus stats` | Call graph statistics |
 | `nexus hierarchy <entity>` | Module hierarchy for an entity |
@@ -86,6 +87,10 @@ nexus callees "ElixirNexus.Indexer" --limit 5
 
 # Impact analysis — what breaks if this changes?
 nexus impact QdrantClient.hybrid_search --depth 5
+
+# Structural coupling — files tightly coupled to this one
+nexus community lib/elixir_nexus/search.ex
+nexus community lib/elixir_nexus/search.ex --limit 5
 
 # Dead code — unreachable public functions
 nexus dead-code

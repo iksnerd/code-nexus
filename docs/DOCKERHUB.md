@@ -63,6 +63,8 @@ If a project isn't found, the error lists all available projects across all moun
 
 Add a `.nexusignore` file to your project root (gitignore-style globs). CodeNexus also respects `.gitignore` automatically. Defaults already exclude `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, `*.lock`, and similar noise.
 
+Path patterns with a `/` are matched relative to the project root — `docs/internal` only ignores that specific directory, not every directory named `internal`.
+
 ## MCP Tools
 
 | Tool | Description |
@@ -128,7 +130,7 @@ Add to your project's `.mcp.json`:
 
 ## Image Size
 
-The runtime image is **~588MB** (multi-stage build — Rust toolchain is build-only).
+The runtime image is **~593MB** (multi-stage build — Rust toolchain is build-only).
 
 
 [github.com/iksnerd/code-nexus](https://github.com/iksnerd/code-nexus)

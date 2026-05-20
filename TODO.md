@@ -1,7 +1,7 @@
 # CodeNexus TODO — v1.12.0 Roadmap
 
-**Current version:** v1.11.5 (search quality + dead code filter fixes)
-**Status:** v1.11.5 tagged, 768 tests green (32 excluded)
+**Current version:** v1.12.0 (JSX hierarchy, Go struct children, nexus community, quality fixes)
+**Status:** v1.12.0 tagged + Docker Hub pushed, 761 tests green (42 excluded)
 
 ---
 
@@ -102,7 +102,7 @@ mix test --exclude performance --exclude multi_project  # Tests pass
 
 **Full test suite:**
 ```bash
-mix test                           # All 749 tests
+mix test                           # All 761+ tests
 mix test --include performance     # + 32 benchmarks
 ```
 
