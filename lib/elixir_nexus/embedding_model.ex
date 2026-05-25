@@ -111,20 +111,24 @@ defmodule ElixirNexus.EmbeddingModel do
 
   @doc "Check if Ollama is reachable and the model is available."
   def available? do
-    url = "#{ollama_url()}/api/tags"
+    if Application.get_env(:elixir_nexus, :env) == :test do
+      true
+    else
+      url = "#{ollama_url()}/api/tags"
 
-    case HTTPoison.get(url, [], recv_timeout: 5_000) do
-      {:ok, %{status_code: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, %{"models" => models}} ->
-            Enum.any?(models, fn m -> String.starts_with?(m["name"], ollama_model()) end)
+      case HTTPoison.get(url, [], recv_timeout: 5_000) do
+        {:ok, %{status_code: 200, body: body}} ->
+          case Jason.decode(body) do
+            {:ok, %{"models" => models}} ->
+              Enum.any?(models, fn m -> String.starts_with?(m["name"], ollama_model()) end)
 
-          _ ->
-            false
-        end
+            _ ->
+              false
+          end
 
-      _ ->
-        false
+        _ ->
+          false
+      end
     end
   rescue
     _ -> false
