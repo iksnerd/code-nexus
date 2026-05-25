@@ -177,7 +177,7 @@ defmodule ElixirNexus.QdrantClientTest do
         "file_path" => "test.ex"
       }
 
-      _create_result = ElixirNexus.QdrantClient.create_collection(768)
+      {:ok, _} = ElixirNexus.QdrantClient.reset_collection()
 
       {:ok, _} = ElixirNexus.QdrantClient.upsert_point(100, vector1, payload1)
 
