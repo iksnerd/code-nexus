@@ -72,7 +72,7 @@ Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
 
 ## Running
 
-**Prerequisites:** Ollama running on host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Override with `OLLAMA_MODEL=nomic-embed-text` if you prefer the older default.
+**Prerequisites:** Ollama running on host with `embeddinggemma:300m` pulled (`ollama pull embeddinggemma:300m`). Override with `OLLAMA_MODEL=nomic-embed-text` if you prefer the older default. `EMBEDDING_MODEL` is also accepted as an alias for `OLLAMA_MODEL`.
 
 ```bash
 # Docker — starts Phoenix :4100 + MCP Streamable HTTP :3002 in a single BEAM

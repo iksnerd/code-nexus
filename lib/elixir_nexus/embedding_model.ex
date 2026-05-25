@@ -15,7 +15,9 @@ defmodule ElixirNexus.EmbeddingModel do
   end
 
   def model_name do
-    System.get_env("OLLAMA_MODEL") || Application.get_env(:elixir_nexus, :ollama_model, @default_model)
+    System.get_env("OLLAMA_MODEL") ||
+      System.get_env("EMBEDDING_MODEL") ||
+      Application.get_env(:elixir_nexus, :ollama_model, @default_model)
   end
 
   defp ollama_url, do: base_url()
@@ -35,7 +37,7 @@ defmodule ElixirNexus.EmbeddingModel do
 
   @doc """
   Embed a batch of texts. Returns {:ok, [[float]]} or {:error, reason}.
-  Retries on transient errors (timeout, connection refused) with linear backoff —
+  Retries on transient errors (timeout, connection refused) with exponential backoff —
   covers Ollama cold-start when the model is loading. Retry count and timeout
   are configurable via Application env (`:ollama_retry_attempts`, `:ollama_timeout`).
   """
@@ -76,7 +78,7 @@ defmodule ElixirNexus.EmbeddingModel do
       {:error, %HTTPoison.Error{reason: reason}}
       when reason in [:timeout, :connect_timeout, :econnrefused] ->
         if attempt < retry_attempts() do
-          backoff = retry_backoff_ms() * attempt
+          backoff = floor(retry_backoff_ms() * :math.pow(2, attempt - 1))
           Logger.info("Ollama #{reason} on attempt #{attempt}/#{retry_attempts()}, retrying in #{backoff}ms")
           Process.sleep(backoff)
           do_embed_batch(texts, attempt + 1)

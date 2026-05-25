@@ -359,6 +359,15 @@ defmodule ElixirNexus.MCPServer do
           ElixirNexus.Indexer.busy?() ->
             {:error, busy_message(display_path), state}
 
+          not ElixirNexus.EmbeddingModel.available?() ->
+            ollama_url = ElixirNexus.EmbeddingModel.base_url()
+            model = ElixirNexus.EmbeddingModel.model_name()
+
+            {:error,
+             "Embedding backend unreachable at #{ollama_url}. " <>
+               "Ensure Ollama is running and the model is pulled " <>
+               "(`ollama pull #{model}`). Use get_status to verify connectivity.", state}
+
           true ->
             IndexManagement.ensure_collection_for_project(index_root, display_path)
             # Record the project under reindex so a concurrent caller's
@@ -399,6 +408,10 @@ defmodule ElixirNexus.MCPServer do
                   result,
                   state |> Map.put(:indexed_dirs, dirs) |> Map.put(:project_path, display_path)
                 )
+
+              {:error, {:connection_failed, reason}} ->
+                ollama_url = ElixirNexus.EmbeddingModel.base_url()
+                {:error, "Embedding backend unreachable (#{reason}) at #{ollama_url}. Verify Ollama is up.", state}
 
               {:error, reason} ->
                 {:error, "Reindex failed: #{inspect(reason)}", state}

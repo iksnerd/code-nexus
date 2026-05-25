@@ -18,7 +18,7 @@ defmodule ElixirNexus.SearchLive.Index do
             placeholder="Search code by function name, logic, or concept..."
             class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 pr-20"
             autocomplete="off"
-            phx-debounce="300"
+            phx-debounce="600"
             phx-hook="SearchFocus"
             id="search-input"
           />
