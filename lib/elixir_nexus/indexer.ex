@@ -23,6 +23,11 @@ defmodule ElixirNexus.Indexer do
     GenServer.call(__MODULE__, {:index_directories, paths}, :infinity)
   end
 
+  @doc "Start indexing asynchronously — returns immediately. Poll get_status or use get_graph_stats to detect completion."
+  def async_index_directories(paths) when is_list(paths) do
+    GenServer.cast(__MODULE__, {:async_index_directories, paths})
+  end
+
   def index_file(file_path) do
     GenServer.call(__MODULE__, {:index_file, file_path}, :infinity)
   end
@@ -219,8 +224,36 @@ defmodule ElixirNexus.Indexer do
        indexed_files: MapSet.size(state.indexed_files),
        total_chunks: if(is_integer(chunk_count) and chunk_count > 0, do: chunk_count, else: state.total_chunks),
        status: state.status,
-       errors: state.errors
+       errors: state.errors,
+       indexing_progress: %{files_done: state.acked_file_count, total_files: state.pending_file_count}
      }, state}
+  end
+
+  @impl true
+  def handle_cast({:async_index_directories, _paths}, %{status: :indexing} = state) do
+    {:noreply, state}
+  end
+
+  def handle_cast({:async_index_directories, paths}, state) do
+    Logger.info("Starting async Broadway indexing of directories: #{inspect(paths)}")
+
+    {all_files, combined_stats} =
+      Enum.reduce(paths, {[], empty_skip_stats()}, fn path, {acc_files, acc_stats} ->
+        case collect_files(path) do
+          {:ok, files, stats} -> {acc_files ++ files, merge_skip_stats(acc_stats, stats)}
+          {:error, _} -> {acc_files, acc_stats}
+        end
+      end)
+
+    unique_files = Enum.uniq(all_files)
+
+    case unique_files do
+      [] ->
+        {:noreply, prepare_reindex(state)}
+
+      files ->
+        do_async_index_files(files, combined_stats, state)
+    end
   end
 
   @impl true
@@ -262,6 +295,36 @@ defmodule ElixirNexus.Indexer do
         acked_file_count: 0,
         skip_stats: empty_skip_stats()
     }
+  end
+
+  # Async variant of do_index_files — no pending_reply, never issues a GenServer reply.
+  defp do_async_index_files(files, skip_stats, state) do
+    if ElixirNexus.DirtyTracker.empty?() do
+      seed_dirty_tracker_from_qdrant()
+    end
+
+    if not ElixirNexus.DirtyTracker.empty?() do
+      dirty =
+        Enum.filter(files, fn path ->
+          case ElixirNexus.DirtyTracker.dirty?(path) do
+            {true, _sha} -> true
+            _ -> false
+          end
+        end)
+
+      if dirty == [] do
+        Logger.info("Incremental async reindex: all #{length(files)} files unchanged, skipping embed")
+        {:noreply, state}
+      else
+        Logger.info(
+          "Incremental async reindex: #{length(dirty)}/#{length(files)} files changed, re-embedding dirty only"
+        )
+
+        do_partial_reindex(dirty, files, skip_stats, nil, state)
+      end
+    else
+      do_full_reindex(files, skip_stats, nil, state)
+    end
   end
 
   defp do_index_files(files, skip_stats, from, state) do
