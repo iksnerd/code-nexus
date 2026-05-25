@@ -106,7 +106,7 @@ Add to your project's `.mcp.json`:
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant vector DB URL |
 | `MCP_HTTP_PORT` | _(unset)_ | Set to enable MCP Streamable HTTP transport |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (use `http://host.docker.internal:11434` in Docker) |
-| `OLLAMA_MODEL` | `embeddinggemma:300m` | Ollama embedding model name (768-dim) |
+| `OLLAMA_MODEL` | `embeddinggemma:300m` | Ollama embedding model name (768-dim). `EMBEDDING_MODEL` is accepted as an alias. |
 | `EMBEDDING_BACKEND` | _(unset)_ | Set to `tfidf` to skip Ollama and use local TF-IDF only (~10× faster indexing, no Ollama required) |
 | `WORKSPACE_HOST` | _(unset)_ | Host path mapped to `/workspace` (for path translation) |
 | `WORKSPACE_HOST_2` | _(unset)_ | Host path mapped to `/workspace2` |
