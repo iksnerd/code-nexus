@@ -30,9 +30,17 @@ defmodule ElixirNexus.QdrantClientTest do
     end
 
     test "handles various vector sizes" do
-      for size <- [64, 128, 256, 768, 512] do
-        result = ElixirNexus.QdrantClient.create_collection(size)
-        assert is_tuple(result)
+      original = ElixirNexus.QdrantClient.active_collection()
+
+      try do
+        for size <- [64, 128, 256, 768, 512] do
+          ElixirNexus.QdrantClient.switch_collection_force("nexus_test_sizes_temp")
+          result = ElixirNexus.QdrantClient.create_collection(size)
+          ElixirNexus.QdrantClient.delete_collection()
+          assert is_tuple(result)
+        end
+      after
+        ElixirNexus.QdrantClient.switch_collection_force(original)
       end
     end
   end
@@ -177,7 +185,7 @@ defmodule ElixirNexus.QdrantClientTest do
         "file_path" => "test.ex"
       }
 
-      {:ok, _} = ElixirNexus.QdrantClient.reset_collection()
+      _create_result = ElixirNexus.QdrantClient.create_collection(768)
 
       {:ok, _} = ElixirNexus.QdrantClient.upsert_point(100, vector1, payload1)
 
