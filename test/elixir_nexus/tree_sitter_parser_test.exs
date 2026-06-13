@@ -163,4 +163,70 @@ defmodule ElixirNexus.TreeSitterParserTest do
       assert "Button" in widget.calls, "PascalCase <Button /> should be a call"
     end
   end
+
+  describe "parse_and_extract/2 - Go struct/method/import edges (NIF integration)" do
+    # Regression guards for the contains-edge drop (85 -> 0) and imports: 0 seen on
+    # real Go projects after a tree-sitter-go grammar shape change:
+    #   - struct fields nest under field_declaration_list, not struct_type directly
+    #   - method receivers live in a parameter_list (must be a significant NIF node)
+    #   - import paths live in string-literal text (must be captured despite quote
+    #     tokens making child_count > 0)
+    @tag :nif
+    test "struct contains its fields and receiver methods" do
+      source = """
+      package store
+
+      type Storage struct {
+        Root string
+        size int
+      }
+
+      func (s *Storage) WritePiece(i int) error { return nil }
+      func (s *Storage) Preallocate() error { return nil }
+      """
+
+      path = "/tmp/test_go_struct_#{System.unique_integer()}.go"
+      File.write!(path, source)
+      on_exit(fn -> File.rm(path) end)
+
+      {:ok, entities} = TreeSitterParser.parse_and_extract(path)
+      storage = Enum.find(entities, &(&1.name == "Storage" && &1.entity_type == :struct))
+
+      assert storage != nil, "Expected to find Storage struct"
+      assert "Root" in storage.contains, "Expected struct field Root in contains"
+      assert "size" in storage.contains, "Expected struct field size in contains"
+      assert "WritePiece" in storage.contains, "Expected receiver method WritePiece in contains"
+      assert "Preallocate" in storage.contains, "Expected receiver method Preallocate in contains"
+
+      method = Enum.find(entities, &(&1.entity_type == :method && &1.name == "Storage.WritePiece"))
+      assert method != nil, "Expected method to be named Storage.WritePiece (receiver-qualified)"
+    end
+
+    @tag :nif
+    test "import paths are extracted into is_a" do
+      source = """
+      package main
+
+      import (
+        "fmt"
+        "net/http"
+        "weightless/internal/tracker"
+      )
+
+      func main() { fmt.Println("hi") }
+      """
+
+      path = "/tmp/test_go_imports_#{System.unique_integer()}.go"
+      File.write!(path, source)
+      on_exit(fn -> File.rm(path) end)
+
+      {:ok, entities} = TreeSitterParser.parse_and_extract(path)
+      main = Enum.find(entities, &(&1.name == "main" && &1.entity_type == :function))
+
+      assert main != nil, "Expected to find main function"
+      assert "fmt" in main.is_a, "Expected import fmt in is_a"
+      assert "net/http" in main.is_a, "Expected import net/http in is_a"
+      assert "weightless/internal/tracker" in main.is_a, "Expected internal import in is_a"
+    end
+  end
 end

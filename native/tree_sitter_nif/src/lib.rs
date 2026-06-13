@@ -43,7 +43,13 @@ fn get_language(lang: &str) -> Option<tree_sitter::Language> {
 }
 
 fn node_to_ast(node: tree_sitter::Node, source: &[u8], depth: usize) -> AstNode {
-    let text = if node.child_count() == 0 || depth > 25 {
+    let kind = node.kind();
+    // String-literal nodes carry their value via anonymous quote-token children
+    // (so child_count() > 0), which left `text` empty and broke import-path
+    // extraction (Go import_spec, Python/JS module sources). Always capture their
+    // raw text. Other nodes only get text when they're true leaves.
+    let is_string_literal = kind.contains("string_literal") || kind == "string";
+    let text = if node.child_count() == 0 || depth > 25 || is_string_literal {
         node.utf8_text(source).unwrap_or("").to_string()
     } else {
         String::new()
@@ -210,6 +216,7 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "field_identifier"
         || kind == "type_identifier"
         || kind == "pointer_type"
+        || kind == "parameter_list"
         || kind == "parameter_declaration"
         || kind == "package_clause"
         || kind == "package_identifier"

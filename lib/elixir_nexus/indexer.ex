@@ -87,7 +87,8 @@ defmodule ElixirNexus.Indexer do
       pending_reply: nil,
       pending_file_count: 0,
       acked_file_count: 0,
-      skip_stats: empty_skip_stats()
+      skip_stats: empty_skip_stats(),
+      last_index_result: nil
     }
 
     if ChunkCache.count() > 0 do
@@ -115,8 +116,10 @@ defmodule ElixirNexus.Indexer do
     case collect_files(path) do
       {:ok, [], stats} ->
         clean_state = prepare_reindex(state)
+        result = build_index_result(files: 0, skipped: stats, error: zero_files_error([path]))
 
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: stats}}, clean_state}
+        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: stats}},
+         %{clean_state | last_index_result: result}}
 
       {:ok, files, stats} ->
         do_index_files(files, stats, from, state)
@@ -147,8 +150,10 @@ defmodule ElixirNexus.Indexer do
     case unique_files do
       [] ->
         clean_state = prepare_reindex(state)
+        result = build_index_result(files: 0, skipped: combined_stats, error: zero_files_error(paths))
 
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: combined_stats}}, clean_state}
+        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: combined_stats}},
+         %{clean_state | last_index_result: result}}
 
       files ->
         do_index_files(files, combined_stats, from, state)
@@ -225,7 +230,8 @@ defmodule ElixirNexus.Indexer do
        total_chunks: if(is_integer(chunk_count) and chunk_count > 0, do: chunk_count, else: state.total_chunks),
        status: state.status,
        errors: state.errors,
-       indexing_progress: %{files_done: state.acked_file_count, total_files: state.pending_file_count}
+       indexing_progress: %{files_done: state.acked_file_count, total_files: state.pending_file_count},
+       last_index_result: state.last_index_result
      }, state}
   end
 
@@ -249,7 +255,12 @@ defmodule ElixirNexus.Indexer do
 
     case unique_files do
       [] ->
-        {:noreply, prepare_reindex(state)}
+        Logger.warning("Async reindex resolved to 0 indexable files for #{inspect(paths)}")
+        clean_state = prepare_reindex(state)
+
+        result = build_index_result(files: 0, skipped: combined_stats, error: zero_files_error(paths))
+
+        {:noreply, %{clean_state | last_index_result: result}}
 
       files ->
         do_async_index_files(files, combined_stats, state)
@@ -314,7 +325,16 @@ defmodule ElixirNexus.Indexer do
 
       if dirty == [] do
         Logger.info("Incremental async reindex: all #{length(files)} files unchanged, skipping embed")
-        {:noreply, state}
+
+        result =
+          build_index_result(
+            files: length(files),
+            chunks: ChunkCache.count(),
+            languages: IndexingHelpers.count_languages(files),
+            skipped: skip_stats
+          )
+
+        {:noreply, %{state | last_index_result: result}}
       else
         Logger.info(
           "Incremental async reindex: #{length(dirty)}/#{length(files)} files changed, re-embedding dirty only"
@@ -350,6 +370,14 @@ defmodule ElixirNexus.Indexer do
       if dirty == [] do
         Logger.info("Incremental reindex: all #{length(files)} files unchanged, skipping embed")
 
+        result =
+          build_index_result(
+            files: length(files),
+            chunks: ChunkCache.count(),
+            languages: IndexingHelpers.count_languages(files),
+            skipped: skip_stats
+          )
+
         {:reply,
          {:ok,
           %{
@@ -357,7 +385,7 @@ defmodule ElixirNexus.Indexer do
             total_chunks: ChunkCache.count(),
             languages: IndexingHelpers.count_languages(files),
             skipped: skip_stats
-          }}, state}
+          }}, %{state | last_index_result: result}}
       else
         Logger.info("Incremental reindex: #{length(dirty)}/#{length(files)} files changed, re-embedding dirty only")
         do_partial_reindex(dirty, files, skip_stats, from, state)
@@ -429,7 +457,22 @@ defmodule ElixirNexus.Indexer do
     # Broadcast completion
     Events.broadcast_indexing_complete(%{files: file_count, chunks: chunk_count})
 
-    new_state = %{state | total_chunks: chunk_count, status: :idle, pending_file_count: 0, acked_file_count: 0}
+    result =
+      build_index_result(
+        files: file_count,
+        chunks: chunk_count,
+        languages: languages,
+        skipped: state.skip_stats
+      )
+
+    new_state = %{
+      state
+      | total_chunks: chunk_count,
+        status: :idle,
+        pending_file_count: 0,
+        acked_file_count: 0,
+        last_index_result: result
+    }
 
     # Reply to the waiting caller if there is one
     case new_state.pending_reply do
@@ -507,6 +550,25 @@ defmodule ElixirNexus.Indexer do
           end
       end
     end)
+  end
+
+  # Build a terminal index-result record surfaced via get_status as last_index_result.
+  # Lets callers distinguish "never ran" (nil) from "finished empty/errored" vs "finished ok".
+  defp build_index_result(opts) do
+    %{
+      files: Keyword.get(opts, :files, 0),
+      chunks: Keyword.get(opts, :chunks, 0),
+      languages: Keyword.get(opts, :languages, []),
+      skipped: Keyword.get(opts, :skipped, empty_skip_stats()),
+      error: Keyword.get(opts, :error),
+      finished_at: DateTime.utc_now()
+    }
+  end
+
+  defp zero_files_error(paths) do
+    "Indexed 0 files — the resolved path(s) #{inspect(paths)} contained no indexable source files " <>
+      "(empty directory or wrong workspace mount). Try the full host path, or check that the project " <>
+      "is mounted into the container."
   end
 
   defp empty_skip_stats do

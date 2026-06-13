@@ -252,7 +252,7 @@ defmodule ElixirNexus.Parsers.Go.Entities do
 
   defp extract_struct_fields(%{"children" => children}) do
     children
-    |> Enum.filter(&(&1["kind"] == "field_declaration"))
+    |> collect_field_declarations()
     |> Enum.flat_map(fn field ->
       (field["children"] || [])
       |> Enum.filter(&(&1["kind"] == "field_identifier"))
@@ -262,6 +262,17 @@ defmodule ElixirNexus.Parsers.Go.Entities do
   end
 
   defp extract_struct_fields(_), do: []
+
+  # tree-sitter-go wraps struct fields in a `field_declaration_list` node, so the
+  # `field_declaration` children are one level deeper than the `struct_type`.
+  # Accept both shapes (direct children and the wrapped list).
+  defp collect_field_declarations(children) do
+    Enum.flat_map(children, fn
+      %{"kind" => "field_declaration"} = node -> [node]
+      %{"kind" => "field_declaration_list", "children" => inner} -> collect_field_declarations(inner)
+      _ -> []
+    end)
+  end
 
   defp extract_interface_methods(%{"children" => children}) do
     children

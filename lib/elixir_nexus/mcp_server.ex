@@ -397,7 +397,9 @@ defmodule ElixirNexus.MCPServer do
                 status: "indexing_started",
                 directories: dirs,
                 project_path: display_path,
-                message: "Indexing running in the background. Call get_status to check progress."
+                message:
+                  "Indexing running in the background. Call get_status to check progress and " <>
+                    "read last_index_result for the final file/chunk count or error once it finishes."
               }
               |> PathResolution.maybe_add_default_path_warning(path_arg, display_path, state)
 
@@ -483,6 +485,7 @@ defmodule ElixirNexus.MCPServer do
       file_count: ElixirNexus.ChunkCache.count(),
       indexing: indexer.status == :indexing,
       indexing_progress: indexer.indexing_progress,
+      last_index_result: indexer.last_index_result,
       qdrant: qdrant,
       collections: collections,
       ollama_url: ElixirNexus.EmbeddingModel.base_url(),

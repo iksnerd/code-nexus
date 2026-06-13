@@ -65,6 +65,34 @@ defmodule ElixirNexus.IndexerDirectoryTest do
       end
     end
 
+    test "records a loud last_index_result error when 0 files are indexed" do
+      empty_dir = Path.join(System.tmp_dir!(), "empty_loud_#{:rand.uniform(1_000_000)}")
+      File.mkdir_p(empty_dir)
+      on_exit(fn -> File.rm_rf(empty_dir) end)
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(empty_dir)
+
+      result = ElixirNexus.Indexer.status().last_index_result
+      assert result.files == 0
+      assert is_binary(result.error)
+      assert result.error =~ "0 files"
+    end
+
+    test "records a clean last_index_result after a successful index", %{test_dir: test_dir} do
+      File.write(Path.join(test_dir, "ok.ex"), """
+        defmodule Ok do
+          def ok, do: :ok
+        end
+      """)
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      result = ElixirNexus.Indexer.status().last_index_result
+      assert result.files >= 1
+      assert is_nil(result.error)
+    end
+
     test "skips non-Elixir files in directory", %{test_dir: test_dir} do
       File.write(Path.join(test_dir, "valid.ex"), """
         defmodule Valid do

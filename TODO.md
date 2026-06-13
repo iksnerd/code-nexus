@@ -1,7 +1,23 @@
-# CodeNexus TODO — v1.12.0 Roadmap
+# CodeNexus TODO
 
-**Current version:** v1.12.0 (JSX hierarchy, Go struct children, nexus community, quality fixes)
-**Status:** v1.12.0 tagged + Docker Hub pushed, 763 tests green (42 excluded)
+**Current version:** v1.14.0 (async reindex, indexing progress in get_status)
+**Status:** v1.14.0 tagged; 768 tests green (42 excluded)
+
+---
+
+## 🔧 In progress (uncommitted) — council-hub feedback fixes (2026-06-13)
+
+Acting on `codenexus-feedback` #019ec14e (Go re-test on `weightless`) + `code-nexus-suggestions`.
+
+- [x] **Loud 0-file index + `last_index_result`** — async reindex no longer reports silent success on an empty/wrong-mount result. `Indexer` records a terminal `last_index_result` (`files`, `chunks`, `languages`, `skipped`, `error`, `finished_at`) on every completion path; surfaced via `get_status`. Distinguishes never-ran (nil) / finished-empty (error) / finished-ok. **Files:** `indexer.ex`, `mcp_server.ex`. Tests added.
+- [x] **Go `contains` regression (85 → 0)** — root-caused to a tree-sitter-go AST shape change. Three fixes:
+  - NIF: added `parameter_list` to `is_significant_node` — method receivers were dropped (children of filtered nodes aren't promoted), so methods lost their `Type.` prefix and couldn't link to their struct. Restores `Storage.WritePiece` naming + method params.
+  - NIF: capture `text` for string-literal kinds even when quote tokens make `child_count > 0` — fixes empty import paths.
+  - Elixir: `extract_struct_fields` descends into the new `field_declaration_list` wrapper.
+  - **Files:** `native/tree_sitter_nif/src/lib.rs` (NIF rebuilt), `parsers/go/entities.ex`. NIF + parser integration tests added.
+- [x] **Go `imports` edges (0)** — same string-literal NIF bug; `ImportsPackage.extract_imports` now recovers paths, propagated to all entities' `is_a`. Verified end-to-end on `weightless`.
+- [ ] **Bare-name multi-mount resolution** — `resolve_path` already scans all mounts in source (`path_resolution.ex`); the feedback ran against an older `:latest` image. Verify after next Docker rebuild.
+- [ ] Rebuild + push Docker image (Linux NIF) and re-verify against `weightless` before closing the council-hub thread.
 
 ---
 
@@ -110,6 +126,8 @@ mix test --include performance     # + 32 benchmarks
 ---
 
 ## Session Notes
+
+**2026-06-13 (council-hub feedback session):** Acted on the Go re-test feedback (`codenexus-feedback` #019ec14e). (1) Silent 0-file reindex success → loud `last_index_result` in `get_status`. (2) Go `contains` regression 85→0 root-caused to a tree-sitter-go AST shape change: `parameter_list` was missing from the NIF significant-node list (receivers dropped, since children of filtered nodes aren't promoted), struct fields moved under `field_declaration_list`, and string-literal text was empty due to anonymous quote-token children. Fixed all three (NIF rebuilt for macOS host; Docker rebuilds Linux NIF). (3) Go `imports` edges were 0 from the same string-literal bug — now extract correctly. Note: the earlier "Go imports stats verification ✅ — no bug found" was a false negative; the bug was in the NIF, not the Elixir pipeline. 768 tests, 0 failures. NIF + parser integration tests added. Pending: Docker image rebuild/push + re-verify against `weightless`.
 
 **2026-05-20 (quick wins):** GitHub topics already set. Go module hierarchy backlog item marked done (shipped v1.11.0). Nested function declarations added to find_module_hierarchy — inner functions whose line range falls within parent's range now appear as children at query time; no reindex needed. 2 new tests, 763 total, 0 failures.
 

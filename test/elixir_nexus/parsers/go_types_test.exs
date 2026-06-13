@@ -67,6 +67,48 @@ defmodule ElixirNexus.Parsers.GoTypesTest do
       assert "Port" in struct.contains
     end
 
+    test "extracts struct fields wrapped in a field_declaration_list (real NIF shape)" do
+      # tree-sitter-go nests field_declaration under field_declaration_list rather
+      # than directly under struct_type. Regression guard for the contains-edge
+      # drop (85 -> 0) caused by only reading struct_type's direct children.
+      ast =
+        wrap_program([
+          make_node("type_declaration",
+            children: [
+              make_node("type_spec",
+                start_row: 0,
+                end_row: 4,
+                children: [
+                  make_node("type_identifier", text: "Server"),
+                  make_node("struct_type",
+                    children: [
+                      make_node("field_declaration_list",
+                        children: [
+                          make_node("field_declaration",
+                            children: [make_node("field_identifier", text: "Host")]
+                          ),
+                          make_node("field_declaration",
+                            children: [make_node("field_identifier", text: "Port")]
+                          )
+                        ]
+                      )
+                    ]
+                  )
+                ]
+              )
+            ]
+          )
+        ])
+
+      source = "type Server struct {\n  Host string\n  Port int\n}"
+      entities = GoExtractor.extract_entities("server.go", ast, source)
+      struct = Enum.find(entities, &(&1.name == "Server" && &1.entity_type == :struct))
+
+      assert struct != nil
+      assert "Host" in struct.contains
+      assert "Port" in struct.contains
+    end
+
     test "extracts interface type with methods" do
       ast =
         wrap_program([
