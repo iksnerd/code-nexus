@@ -216,6 +216,45 @@ defmodule ElixirNexus.GraphLive.Index do
 
     node_ids = MapSet.new(nodes, & &1.id)
 
+    # id → package (last segment of its group), so cross-package calls written as
+    # `pkg.Func` can resolve to the bare-named `Func` node in package `pkg`.
+    pkg_of =
+      nodes_map
+      |> Enum.reduce(%{}, fn {id, node}, acc ->
+        Map.put(acc, id, group_for(node["file_path"]) |> String.split("/") |> List.last())
+      end)
+
+    # Resolve a callee name to target node ids: exact match first; for qualified
+    # `pkg.Func` calls, the bare `Func` in the matching package; else an
+    # unambiguous bare match anywhere. This is what connects the package boxes —
+    # without it, qualified cross-package calls leave whole packages isolated.
+    resolve_targets = fn raw ->
+      lower = String.downcase(raw)
+
+      case Map.get(name_to_ids, lower, []) do
+        [] ->
+          parts = String.split(lower, ".")
+
+          if length(parts) >= 2 do
+            bare = List.last(parts)
+            prefix = Enum.at(parts, -2)
+            by_bare = Map.get(name_to_ids, bare, [])
+            pkg_matched = Enum.filter(by_bare, &(Map.get(pkg_of, &1) == prefix))
+
+            cond do
+              pkg_matched != [] -> pkg_matched
+              match?([_], by_bare) -> by_bare
+              true -> []
+            end
+          else
+            []
+          end
+
+        ids ->
+          ids
+      end
+    end
+
     links =
       nodes_map
       |> Enum.flat_map(fn {id, node} ->
@@ -223,11 +262,9 @@ defmodule ElixirNexus.GraphLive.Index do
           call_links =
             (node["calls"] || [])
             |> Enum.flat_map(fn callee_name ->
-              callee_lower = String.downcase(callee_name)
-              target_ids = Map.get(name_to_ids, callee_lower, [])
-
-              target_ids
+              resolve_targets.(callee_name)
               |> Enum.filter(&MapSet.member?(node_ids, &1))
+              |> Enum.reject(&(&1 == id))
               |> Enum.map(fn target_id ->
                 %{source: id, target: target_id, type: "calls"}
               end)

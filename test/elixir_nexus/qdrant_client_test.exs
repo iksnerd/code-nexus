@@ -305,6 +305,12 @@ defmodule ElixirNexus.QdrantClientTest do
         else
           Application.delete_env(:elixir_nexus, :qdrant_runtime)
         end
+
+        # Delete any collections these tests may have materialized in the shared
+        # Qdrant so they don't leak into the dashboard / startup resolver.
+        for name <- ~w(nexus_force_switched nexus_temp_collection) do
+          ElixirNexus.QdrantClient.delete_collection(name)
+        end
       end)
 
       :ok

@@ -171,13 +171,13 @@ Hooks.CodeGraph = {
 
     // Type-aware link distance: contained methods tight to their struct, call/
     // import edges longer so the graph breathes.
-    const linkDistance = { "contains": 45, "calls": 150, "imports": 190 };
+    const linkDistance = { "contains": 55, "calls": 175, "imports": 215 };
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 150).strength(0.25))
-      .force("charge", d3.forceManyBody().strength(-360).distanceMax(700))
-      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 7 + 16))
-      .force("x", d3.forceX(d => centerOf(d).x).strength(0.5))
-      .force("y", d3.forceY(d => centerOf(d).y).strength(0.5));
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 175).strength(0.2))
+      .force("charge", d3.forceManyBody().strength(-520).distanceMax(900))
+      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 8 + 30).strength(0.9))
+      .force("x", d3.forceX(d => centerOf(d).x).strength(0.45))
+      .force("y", d3.forceY(d => centerOf(d).y).strength(0.45));
 
     this.simulation = simulation;
 

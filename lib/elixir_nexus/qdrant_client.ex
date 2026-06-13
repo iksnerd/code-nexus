@@ -95,8 +95,11 @@ defmodule ElixirNexus.QdrantClient do
     end
   end
 
-  # Returns the default collection if it exists in Qdrant, otherwise the first non-test
-  # collection available. Falls back to default if Qdrant has no collections yet.
+  # Returns the default collection if it exists, otherwise the *largest real*
+  # collection (most points) — never a test/temp artifact. Picking the first
+  # available name made the server boot into leaked test collections like
+  # `nexus_force_switched`; choosing the biggest real project is both robust
+  # against junk and a sensible default. Falls back to default if none qualify.
   defp resolve_startup_collection(url, default_coll) do
     case http_get("#{url}/collections/#{default_coll}") do
       {:ok, _} ->
@@ -105,12 +108,32 @@ defmodule ElixirNexus.QdrantClient do
       {:error, _} ->
         case http_get("#{url}/collections") do
           {:ok, data} ->
-            names = data["result"]["collections"] |> List.wrap() |> Enum.map(& &1["name"])
-            Enum.find(names, default_coll, &(not String.ends_with?(&1, "_test")))
+            (data["result"]["collections"] || [])
+            |> Enum.map(& &1["name"])
+            |> Enum.reject(&test_collection?/1)
+            |> Enum.max_by(&collection_point_count(url, &1), fn -> default_coll end)
 
           _ ->
             default_coll
         end
+    end
+  end
+
+  @doc """
+  True for collections created by the test suite or transient switches — they
+  should be hidden from the UI and never auto-selected at boot.
+  """
+  def test_collection?(name) when is_binary(name) do
+    String.ends_with?(name, "_test") or String.contains?(name, "_test_") or
+      name in ~w(nexus_force_switched nexus_temp_collection)
+  end
+
+  def test_collection?(_), do: false
+
+  defp collection_point_count(url, name) do
+    case http_get("#{url}/collections/#{name}") do
+      {:ok, %{"result" => %{"points_count" => n}}} when is_integer(n) -> n
+      _ -> 0
     end
   end
 
