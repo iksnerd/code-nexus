@@ -5,7 +5,17 @@
 
 ---
 
-## 🔧 v1.17.0 (committed, local-verified, not yet released) — 2026-06-13
+## ✅ Shipped in v1.17.0 — graph representation + switching robustness (2026-06-13)
+
+Plus, beyond the list below: package clustering with tinted container boxes +
+labels, language-aware grouping (`group_for/1`), struct/method/interface colors +
+legend, calmer cross-package edges, wider spacing, qualified cross-package call
+resolution (no more isolated package boxes), and project/collection switching
+robustness (boot resolver picks the largest real collection, NavHook hides
+test/temp collections and no longer hijacks the active one, test-collection
+cleanup). All verified live against weightless via the local mix loop.
+
+
 
 Graph correctness + representation, all verified live via the local mix loop against weightless:
 
