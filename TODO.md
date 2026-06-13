@@ -5,9 +5,13 @@
 
 ---
 
-## 🔧 In progress (uncommitted) — council-hub feedback fixes (2026-06-13)
+## ✅ Shipped in v1.15.0 — council-hub feedback fixes (2026-06-13)
 
 Acting on `codenexus-feedback` #019ec14e (Go re-test on `weightless`) + `code-nexus-suggestions`.
+Shipped + live-verified against weightless on `iksnerd/code-nexus:v1.15.0`:
+`contains` 0 → **398**, `imports` 0 → **6398**, `find_module_hierarchy("SwarmState")`
+returns fields + 12 receiver methods, bare-name `weightless` now returns a loud
+0-file error instead of silent success.
 
 - [x] **Loud 0-file index + `last_index_result`** — async reindex no longer reports silent success on an empty/wrong-mount result. `Indexer` records a terminal `last_index_result` (`files`, `chunks`, `languages`, `skipped`, `error`, `finished_at`) on every completion path; surfaced via `get_status`. Distinguishes never-ran (nil) / finished-empty (error) / finished-ok. **Files:** `indexer.ex`, `mcp_server.ex`. Tests added.
 - [x] **Go `contains` regression (85 → 0)** — root-caused to a tree-sitter-go AST shape change. Three fixes:
@@ -16,8 +20,8 @@ Acting on `codenexus-feedback` #019ec14e (Go re-test on `weightless`) + `code-ne
   - Elixir: `extract_struct_fields` descends into the new `field_declaration_list` wrapper.
   - **Files:** `native/tree_sitter_nif/src/lib.rs` (NIF rebuilt), `parsers/go/entities.ex`. NIF + parser integration tests added.
 - [x] **Go `imports` edges (0)** — same string-literal NIF bug; `ImportsPackage.extract_imports` now recovers paths, propagated to all entities' `is_a`. Verified end-to-end on `weightless`.
-- [ ] **Bare-name multi-mount resolution** — `resolve_path` already scans all mounts in source (`path_resolution.ex`); the feedback ran against an older `:latest` image. Verify after next Docker rebuild.
-- [ ] Rebuild + push Docker image (Linux NIF) and re-verify against `weightless` before closing the council-hub thread.
+- [x] Rebuild + push Docker image (`v1.15.0` + `latest`, arm64) and re-verify against `weightless` — done, all four findings confirmed fixed live.
+- [ ] **Bare-name multi-mount ambiguity** — `weightless` exists under BOTH `/workspace` (www, empty) and `/workspace4` (GolandProjects, the real Go project). `resolve_bare_name` picks `/workspace` first. The loud 0-file error now makes this obvious, but consider: when a bare name matches multiple mounts, prefer the non-empty one or report the ambiguity. Low priority now that the failure is loud.
 
 ---
 
