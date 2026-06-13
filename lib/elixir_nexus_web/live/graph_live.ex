@@ -215,11 +215,20 @@ defmodule ElixirNexus.GraphLive.Index do
               end)
             end)
 
+          parent_lower = String.downcase(node["name"] || "")
+
           contains_links =
             (node["contains"] || [])
             |> Enum.flat_map(fn child_name ->
               child_lower = String.downcase(child_name)
-              target_ids = Map.get(name_to_ids, child_lower, [])
+
+              # `contains` stores bare child names (struct fields + method names),
+              # but method nodes are receiver-qualified ("Struct.method"). Try both
+              # the bare name and the "<parent>.<child>" form so struct→method
+              # containment actually resolves to a link.
+              target_ids =
+                Map.get(name_to_ids, child_lower, []) ++
+                  Map.get(name_to_ids, "#{parent_lower}.#{child_lower}", [])
 
               target_ids
               |> Enum.filter(&MapSet.member?(node_ids, &1))

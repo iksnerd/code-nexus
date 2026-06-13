@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ Shipped in v1.16.1 — graph UI contains links (2026-06-13)
+
+- [x] **D3 graph renders struct→method containment** — `build_d3_graph` matched `contains`
+  entries by exact name, but `contains` stores bare child names (`TrackUsage`) while method
+  nodes are receiver-qualified (`SwarmState.TrackUsage`), so 0 contains links drew (verified
+  live: 75 calls + 2 imports + 0 contains on weightless). Resolver now also tries
+  `"<parent>.<child>"`. **File:** `elixir_nexus_web/live/graph_live.ex`.
+
+---
+
 ## ✅ Shipped in v1.16.0 — reindex reconciliation + purge (2026-06-13)
 
 Acting on `code-nexus-feedback` #019ec226: **`reindex` was additive** — partial/incremental
