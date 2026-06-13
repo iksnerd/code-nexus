@@ -292,5 +292,54 @@ defmodule ElixirNexus.Parsers.GoCallsTest do
       assert "Build" in func.calls
       assert "builder.SetName" in func.calls
     end
+
+    test "captures composite-literal struct usage as an edge (bare, pointer, qualified)" do
+      # build()'s body uses Server{}, &Server{}, and pkg.Opts{} — each should
+      # appear as a usage edge so data structs connect to the code that builds them.
+      bare = make_node("composite_literal", children: [make_node("type_identifier", text: "Server")])
+
+      pointer =
+        make_node("unary_expression",
+          children: [make_node("composite_literal", children: [make_node("type_identifier", text: "Peer")])]
+        )
+
+      qualified =
+        make_node("composite_literal",
+          children: [
+            make_node("qualified_type",
+              children: [
+                make_node("package_identifier", text: "pkg"),
+                make_node("type_identifier", text: "Opts")
+              ]
+            )
+          ]
+        )
+
+      ast =
+        wrap_program([
+          make_node("function_declaration",
+            start_row: 0,
+            end_row: 4,
+            children: [
+              make_node("identifier", text: "build"),
+              make_node("parameter_list", children: []),
+              make_node("block",
+                children: [
+                  make_node("expression_statement", children: [bare]),
+                  make_node("expression_statement", children: [pointer]),
+                  make_node("expression_statement", children: [qualified])
+                ]
+              )
+            ]
+          )
+        ])
+
+      func = GoExtractor.extract_entities("b.go", ast, "src") |> Enum.find(&(&1.name == "build"))
+
+      assert func != nil
+      assert "Server" in func.calls
+      assert "Peer" in func.calls
+      assert "Opts" in func.calls
+    end
   end
 end

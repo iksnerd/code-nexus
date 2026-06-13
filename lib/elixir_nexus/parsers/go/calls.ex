@@ -44,9 +44,36 @@ defmodule ElixirNexus.Parsers.Go.Calls do
 
   defp find_calls(%{"kind" => "call_expression"}), do: []
 
+  # composite_literal: `Server{...}` / `&Server{...}` / `pkg.Opts{...}` / `[]Peer{...}`
+  # instantiates a struct. Emit the (bare) type name as a usage edge so data structs
+  # (no methods) connect to the code that builds them instead of floating disconnected.
+  # The type child is a type_identifier, or wraps one in a qualified/pointer/slice/map
+  # /array/generic type — collect type_identifiers from the type portion only (the
+  # literal body is a separate `literal_value` child we don't descend into here).
+  defp find_calls(%{"kind" => "composite_literal", "children" => children}) do
+    type_names = Enum.flat_map(children, &composite_type_names/1)
+    nested = Enum.flat_map(children, &find_calls/1)
+    type_names ++ nested
+  end
+
   # Recurse into other nodes
   defp find_calls(%{"children" => children}), do: Enum.flat_map(children, &find_calls/1)
   defp find_calls(_), do: []
+
+  # Collect bare type_identifier names from a composite_literal's type child,
+  # unwrapping qualified/pointer/slice/array/map/generic type wrappers. Returns
+  # bare names (e.g. "CreateOptions" from `torrent.CreateOptions`) to match the
+  # struct entity's name. Stops at type nodes — never descends into a literal body.
+  defp composite_type_names(%{"kind" => "type_identifier"} = node) do
+    [node["text"] || node["name"]] |> Enum.reject(&(&1 in [nil, ""]))
+  end
+
+  defp composite_type_names(%{"kind" => kind, "children" => children})
+       when kind in ~w(qualified_type pointer_type slice_type array_type map_type generic_type) do
+    Enum.flat_map(children, &composite_type_names/1)
+  end
+
+  defp composite_type_names(_), do: []
 
   # Extract callee name from the function child of a call_expression
   defp extract_callee_name(%{"kind" => "identifier", "text" => text}) when is_binary(text), do: text

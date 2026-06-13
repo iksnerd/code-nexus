@@ -329,6 +329,8 @@ defmodule ElixirNexus.Indexer do
 
   # Async variant of do_index_files — no pending_reply, never issues a GenServer reply.
   defp do_async_index_files(files, skip_stats, state) do
+    hydrate_cold_caches()
+
     if ElixirNexus.DirtyTracker.empty?() do
       seed_dirty_tracker_from_qdrant()
     end
@@ -373,6 +375,8 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_index_files(files, skip_stats, from, state) do
+    hydrate_cold_caches()
+
     # On the first reindex after a container restart, DirtyTracker is empty even
     # though Qdrant already has vectors from the last session. Seed it now from the
     # stored file_sha values so the dirty check below can skip unchanged files.
@@ -586,6 +590,17 @@ defmodule ElixirNexus.Indexer do
 
     if stale != [], do: Logger.info("Reindex reconcile: purged #{length(stale)} out-of-scope files")
     length(stale)
+  end
+
+  # After a restart the ETS caches are cold while Qdrant still holds the data.
+  # The partial-reindex path assumes warm caches — skipping unchanged files would
+  # otherwise leave the graph empty, and re-embedding only dirty files would rebuild
+  # the graph from just those files. Hydrate from the current Qdrant collection first.
+  # No-op once warm (ChunkCache populated) and for fresh/empty collections.
+  defp hydrate_cold_caches do
+    if ChunkCache.count() == 0 do
+      ElixirNexus.ProjectSwitcher.reload_from_qdrant()
+    end
   end
 
   # Rebuild the graph cache off-thread so the Indexer GenServer stays responsive.

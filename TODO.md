@@ -5,6 +5,31 @@
 
 ---
 
+## 🔧 v1.17.0 (committed, local-verified, not yet released) — 2026-06-13
+
+Graph correctness + representation, all verified live via the local mix loop against weightless:
+
+- [x] **Cold-ETS hydrate on reindex** — after a restart, reindexing a project with existing
+  Qdrant data + unchanged files took the "skip embed" path and left ChunkCache/GraphCache
+  empty → `get_graph_stats`/graph/search returned zeros. `hydrate_cold_caches/0` now reloads
+  from Qdrant when ETS is cold, before the dirty check. **File:** `indexer.ex`.
+- [x] **Struct usage edges (connect data structs)** — Go `composite_literal` (`Server{}`,
+  `&Server{}`, `pkg.Opts{}`, `[]T{}`) now emits a usage edge from the enclosing function to
+  the struct. NIF gaps fixed: `qualified_type` made significant, `unary_expression` made
+  significant (`&T{}`), and `type_identifier`/`qualified_type`/`composite_literal` added to the
+  depth>20 allow-list. Struct connectivity on weightless: **10/29 → 24/29**. Remaining 5 are
+  package-level `var` literals / `var x T` decls / channel-element types (would need
+  field/param/return-type edges). **Files:** `parsers/go/calls.ex`, `native/.../lib.rs` (NIF rebuilt).
+- [x] **Graph viz colors + legend** — struct (amber), method (purple), interface, variable/
+  constant now colored; legend gains Method + Struct. **Files:** `app.js`, `graph_live.ex`.
+- [x] **Graph layout** — type-aware link distance (contains tight so methods cluster on their
+  struct), structs/modules always labeled. **File:** `app.js`.
+- [x] Tests: composite-literal usage edges (bare/pointer/qualified). 771 tests green.
+- Note: "duplicate nodes" report was a false alarm — extra circles are glow rings on
+  high-traffic nodes, not duplicate node groups (158 unique = 158 groups).
+
+---
+
 ## ✅ Shipped in v1.16.1 — graph UI contains links (2026-06-13)
 
 - [x] **D3 graph renders struct→method containment** — `build_d3_graph` matched `contains`

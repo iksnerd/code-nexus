@@ -19,6 +19,12 @@ defmodule ElixirNexus.GraphLive.Index do
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Function
           </span>
           <span class="flex items-center gap-1.5 text-xs text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span> Method
+          </span>
+          <span class="flex items-center gap-1.5 text-xs text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span> Struct
+          </span>
+          <span class="flex items-center gap-1.5 text-xs text-slate-400">
             <span class="w-6 border-t-2 border-slate-500"></span> Calls
           </span>
           <span class="flex items-center gap-1.5 text-xs text-slate-400">

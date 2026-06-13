@@ -117,7 +117,12 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
             || kind == "member_expression"
             || kind == "selector_expression"
             || kind == "field_identifier"
-            || kind == "argument_list";
+            || kind == "argument_list"
+            // Type references inside deeply-nested expressions (e.g. struct literals
+            // buried in large handlers) — needed so composite_literal usage edges resolve.
+            || kind == "composite_literal"
+            || kind == "type_identifier"
+            || kind == "qualified_type";
     }
 
     // Declarations and definitions
@@ -215,7 +220,11 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "selector_expression"
         || kind == "field_identifier"
         || kind == "type_identifier"
+        || kind == "qualified_type"
         || kind == "pointer_type"
+        // `&Struct{}` — the idiomatic Go pointer-to-struct construction wraps the
+        // composite_literal in a unary_expression; without this it's never reached.
+        || kind == "unary_expression"
         || kind == "parameter_list"
         || kind == "parameter_declaration"
         || kind == "package_clause"

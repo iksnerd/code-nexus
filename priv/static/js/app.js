@@ -126,8 +126,11 @@ Hooks.CodeGraph = {
       if (neighbors.has(tid)) neighbors.get(tid).add(sid);
     });
 
+    // Type-aware link distance: pull contained methods tight to their struct,
+    // keep call/import edges longer so the graph spreads out.
+    const linkDistance = { "contains": 60, "calls": 160, "imports": 200 };
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(180))
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 160))
       .force("charge", d3.forceManyBody().strength(-500).distanceMax(800))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 8 + 25))
@@ -184,7 +187,11 @@ Hooks.CodeGraph = {
       "module": "#3b82f6",
       "function": "#10b981",
       "class": "#f59e0b",
+      "struct": "#f59e0b",
+      "interface": "#eab308",
       "method": "#8b5cf6",
+      "variable": "#22d3ee",
+      "constant": "#22d3ee",
       "unknown": "#64748b"
     };
 
@@ -192,7 +199,11 @@ Hooks.CodeGraph = {
       "module": "bg-blue-500/20 text-blue-400",
       "function": "bg-emerald-500/20 text-emerald-400",
       "class": "bg-amber-500/20 text-amber-400",
+      "struct": "bg-amber-500/20 text-amber-400",
+      "interface": "bg-yellow-500/20 text-yellow-400",
       "method": "bg-purple-500/20 text-purple-400",
+      "variable": "bg-cyan-500/20 text-cyan-400",
+      "constant": "bg-cyan-500/20 text-cyan-400",
       "unknown": "bg-slate-500/20 text-slate-400"
     };
 
@@ -265,7 +276,7 @@ Hooks.CodeGraph = {
     node.append("text")
       .attr("x", d => Math.sqrt(d.val) * 4 + 8)
       .attr("y", 4)
-      .text(d => d.val >= 3 ? d.name : "")
+      .text(d => (d.val >= 3 || d.type === "struct" || d.type === "module") ? d.name : "")
       .attr("fill", d => d.callers_count >= 10 ? "#f1f5f9" : "#cbd5e1")
       .attr("font-size", d => d.callers_count >= 10 ? "12px" : d.val >= 8 ? "11px" : "9px")
       .attr("font-weight", d => d.callers_count >= 10 ? "bold" : "normal")

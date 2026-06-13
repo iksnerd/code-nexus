@@ -109,6 +109,24 @@ mix mcp_http --port 3002                              # MCP Streamable HTTP tran
 
 In local mode, MCP and Phoenix are separate BEAM instances sharing Qdrant but not ETS or PubSub.
 
+### Fast iteration loop (no Docker rebuild)
+
+When iterating on fixes, **do not rebuild the Docker image per change** — that's minutes per cycle. Run the app locally and point your MCP client + browser at it:
+
+```bash
+docker stop code_nexus                                 # free ports 3002/4100 (keep qdrant running)
+MCP_HTTP_PORT=3002 QDRANT_URL=http://localhost:6333 OLLAMA_URL=http://localhost:11434 \
+  PHX_SERVER=true nohup mix phx.server > /tmp/nexus_local.log 2>&1 &
+```
+
+Setting `MCP_HTTP_PORT` makes `application.ex` start MCP HTTP (`:3002`) + Phoenix (`:4100`) in a **single local BEAM** (shared ETS/PubSub, same as Docker). The `code-nexus` MCP tools and the dashboard at `http://localhost:4100` now hit this instance against the shared Qdrant.
+
+- **Elixir change** → restart the `mix phx.server` process (seconds). Reindex to repopulate (ETS is cold on boot; the reindex auto-hydrates from Qdrant).
+- **Rust NIF change** → still needs the local cargo rebuild (flip `skip_compilation?` → `mix compile --force` → restore — see the Tree-sitter NIF section), then restart. No Docker.
+- Use full host paths for `reindex` locally (e.g. `/Users/you/GolandProjects/foo`) — there are no `/workspace` mounts outside Docker.
+
+Only build/push a Docker image once the change is verified locally and you're cutting a release.
+
 ## Architecture
 
 - **MCP Server** (`lib/elixir_nexus/mcp_server.ex`) — stdio + HTTP (Streamable HTTP at `/mcp`) transport, ex_mcp 0.9.0
