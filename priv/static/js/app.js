@@ -126,16 +126,48 @@ Hooks.CodeGraph = {
       if (neighbors.has(tid)) neighbors.get(tid).add(sid);
     });
 
-    // Type-aware link distance: pull contained methods tight to their struct,
-    // keep call/import edges longer so the graph spreads out.
-    const linkDistance = { "contains": 60, "calls": 160, "imports": 200 };
+    // Cluster by package: lay out each group's center on a grid, then pull its
+    // nodes toward it. This mirrors the codebase's package structure instead of
+    // hairballing 150+ flat nodes into the middle.
+    const groups = Array.from(new Set(nodes.map(n => n.group || "?")));
+    const cols = Math.max(1, Math.ceil(Math.sqrt(groups.length)));
+    const cellW = width / cols;
+    const cellH = height / Math.max(1, Math.ceil(groups.length / cols));
+    const groupCenter = {};
+    groups.forEach((gname, i) => {
+      groupCenter[gname] = {
+        x: (i % cols + 0.5) * cellW,
+        y: (Math.floor(i / cols) + 0.5) * cellH,
+        name: gname
+      };
+    });
+    this.groupCenter = groupCenter;
+    const centerOf = d => groupCenter[d.group || "?"] || {x: width / 2, y: height / 2};
+
+    // Faint package label behind each cluster so the structure is legible.
+    g.append("g")
+      .selectAll("text")
+      .data(groups)
+      .join("text")
+      .attr("x", d => groupCenter[d].x)
+      .attr("y", d => groupCenter[d].y)
+      .text(d => d)
+      .attr("fill", "#64748b")
+      .attr("font-size", "14px")
+      .attr("font-weight", "bold")
+      .attr("font-family", "monospace")
+      .attr("text-anchor", "middle")
+      .attr("opacity", 0.22)
+      .style("pointer-events", "none");
+
+    // Type-aware link distance: pull contained methods tight to their struct.
+    const linkDistance = { "contains": 35, "calls": 90, "imports": 120 };
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 160))
-      .force("charge", d3.forceManyBody().strength(-500).distanceMax(800))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 8 + 25))
-      .force("x", d3.forceX(width / 2).strength(0.02))
-      .force("y", d3.forceY(height / 2).strength(0.02));
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 90).strength(0.3))
+      .force("charge", d3.forceManyBody().strength(-220).distanceMax(450))
+      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 6 + 12))
+      .force("x", d3.forceX(d => centerOf(d).x).strength(0.45))
+      .force("y", d3.forceY(d => centerOf(d).y).strength(0.45));
 
     this.simulation = simulation;
 

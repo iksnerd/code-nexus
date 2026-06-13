@@ -156,6 +156,30 @@ defmodule ElixirNexus.GraphLive.Index do
 
   @max_graph_nodes 500
 
+  # Group key for spatial clustering. The natural unit differs by language, so
+  # dispatch on the file extension — Go clusters by package (== its directory),
+  # other languages fall back to the source folder. This is the seam to specialize
+  # per language (e.g. Elixir module namespace, Java package from `package` decl).
+  # Nodes sharing a group are pulled together so the graph mirrors the codebase's
+  # structure instead of hairballing.
+  defp group_for(nil), do: "?"
+
+  defp group_for(path) do
+    path = to_string(path)
+
+    case Path.extname(path) do
+      # Go: one package per directory — the directory IS the package.
+      ".go" -> dir_group(path)
+      # Default: cluster by source folder (works for JS/TS/Python/Rust/etc.).
+      _ -> dir_group(path)
+    end
+  end
+
+  # Last two path segments of the file's directory, e.g. "internal/tracker", "cmd/wl".
+  defp dir_group(path) do
+    path |> Path.dirname() |> Path.split() |> Enum.take(-2) |> Enum.join("/")
+  end
+
   defp build_d3_graph do
     nodes_map = ElixirNexus.GraphCache.all_nodes()
 
@@ -168,6 +192,7 @@ defmodule ElixirNexus.GraphLive.Index do
           name: node["name"],
           type: node["entity_type"] || node["type"] || "unknown",
           file: node["file_path"] |> to_string() |> String.replace_leading("/app/", ""),
+          group: group_for(node["file_path"]),
           val: (node["incoming_count"] || 0) + 1,
           calls_count: length(node["calls"] || []),
           callers_count: node["incoming_count"] || 0,
