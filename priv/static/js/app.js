@@ -131,45 +131,68 @@ Hooks.CodeGraph = {
     // hairballing 150+ flat nodes into the middle.
     const groups = Array.from(new Set(nodes.map(n => n.group || "?")));
     const cols = Math.max(1, Math.ceil(Math.sqrt(groups.length)));
-    const cellW = width / cols;
-    const cellH = height / Math.max(1, Math.ceil(groups.length / cols));
+    // Lay clusters out over a virtual area larger than the viewport so packages
+    // sit well apart; a one-time zoom-to-fit (below) frames the whole spread.
+    const spread = 1.6;
+    const vw = width * spread, vh = height * spread;
+    const ox = (width - vw) / 2, oy = (height - vh) / 2;
+    const cellW = vw / cols;
+    const cellH = vh / Math.max(1, Math.ceil(groups.length / cols));
     const groupCenter = {};
     groups.forEach((gname, i) => {
       groupCenter[gname] = {
-        x: (i % cols + 0.5) * cellW,
-        y: (Math.floor(i / cols) + 0.5) * cellH,
+        x: ox + (i % cols + 0.5) * cellW,
+        y: oy + (Math.floor(i / cols) + 0.5) * cellH,
         name: gname
       };
     });
     this.groupCenter = groupCenter;
     const centerOf = d => groupCenter[d.group || "?"] || {x: width / 2, y: height / 2};
 
-    // Faint package label behind each cluster so the structure is legible.
-    g.append("g")
-      .selectAll("text")
-      .data(groups)
-      .join("text")
-      .attr("x", d => groupCenter[d].x)
-      .attr("y", d => groupCenter[d].y)
-      .text(d => d)
-      .attr("fill", "#64748b")
-      .attr("font-size", "14px")
-      .attr("font-weight", "bold")
-      .attr("font-family", "monospace")
-      .attr("text-anchor", "middle")
-      .attr("opacity", 0.22)
-      .style("pointer-events", "none");
+    // Per-package color + a tinted container box drawn behind the graph, so each
+    // cluster reads as a visible package region. Repositioned each tick to wrap
+    // that package's nodes.
+    const groupPalette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#eab308", "#f43f5e", "#14b8a6", "#a855f7"];
+    const groupColor = {};
+    groups.forEach((gname, i) => { groupColor[gname] = groupPalette[i % groupPalette.length]; });
+    const nodesByGroup = {};
+    groups.forEach(gname => { nodesByGroup[gname] = nodes.filter(n => (n.group || "?") === gname); });
 
-    // Type-aware link distance: pull contained methods tight to their struct.
-    const linkDistance = { "contains": 35, "calls": 90, "imports": 120 };
+    const hullBox = g.append("g").attr("class", "cluster-hulls")
+      .selectAll("g").data(groups).join("g").style("pointer-events", "none");
+    hullBox.append("rect")
+      .attr("rx", 16)
+      .attr("fill", d => groupColor[d]).attr("fill-opacity", 0.06)
+      .attr("stroke", d => groupColor[d]).attr("stroke-opacity", 0.3).attr("stroke-width", 1);
+    hullBox.append("text")
+      .text(d => d)
+      .attr("fill", d => groupColor[d]).attr("fill-opacity", 0.75)
+      .attr("font-size", "12px").attr("font-weight", "bold").attr("font-family", "monospace");
+
+    // Type-aware link distance: contained methods tight to their struct, call/
+    // import edges longer so the graph breathes.
+    const linkDistance = { "contains": 45, "calls": 150, "imports": 190 };
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 90).strength(0.3))
-      .force("charge", d3.forceManyBody().strength(-220).distanceMax(450))
-      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 6 + 12))
-      .force("x", d3.forceX(d => centerOf(d).x).strength(0.45))
-      .force("y", d3.forceY(d => centerOf(d).y).strength(0.45));
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 150).strength(0.25))
+      .force("charge", d3.forceManyBody().strength(-360).distanceMax(700))
+      .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 7 + 16))
+      .force("x", d3.forceX(d => centerOf(d).x).strength(0.5))
+      .force("y", d3.forceY(d => centerOf(d).y).strength(0.5));
 
     this.simulation = simulation;
+
+    // Frame the whole (wider-than-viewport) layout once it settles.
+    simulation.on("end", () => {
+      const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const bw = maxX - minX, bh = maxY - minY;
+      if (!isFinite(bw) || !isFinite(bh) || bw === 0 || bh === 0) return;
+      const scale = Math.min(width / (bw + 160), height / (bh + 160), 1.1);
+      const tx = width / 2 - scale * (minX + maxX) / 2;
+      const ty = height / 2 - scale * (minY + maxY) / 2;
+      svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    });
 
     // Arrowhead markers for each link type
     const defs = svg.append("defs");
@@ -199,12 +222,20 @@ Hooks.CodeGraph = {
     const linkOpacity = { "calls": 0.5, "imports": 0.6, "contains": 0.45 };
     const linkWidth = { "calls": 1.5, "imports": 1.5, "contains": 1.2 };
 
+    // Cross-package edges are calmed (much fainter) so intra-package structure
+    // reads first and inter-package coupling reads as secondary.
+    const linkOpacityFor = d => {
+      const base = linkOpacity[d.type] || 0.5;
+      const sg = d.source && d.source.group, tg = d.target && d.target.group;
+      return (sg != null && tg != null && sg !== tg) ? base * 0.22 : base;
+    };
+
     const link = g.append("g")
       .selectAll("line")
       .data(links)
       .join("line")
       .attr("stroke", d => linkColors[d.type] || "#64748b")
-      .attr("stroke-opacity", d => linkOpacity[d.type] || 0.5)
+      .attr("stroke-opacity", linkOpacityFor)
       .attr("stroke-width", d => linkWidth[d.type] || 1.5)
       .attr("stroke-dasharray", d => linkDash[d.type] || "none")
       .attr("marker-end", d => `url(#arrowhead-${d.type})`);
@@ -296,7 +327,7 @@ Hooks.CodeGraph = {
         node.select("text").attr("opacity", 1);
         link
           .attr("stroke", d => linkColors[d.type] || "#64748b")
-          .attr("stroke-opacity", d => linkOpacity[d.type] || 0.5)
+          .attr("stroke-opacity", linkOpacityFor)
           .attr("stroke-width", d => linkWidth[d.type] || 1.5)
           .attr("stroke-dasharray", d => linkDash[d.type] || "none")
           .attr("marker-end", d => `url(#arrowhead-${d.type})`);
@@ -323,6 +354,25 @@ Hooks.CodeGraph = {
         .attr("y2", d => d.target.y);
 
       node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+      // Wrap each package's nodes in its container box.
+      const pad = 30;
+      hullBox.each(function(gname) {
+        const members = nodesByGroup[gname];
+        if (!members || members.length === 0) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        members.forEach(m => {
+          if (m.x < minX) minX = m.x;
+          if (m.y < minY) minY = m.y;
+          if (m.x > maxX) maxX = m.x;
+          if (m.y > maxY) maxY = m.y;
+        });
+        const sel = d3.select(this);
+        sel.select("rect")
+          .attr("x", minX - pad).attr("y", minY - pad)
+          .attr("width", maxX - minX + pad * 2).attr("height", maxY - minY + pad * 2);
+        sel.select("text").attr("x", minX - pad + 12).attr("y", minY - pad + 18);
+      });
     });
 
     function drag(simulation) {
