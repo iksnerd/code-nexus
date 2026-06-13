@@ -315,6 +315,25 @@ defmodule ElixirNexus.MCPServer do
     })
   end
 
+  deftool "purge" do
+    meta do
+      name("purge")
+
+      description(
+        "Wipe the current project's index — resets the Qdrant collection and clears all caches, " <>
+          "leaving an empty index. Use when stale entities linger (e.g. after deleting files or " <>
+          "adding .nexusignore rules) and you want a clean slate; follow with reindex. " <>
+          "Note: reindex already reconciles out-of-scope files automatically, so purge is rarely needed."
+      )
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{},
+      required: []
+    })
+  end
+
   deftool "load_resources" do
     meta do
       name("load_resources")
@@ -494,6 +513,25 @@ defmodule ElixirNexus.MCPServer do
     }
 
     ResponseFormat.json_reply(status, state)
+  end
+
+  def handle_tool_call("purge", _args, state) do
+    IndexManagement.capture_collection()
+
+    case ElixirNexus.Indexer.purge() do
+      :ok ->
+        ResponseFormat.json_reply(
+          %{
+            status: "purged",
+            current_project: current_project_path(state),
+            message: "Collection and caches cleared. Call reindex to rebuild the index."
+          },
+          state
+        )
+
+      {:error, :indexing_in_progress} ->
+        {:error, "Cannot purge while indexing is in progress. Wait for it to finish, then retry.", state}
+    end
   end
 
   def handle_tool_call("get_graph_stats", _args, state) do

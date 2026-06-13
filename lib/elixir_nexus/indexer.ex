@@ -41,6 +41,15 @@ defmodule ElixirNexus.Indexer do
     GenServer.call(__MODULE__, :status)
   end
 
+  @doc """
+  Wipe the current project's index: reset the Qdrant collection and clear the
+  ChunkCache, GraphCache, and DirtyTracker. Leaves an empty index ready for a
+  fresh reindex. Rejected while indexing is in progress.
+  """
+  def purge do
+    GenServer.call(__MODULE__, :purge, :infinity)
+  end
+
   @doc "Returns true when an indexing job is currently running."
   def busy? do
     status().status == :indexing
@@ -216,6 +225,16 @@ defmodule ElixirNexus.Indexer do
     {:reply, :ok, new_state}
   end
 
+  def handle_call(:purge, _from, %{status: :indexing} = state) do
+    {:reply, {:error, :indexing_in_progress}, state}
+  end
+
+  def handle_call(:purge, _from, state) do
+    Logger.info("Purging current collection and caches")
+    clean_state = prepare_reindex(state)
+    {:reply, :ok, %{clean_state | last_index_result: build_index_result(files: 0, error: nil)}}
+  end
+
   def handle_call(:status, _from, state) do
     chunk_count =
       try do
@@ -315,6 +334,12 @@ defmodule ElixirNexus.Indexer do
     end
 
     if not ElixirNexus.DirtyTracker.empty?() do
+      # Reconcile deletions first: files indexed in a previous pass that are no
+      # longer in scope (deleted on disk, or newly excluded by .nexusignore) must
+      # have their chunks/vectors/graph nodes purged — otherwise reindex is
+      # additive and stale nodes persist.
+      purged = purge_out_of_scope(files)
+
       dirty =
         Enum.filter(files, fn path ->
           case ElixirNexus.DirtyTracker.dirty?(path) do
@@ -324,7 +349,7 @@ defmodule ElixirNexus.Indexer do
         end)
 
       if dirty == [] do
-        Logger.info("Incremental async reindex: all #{length(files)} files unchanged, skipping embed")
+        Logger.info("Incremental async reindex: all #{length(files)} files unchanged, #{purged} purged, skipping embed")
 
         result =
           build_index_result(
@@ -359,6 +384,8 @@ defmodule ElixirNexus.Indexer do
     # existing data), check whether any files actually changed. If none did, the
     # existing Qdrant vectors and ETS caches are already correct — skip re-embedding.
     if not ElixirNexus.DirtyTracker.empty?() do
+      purged = purge_out_of_scope(files)
+
       dirty =
         Enum.filter(files, fn path ->
           case ElixirNexus.DirtyTracker.dirty?(path) do
@@ -368,7 +395,7 @@ defmodule ElixirNexus.Indexer do
         end)
 
       if dirty == [] do
-        Logger.info("Incremental reindex: all #{length(files)} files unchanged, skipping embed")
+        Logger.info("Incremental reindex: all #{length(files)} files unchanged, #{purged} purged, skipping embed")
 
         result =
           build_index_result(
@@ -443,16 +470,7 @@ defmodule ElixirNexus.Indexer do
     Logger.info("Broadway pipeline complete: #{file_count} files, #{chunk_count} chunks")
 
     # Rebuild graph cache asynchronously to avoid blocking the Indexer GenServer
-    all_chunks = ChunkCache.all()
-
-    Task.start(fn ->
-      try do
-        GraphCache.rebuild_from_chunks(all_chunks)
-        Logger.info("Graph cache rebuilt (#{length(all_chunks)} chunks)")
-      rescue
-        e -> Logger.error("Failed to rebuild graph cache: #{inspect(e)}")
-      end
-    end)
+    rebuild_graph_async()
 
     # Broadcast completion
     Events.broadcast_indexing_complete(%{files: file_count, chunks: chunk_count})
@@ -548,6 +566,38 @@ defmodule ElixirNexus.Indexer do
           else
             {files, bump(stats, :unsupported_extension)}
           end
+      end
+    end)
+  end
+
+  # Delete chunks/vectors/graph nodes for files that were indexed in a prior pass
+  # but are no longer in the current scope (deleted on disk or newly ignored).
+  # Returns the count of purged files. Keeps reindex reconciling rather than additive.
+  defp purge_out_of_scope(in_scope_files) do
+    scope_set = MapSet.new(in_scope_files)
+    stale = Enum.reject(ElixirNexus.DirtyTracker.known_files(), &MapSet.member?(scope_set, &1))
+
+    Enum.each(stale, fn path ->
+      ElixirNexus.QdrantClient.delete_points_by_file(path)
+      ChunkCache.delete_by_file(path)
+      GraphCache.delete_by_file(path)
+      ElixirNexus.DirtyTracker.forget(path)
+    end)
+
+    if stale != [], do: Logger.info("Reindex reconcile: purged #{length(stale)} out-of-scope files")
+    length(stale)
+  end
+
+  # Rebuild the graph cache off-thread so the Indexer GenServer stays responsive.
+  defp rebuild_graph_async do
+    all_chunks = ChunkCache.all()
+
+    Task.start(fn ->
+      try do
+        GraphCache.rebuild_from_chunks(all_chunks)
+        Logger.info("Graph cache rebuilt (#{length(all_chunks)} chunks)")
+      rescue
+        e -> Logger.error("Failed to rebuild graph cache: #{inspect(e)}")
       end
     end)
   end

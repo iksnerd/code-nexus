@@ -5,6 +5,23 @@
 
 ---
 
+## ✅ Shipped in v1.16.0 — reindex reconciliation + purge (2026-06-13)
+
+Acting on `code-nexus-feedback` #019ec226: **`reindex` was additive** — partial/incremental
+reindex (after a restart, DirtyTracker seeded from Qdrant) re-embedded only dirty files and
+never deleted files that dropped out of scope (deleted on disk or newly `.nexusignore`'d), so
+stale nodes/vectors persisted and `get_graph_stats` never shrank.
+
+- [x] **Reindex reconciles deletions** — both partial-reindex paths now call `purge_out_of_scope/1`:
+  files in `DirtyTracker.known_files()` but not in the current scope get their Qdrant points +
+  ChunkCache + GraphCache nodes deleted and are forgotten. Fixes stale top-connected test nodes
+  and the chunk-count-not-recomputed secondary bug. **Files:** `indexer.ex`, `dirty_tracker.ex` (`known_files/0`).
+- [x] **Explicit `purge` MCP tool** — wipes the current collection + caches for a clean slate
+  (escape hatch; reindex auto-reconciles so it's rarely needed). **Files:** `mcp_server.ex`, `indexer.ex` (`purge/0`).
+- [x] Tests: reconciliation (dropped file evicted) + `purge/0` clears index.
+
+---
+
 ## ✅ Shipped in v1.15.0 — council-hub feedback fixes (2026-06-13)
 
 Acting on `codenexus-feedback` #019ec14e (Go re-test on `weightless`) + `code-nexus-suggestions`.

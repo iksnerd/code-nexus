@@ -60,6 +60,15 @@ defmodule ElixirNexus.DirtyTracker do
   end
 
   @doc """
+  Return the list of all tracked file paths. After a seed from Qdrant this is the
+  authoritative set of files currently in the collection — used by reindex to
+  reconcile deletions (files indexed before but now out of scope).
+  """
+  def known_files do
+    GenServer.call(__MODULE__, :known_files)
+  end
+
+  @doc """
   Bulk-seed checksums from a map of file_path => sha256.
   Used at startup to restore state from Qdrant so the first reindex
   can skip re-embedding unchanged files.
@@ -161,6 +170,10 @@ defmodule ElixirNexus.DirtyTracker do
 
   def handle_call(:empty?, _from, state) do
     {:reply, map_size(state) == 0, state}
+  end
+
+  def handle_call(:known_files, _from, state) do
+    {:reply, Map.keys(state), state}
   end
 
   def handle_call({:seed_from_map, sha_map}, _from, state) do

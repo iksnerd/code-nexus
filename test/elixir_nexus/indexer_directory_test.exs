@@ -141,6 +141,42 @@ defmodule ElixirNexus.IndexerDirectoryTest do
     end
   end
 
+  describe "reindex reconciliation" do
+    test "purges chunks for files that dropped out of scope", %{test_dir: test_dir} do
+      keep = Path.join(test_dir, "keep.ex")
+      drop = Path.join(test_dir, "drop.ex")
+
+      File.write!(keep, "defmodule Keep do\n  def keep, do: :ok\nend\n")
+      File.write!(drop, "defmodule Drop do\n  def drop, do: :ok\nend\n")
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      assert Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == drop))
+
+      # Remove the file from scope and reindex — its chunks must be evicted.
+      File.rm!(drop)
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      refute Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == drop))
+      assert Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == keep))
+      refute drop in ElixirNexus.DirtyTracker.known_files()
+    end
+
+    test "purge/0 clears the index", %{test_dir: test_dir} do
+      File.write!(Path.join(test_dir, "x.ex"), "defmodule X do\n  def x, do: :ok\nend\n")
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+      assert ElixirNexus.ChunkCache.count() > 0
+
+      assert :ok = ElixirNexus.Indexer.purge()
+      assert ElixirNexus.ChunkCache.count() == 0
+      assert ElixirNexus.DirtyTracker.known_files() == []
+    end
+  end
+
   describe "error resilience" do
     test "continues after individual file errors", %{test_dir: test_dir} do
       File.write(Path.join(test_dir, "good.ex"), """
