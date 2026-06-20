@@ -97,7 +97,10 @@ defmodule ElixirNexus.Indexer do
       pending_file_count: 0,
       acked_file_count: 0,
       skip_stats: empty_skip_stats(),
-      last_index_result: nil
+      last_index_result: nil,
+      # One-shot: set by purge so the next reindex does a guaranteed full reparse instead
+      # of trusting the seed-from-Qdrant dirty path (which can race the boot auto-reload).
+      force_full_reindex: false
     }
 
     if ChunkCache.count() > 0 do
@@ -232,7 +235,13 @@ defmodule ElixirNexus.Indexer do
   def handle_call(:purge, _from, state) do
     Logger.info("Purging current collection and caches")
     clean_state = prepare_reindex(state)
-    {:reply, :ok, %{clean_state | last_index_result: build_index_result(files: 0, error: nil)}}
+
+    {:reply, :ok,
+     %{
+       clean_state
+       | last_index_result: build_index_result(files: 0, error: nil),
+         force_full_reindex: true
+     }}
   end
 
   def handle_call(:status, _from, state) do
@@ -329,6 +338,19 @@ defmodule ElixirNexus.Indexer do
 
   # Async variant of do_index_files — no pending_reply, never issues a GenServer reply.
   defp do_async_index_files(files, skip_stats, state) do
+    if Map.get(state, :force_full_reindex, false) do
+      # A purge just cleared the index. Force a full reparse and DON'T seed DirtyTracker
+      # from Qdrant — seeding can race the boot auto-reload and pick up stale SHAs, making
+      # files look "unchanged" and leaving a near-empty index. Clear the one-shot flag.
+      Logger.info("Force-full reindex after purge — bypassing dirty/seed path")
+      ElixirNexus.DirtyTracker.reset()
+      do_full_reindex(files, skip_stats, nil, %{state | force_full_reindex: false})
+    else
+      do_async_index_files_incremental(files, skip_stats, state)
+    end
+  end
+
+  defp do_async_index_files_incremental(files, skip_stats, state) do
     hydrate_cold_caches()
 
     if ElixirNexus.DirtyTracker.empty?() do
@@ -375,6 +397,16 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_index_files(files, skip_stats, from, state) do
+    if Map.get(state, :force_full_reindex, false) do
+      Logger.info("Force-full reindex after purge — bypassing dirty/seed path")
+      ElixirNexus.DirtyTracker.reset()
+      do_full_reindex(files, skip_stats, from, %{state | force_full_reindex: false})
+    else
+      do_index_files_incremental(files, skip_stats, from, state)
+    end
+  end
+
+  defp do_index_files_incremental(files, skip_stats, from, state) do
     hydrate_cold_caches()
 
     # On the first reindex after a container restart, DirtyTracker is empty even

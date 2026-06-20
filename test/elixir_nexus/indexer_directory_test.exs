@@ -175,6 +175,36 @@ defmodule ElixirNexus.IndexerDirectoryTest do
       assert ElixirNexus.ChunkCache.count() == 0
       assert ElixirNexus.DirtyTracker.known_files() == []
     end
+
+    test "reindex after purge forces a full reparse even if DirtyTracker is re-seeded", %{
+      test_dir: test_dir
+    } do
+      File.write!(Path.join(test_dir, "y.ex"), "defmodule Y do\n  def y, do: :ok\nend\n")
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+      assert ElixirNexus.ChunkCache.count() > 0
+
+      # Purge clears the index and arms the one-shot force-full flag.
+      assert :ok = ElixirNexus.Indexer.purge()
+      assert ElixirNexus.ChunkCache.count() == 0
+
+      # Simulate the boot-auto-reload race: DirtyTracker gets re-populated with the file's
+      # SHA AFTER the purge. Without the force-full guard, the next reindex would see the
+      # files as "unchanged", skip embedding, and leave a near-empty index (the bug).
+      Enum.each(
+        Path.wildcard(Path.join(test_dir, "*.ex")),
+        &ElixirNexus.DirtyTracker.mark_clean/1
+      )
+
+      refute ElixirNexus.DirtyTracker.empty?()
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      assert ElixirNexus.ChunkCache.count() > 0,
+             "purge must force a full reparse despite a re-seeded DirtyTracker"
+    end
   end
 
   describe "error resilience" do
