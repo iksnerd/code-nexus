@@ -1,9 +1,21 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.0 (analysis-quality fixes + architecture awareness)
-**Status:** v1.18.0 shipped — `iksnerd/code-nexus:v1.18.0` + `:latest` (arm64) live on Docker Hub,
-smoke-tested in-image against control-stack; 803 tests green (42 excluded). CI skipped (GitHub
-Actions quota exhausted) — local gate + published-image smoke test stood in.
+**Current version:** v1.18.1 (dashboard architecture-layers panel)
+**Status:** v1.18.1 shipped — `iksnerd/code-nexus:v1.18.1` + `:latest` (arm64, digest `1fd6f57d…`)
+live on Docker Hub. Dashboard layers panel verified in-image (control-stack: all six layers render).
+804 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
+published-image smoke test stood in.
+
+## ✅ Shipped in v1.18.1 — dashboard architecture-layers panel (2026-06-20)
+
+The v1.18.0 layer breakdown was only in the `get_graph_stats` API response. v1.18.1 surfaces it in
+the LiveView dashboard: an "Architecture Layers" panel with per-layer bars, derived the same way as
+`Search.GraphStats.compute_layers/1` (root-relative paths via `ProjectConfig`) so UI and tool agree;
+hides itself for flat projects. Refreshed two stale tool-card blurbs. Verified in-image — dashboard
+HTML renders ports/adapters/application/domain/presentation/repositories on control-stack.
+**Files:** `elixir_nexus_web/live/dashboard_live.ex` + test, `README.md`.
+
+---
 
 ---
 
