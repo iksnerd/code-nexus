@@ -351,7 +351,7 @@ The NIF ships pre-built in the Docker image. Local development requires the Rust
 
 Phoenix LiveView UI at `http://localhost:4100`:
 
-- **Dashboard** — Indexing statistics, entity/edge counts, language distribution, top connected modules, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
+- **Dashboard** — Indexing statistics, entity/edge counts, language distribution, architecture-layer breakdown, top connected modules, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
 - **Search** — Interactive hybrid search with scored results, entity badges, code preview, call/is_a tags.
 - **Graph** — Interactive D3.js force-directed graph showing code relationships. Three edge types (calls, imports, contains) with distinct visual styles. Hover to highlight connected nodes and see detailed metadata.
 - **Vectors** — Browse, filter, inspect, and manage stored vectors.
