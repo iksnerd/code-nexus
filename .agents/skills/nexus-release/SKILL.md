@@ -161,6 +161,14 @@ assert real parser output in the round-trip — e.g. on a known project `get_gra
 `edge_counts.contains > 0` and `find_module_hierarchy(<a known type>)` returns its members. Matching
 the chunk/edge counts from your local run is the strongest signal the in-image NIF is correct.
 
+**Paper cut — purge after a parser/NIF change, or you'll verify stale data.** `reindex` is
+incremental: for files whose SHA is unchanged it *hydrates chunks from Qdrant instead of re-parsing*.
+So after a parser/extractor/NIF change, reindexing an already-indexed project loads the OLD chunks
+(no new edges) and your in-image verification silently passes against stale data. Run the MCP `purge`
+tool (or delete the collection) THEN `reindex` to force a full re-parse with the new NIF. Symptom: the
+new edge/field is present when you probe the file locally (`mix run` against the real source) but
+absent from the live MCP result — that gap means stale hydration, not a code bug.
+
 **Also verify the dashboard UI works:** open `http://localhost:4100` in a browser and check that LiveView connects (buttons should be interactive, not dead). If LiveView fails to connect, check the browser console for `LiveView is not defined` — this means vendor JS files are missing from the image. See the `priv/static/js/` row in the key files table below.
 
 ## 9 — Clean up old local images
