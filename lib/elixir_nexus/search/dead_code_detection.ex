@@ -19,7 +19,7 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   # never by explicit user call sites. Filtering prevents ~100 false positives on
   # Elixir projects where every GenServer/LiveView/Broadway module looks "dead".
   @elixir_framework_callbacks ~w(
-    init terminate code_change
+    init terminate code_change child_spec start_link
     handle_call handle_cast handle_info handle_continue
     handle_demand handle_subscribe handle_cancel handle_events handle_notify
     handle_message handle_batch handle_failed
@@ -61,11 +61,15 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
               key = String.downcase(call)
               idx = Map.put(idx, key, true)
 
+              # Store the final segment of a qualified call so a bare-name lookup resolves
+              # it. Must handle ANY depth — `A.B.C.D.func` is common in Elixir. The old code
+              # only matched 2- and 3-segment calls, so functions called via a deep module
+              # path (e.g. ElixirNexus.MCPServer.PathResolution.parent_mount_basename) were
+              # falsely reported as dead.
               sfx =
                 case String.split(key, ".") do
-                  [_mod, short] -> MapSet.put(sfx, short)
-                  [_mod, _mid, short] -> MapSet.put(sfx, short)
-                  _ -> sfx
+                  [_single] -> sfx
+                  parts -> MapSet.put(sfx, List.last(parts))
                 end
 
               {idx, sfx}
@@ -105,9 +109,12 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             # exports are intentional API surface, not user-defined call sites.
             # Port implementors — a factory/const typed as a known interface is wired via the
             # contract (DI), so its lack of a direct caller doesn't make it dead.
+            # Phoenix controller actions (`index`, `show`, `create`, …) are dispatched by
+            # the router, never called in code — every `*_controller.ex` public fn looks dead.
             entry_point?(file_path, config_root, config) or
               port_implementor?(e.entity, interface_names) or
               test_file?(file_path) or
+              (lang == "elixir" and String.ends_with?(file_path, "_controller.ex")) or
               (lang == "elixir" and name in @elixir_framework_callbacks) or
               (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               (js_or_ts?(lang) and

@@ -6,8 +6,6 @@ defmodule ElixirNexus.RelationshipExtractor do
   - CONTAINS: Module contains functions (hierarchy)
   """
 
-  require Logger
-
   defstruct [
     :calls,
     :is_a,

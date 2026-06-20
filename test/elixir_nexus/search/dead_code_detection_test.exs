@@ -142,6 +142,55 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
       refute "Router.dispatch" in dead_names
     end
 
+    test "resolves deeply-qualified calls (4+ module segments)" do
+      # A function called only via a long module path — common in Elixir
+      # (A.B.C.D.func). The callee must NOT be flagged dead.
+      callee = %{
+        id: "deep_callee",
+        file_path: "/app/lib/elixir_nexus/mcp_server/path_resolution.ex",
+        entity_type: :function,
+        name: "parent_mount_basename",
+        content: "def parent_mount_basename(p), do: p",
+        start_line: 1,
+        end_line: 1,
+        module_path: "ElixirNexus.MCPServer.PathResolution",
+        visibility: :public,
+        parameters: ["p"],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      caller = %{
+        id: "deep_caller",
+        file_path: "/app/lib/elixir_nexus/mcp_server/index_management.ex",
+        entity_type: :function,
+        name: "derive_project_name",
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: "ElixirNexus.MCPServer.IndexManagement",
+        visibility: :public,
+        parameters: [],
+        calls: ["ElixirNexus.MCPServer.PathResolution.parent_mount_basename"],
+        is_a: [],
+        contains: [],
+        language: :elixir
+      }
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many([callee, caller])
+      GraphCache.rebuild_from_chunks([callee, caller])
+
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "parent_mount_basename" in dead_names,
+             "a fn called via a 4-segment module path must not be dead"
+    end
+
     test "handles qualified name matching" do
       # Add a chunk that calls "format" (unqualified) — should still exclude Utils.format
       extra_chunk = %{

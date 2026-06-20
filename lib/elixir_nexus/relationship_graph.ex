@@ -3,7 +3,6 @@ defmodule ElixirNexus.RelationshipGraph do
   Graph-based code relationship analysis.
   Builds and traverses code dependency graphs for improved search ranking.
   """
-  require Logger
 
   @type entity_id :: String.t()
   @type graph :: %{required(entity_id()) => map()}
