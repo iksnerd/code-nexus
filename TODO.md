@@ -1,10 +1,22 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.4 (purge↔boot-race fix + more graph shaping controls)
-**Status:** v1.18.4 shipped — `iksnerd/code-nexus:v1.18.4` + `:latest` (arm64, digest `b7a9733f…`)
-live on Docker Hub. **Purge-race fix verified in-image:** purge→reindex on a fresh container now
-gives a clean 2171 chunks on the FIRST attempt (the exact scenario that returned 0 chunks on
-v1.18.3). 813 tests green. CI skipped (Actions quota) — local gate + image smoke test stood in.
+**Current version:** v1.18.5 (full-screen graph + boxes separation + dead-code bug fixes)
+**Status:** v1.18.5 shipped — `iksnerd/code-nexus:v1.18.5` + `:latest` (arm64, digest `2885fa15…`)
+live on Docker Hub. **Dead-code fixes verified in-image** (dogfooded on elixir-nexus): 12→4 dead
+hits — `parent_mount_basename` (4-segment qualified call), all `*_controller.ex` actions, and
+`child_spec` no longer false-flagged. 814 tests green. CI skipped (Actions quota).
+
+## ✅ Shipped in v1.18.5 — graph polish + dead-code bug fixes (2026-06-20)
+
+- **Full-screen graph** — `/graph` breaks out of `max-w-7xl`; canvas fills `calc(100vh - 150px)`.
+- **Boxes-separation** slider (spread clusters) + **link force strength 0.2→0.35** so the link-distance
+  slider has visible authority (diagnosed live via chrome-devtools: it worked, 446→571, but was masked
+  by cluster forces). **Files:** `layouts.ex`, `graph_live.ex`, `app.js`.
+- **Dead-code bug (dogfooded on self)** — deeply-qualified calls (4+ module segments) never registered
+  their callee suffix (the `case` only matched 2/3 segments), so a fn called via a long path was
+  falsely dead. Now `List.last` for any depth. Plus: skip `*_controller.ex` (Phoenix router actions),
+  add `child_spec`/`start_link` to OTP callbacks. **File:** `search/dead_code_detection.ex`.
+- **Cleanup** — removed 2 unused `require Logger` (warns on all Elixir incl. CI's `--warnings-as-errors`).
 
 ## ✅ Shipped in v1.18.4 — purge race fix + graph shaping (2026-06-20)
 
