@@ -78,18 +78,48 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
                 children
               end
 
+            # Reverse edge: for an interface/struct (a port/contract), surface the entities
+            # that implement it — functions/consts whose return/variable type names it. This
+            # is the implementor side of the class-less `implements` edge.
+            implementors = find_implementors(target, all_entities)
+
             {:ok,
              %{
                name: target.entity["name"],
                entity_type: target.entity["entity_type"],
                file_path: target.entity["file_path"],
                parents: parents,
-               children: children
+               children: children,
+               implementors: implementors
              }}
         end
 
       error ->
         error
+    end
+  end
+
+  # For an interface/struct, the entities whose `is_a` names it — the implementor side of
+  # the `implements` edge. Empty for any other entity type.
+  defp find_implementors(target, all_entities) do
+    if target.entity["entity_type"] in ["interface", "struct"] do
+      name_lower = String.downcase(target.entity["name"] || "")
+
+      all_entities
+      |> Enum.filter(fn e ->
+        (e.entity["is_a"] || []) |> Enum.any?(&(String.downcase(&1) == name_lower))
+      end)
+      |> Enum.map(fn e ->
+        %{
+          name: e.entity["name"],
+          file_path: e.entity["file_path"],
+          entity_type: e.entity["entity_type"],
+          resolved: true
+        }
+      end)
+      |> Enum.uniq_by(&{&1.name, &1.file_path})
+    else
+      []
     end
   end
 end

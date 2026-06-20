@@ -159,6 +159,13 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         // edges are empty — so find_module_hierarchy is blind to class-less (hexagonal) TS.
         || kind == "object_type"
         || kind == "property_signature"
+        // TypeScript type-position annotations. `type_annotation` is the `: T` wrapper on
+        // a function return type or a typed `const x: T` — the only structural signal that a
+        // class-less factory implements a port interface. `generic_type` wraps `Promise<T>` /
+        // `Repository<X>` so the inner `type_identifier` is reachable. `type_identifier`
+        // itself is already significant.
+        || kind == "type_annotation"
+        || kind == "generic_type"
         // Blocks and statements (needed to reach nested calls)
         || kind == "statement_block"
         || kind == "expression_statement"

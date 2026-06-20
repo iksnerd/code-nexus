@@ -251,6 +251,101 @@ defmodule ElixirNexus.Parsers.JavaScriptEntitiesTest do
     end
   end
 
+  describe "implements edges (return-type / typed-const)" do
+    test "function with an interface return type implements it" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "createOktaSyncAdapter",
+              children: [
+                make_node("formal_parameters", children: []),
+                make_node("type_annotation",
+                  children: [make_node("type_identifier", text: "SyncAdapter")]
+                ),
+                make_node("statement_block", children: [])
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities(
+          "okta.ts",
+          ast,
+          "function createOktaSyncAdapter(): SyncAdapter {}"
+        )
+
+      fn_e = Enum.find(entities, &(&1.name == "createOktaSyncAdapter"))
+      assert fn_e != nil
+      assert "SyncAdapter" in fn_e.is_a
+    end
+
+    test "typed const implements the interface in its annotation" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("lexical_declaration",
+              children: [
+                make_node("variable_declarator",
+                  name: "awsAdapter",
+                  children: [
+                    make_node("identifier", text: "awsAdapter"),
+                    make_node("type_annotation",
+                      children: [make_node("type_identifier", text: "SyncAdapter")]
+                    ),
+                    make_node("object", children: [])
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities("aws.ts", ast, "const awsAdapter: SyncAdapter = {}")
+
+      var = Enum.find(entities, &(&1.name == "awsAdapter"))
+      assert var != nil
+      assert "SyncAdapter" in var.is_a
+    end
+
+    test "parameter types are not treated as implements" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("function_declaration",
+              name: "plainHelper",
+              children: [
+                make_node("formal_parameters",
+                  children: [
+                    make_node("required_parameter",
+                      name: "x",
+                      text: "x",
+                      children: [
+                        make_node("identifier", text: "x"),
+                        make_node("type_annotation",
+                          children: [make_node("type_identifier", text: "Widget")]
+                        )
+                      ]
+                    )
+                  ]
+                ),
+                make_node("statement_block", children: [])
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities("h.ts", ast, "function plainHelper(x: Widget) {}")
+
+      fn_e = Enum.find(entities, &(&1.name == "plainHelper"))
+      assert fn_e != nil
+      refute "Widget" in fn_e.is_a, "a parameter type must not become an implements edge"
+    end
+  end
+
   describe "destructuring pattern filtering" do
     test "destructuring binding is not captured as an entity" do
       ast =

@@ -44,6 +44,14 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
 
     case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
+        # Known interface/contract names (TS interfaces, type aliases). A function or const
+        # whose return/variable type names one of these is a port implementor — wired through
+        # the contract (DI / registry), invisible to the call graph. Lowercased for matching.
+        interface_names =
+          all_entities
+          |> Enum.filter(&(&1.entity["entity_type"] in ["interface", "struct"]))
+          |> MapSet.new(&String.downcase(&1.entity["name"] || ""))
+
         # Build reverse call index (calls only, not imports).
         # Also build a suffix set: for dotted calls like "utils.format", store the short
         # name "format" so qualified-name lookup is O(1) instead of O(n) per entity.
@@ -95,7 +103,10 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
             # shadcn/ui components in `components/ui/` are library primitives — their
             # exports are intentional API surface, not user-defined call sites.
+            # Port implementors — a factory/const typed as a known interface is wired via the
+            # contract (DI), so its lack of a direct caller doesn't make it dead.
             entry_point?(file_path, config_root, config) or
+              port_implementor?(e.entity, interface_names) or
               test_file?(file_path) or
               (lang == "elixir" and name in @elixir_framework_callbacks) or
               (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
@@ -158,6 +169,14 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   defp js_or_ts?(lang) do
     String.contains?(lang, "javascript") or String.contains?(lang, "typescript") or
       lang in ["tsx", "jsx"]
+  end
+
+  # True when an entity's `is_a` names a known interface — i.e. it implements a port. The
+  # implements edge comes from a return-type or typed-const annotation (class-less TS), so
+  # this catches DI-wired adapters that have no static caller.
+  defp port_implementor?(entity, interface_names) do
+    (entity["is_a"] || [])
+    |> Enum.any?(fn t -> MapSet.member?(interface_names, String.downcase(t)) end)
   end
 
   # A user-declared entry point (.nexus.toml entry_points). Matches the file path made

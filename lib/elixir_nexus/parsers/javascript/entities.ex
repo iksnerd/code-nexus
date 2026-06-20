@@ -95,7 +95,7 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
         parameters: extract_params(node),
         visibility: visibility,
         calls: Calls.extract_calls(node),
-        is_a: extract_extends(node),
+        is_a: extract_extends(node) ++ extract_implements(node),
         contains: extract_contains(node),
         language: :javascript
       }
@@ -221,6 +221,57 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
 
   defp extract_extends(_), do: []
 
+  # Structural "implements" edge for class-less (hexagonal) TS: a factory whose return type,
+  # or a typed const, names a port interface. These are the only signal that a function
+  # satisfies a contract when there's no `class X implements Y`. Stored in `is_a` alongside
+  # extends/implements; the graph resolves the names against actual interface entities, so
+  # non-interface annotations (`Promise`, `string`) match nothing and are harmless.
+  #
+  #   function createX(): SyncAdapter        → ["SyncAdapter"]
+  #   const x: SyncAdapter = {...}           → ["SyncAdapter"]
+  #   const f = (): IRepo => ({...})          → ["IRepo"]
+  #
+  # Parameter types are NOT picked up — they live nested in `formal_parameters`, while a
+  # return/variable type_annotation is a DIRECT child of the function/declarator.
+  defp extract_implements(%{"kind" => kind, "children" => children})
+       when kind in ["function_declaration", "method_definition", "arrow_function"] do
+    direct_type_names(children)
+  end
+
+  defp extract_implements(%{"kind" => kind, "children" => children})
+       when kind in ["lexical_declaration", "variable_declaration"] do
+    children
+    |> Enum.filter(&(&1["kind"] in ["variable_declarator", "lexical_binding"]))
+    |> Enum.flat_map(fn decl ->
+      decl_children = decl["children"] || []
+      # `const x: T = ...` — type annotation directly on the declarator.
+      on_var = direct_type_names(decl_children)
+      # `const f = (): T => ...` — return type on the arrow-function value.
+      on_arrow =
+        decl_children
+        |> Enum.filter(&(&1["kind"] == "arrow_function"))
+        |> Enum.flat_map(fn arrow -> direct_type_names(arrow["children"] || []) end)
+
+      on_var ++ on_arrow
+    end)
+  end
+
+  defp extract_implements(_), do: []
+
+  # Names from DIRECT-child `type_annotation` nodes only (return type / variable type),
+  # never descending into `formal_parameters`. Takes the outermost named type — a bare
+  # `type_identifier`, or the base of a `generic_type` (`Repository<User>` → "Repository").
+  defp direct_type_names(children) do
+    children
+    |> Enum.filter(&(&1["kind"] == "type_annotation"))
+    |> Enum.flat_map(fn ta ->
+      (ta["children"] || [])
+      |> Enum.filter(&(&1["kind"] in ["type_identifier", "generic_type"]))
+      |> Enum.map(&(&1["name"] || &1["text"] || ""))
+    end)
+    |> Enum.reject(&(&1 == ""))
+  end
+
   defp extract_contains(%{"kind" => "class_declaration", "children" => children}) do
     children
     |> Enum.filter(&(&1["kind"] == "method_definition"))
@@ -244,6 +295,8 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
     |> Enum.flat_map(&member_names/1)
   end
 
+  defp extract_contains(_), do: []
+
   # A binding pattern, not an identifier: `[a, b]`, `{ x, y }`, or anything with a comma/space.
   defp pattern_name?(name) when is_binary(name) do
     String.starts_with?(name, "[") or String.starts_with?(name, "{") or
@@ -251,8 +304,6 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
   end
 
   defp pattern_name?(_), do: false
-
-  defp extract_contains(_), do: []
 
   # Collect member names from an interface_body / object_type node. Members are
   # property_signature / method_signature; the name sits on the node or on a nested

@@ -425,4 +425,78 @@ defmodule ElixirNexus.Search.ModuleHierarchyTest do
       refute "siblingFunction" in child_names
     end
   end
+
+  describe "find_module_hierarchy/1 - interface implementors" do
+    @impl_chunks [
+      %{
+        id: "ih_iface",
+        file_path: "/app/core/ports/sync-adapter.ts",
+        entity_type: :interface,
+        name: "SyncAdapter",
+        content: "",
+        start_line: 1,
+        end_line: 3,
+        module_path: "SyncAdapter",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: ["sync"],
+        language: :typescript
+      },
+      %{
+        id: "ih_okta",
+        file_path: "/app/infrastructure/okta.ts",
+        entity_type: :function,
+        name: "createOktaSyncAdapter",
+        content: "",
+        start_line: 1,
+        end_line: 5,
+        module_path: "createOktaSyncAdapter",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: ["SyncAdapter"],
+        contains: [],
+        language: :typescript
+      },
+      %{
+        id: "ih_aws",
+        file_path: "/app/infrastructure/aws.ts",
+        entity_type: :variable,
+        name: "awsSyncAdapter",
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: "awsSyncAdapter",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: ["SyncAdapter"],
+        contains: [],
+        language: :typescript
+      }
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@impl_chunks)
+      GraphCache.rebuild_from_chunks(@impl_chunks)
+      :ok
+    end
+
+    test "an interface lists its implementors" do
+      {:ok, result} = Queries.find_module_hierarchy("SyncAdapter")
+
+      impl_names = Enum.map(result.implementors, & &1[:name])
+      assert "createOktaSyncAdapter" in impl_names
+      assert "awsSyncAdapter" in impl_names
+    end
+
+    test "a plain function has no implementors" do
+      {:ok, result} = Queries.find_module_hierarchy("createOktaSyncAdapter")
+      assert result.implementors == []
+    end
+  end
 end

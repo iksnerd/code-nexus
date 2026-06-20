@@ -627,6 +627,85 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
     end
   end
 
+  describe "find_dead_code/1 - port implementors" do
+    @port_chunks [
+      # The port (interface) — a known contract name.
+      %{
+        id: "port_iface",
+        file_path: "/app/core/ports/sync-adapter.ts",
+        entity_type: :interface,
+        name: "SyncAdapter",
+        content: "",
+        start_line: 1,
+        end_line: 3,
+        module_path: "SyncAdapter",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: ["sync"],
+        language: :typescript
+      },
+      # A DI-wired adapter: implements the port (return type), no in-repo caller. Not dead.
+      %{
+        id: "port_adapter",
+        file_path: "/app/infrastructure/okta-sync-adapter.ts",
+        entity_type: :function,
+        name: "createOktaSyncAdapter",
+        content: "",
+        start_line: 1,
+        end_line: 5,
+        module_path: "createOktaSyncAdapter",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: ["SyncAdapter"],
+        contains: [],
+        language: :typescript
+      },
+      # A genuinely orphaned function implementing nothing. Still dead.
+      %{
+        id: "port_orphan",
+        file_path: "/app/lib/orphan.ts",
+        entity_type: :function,
+        name: "trulyUnusedHelper",
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: "trulyUnusedHelper",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@port_chunks)
+      GraphCache.rebuild_from_chunks(@port_chunks)
+      :ok
+    end
+
+    test "a factory implementing a known interface is not flagged dead" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "createOktaSyncAdapter" in dead_names,
+             "a port implementor (typed as a known interface) is DI-wired, not dead"
+    end
+
+    test "an orphan implementing nothing is still flagged dead" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      assert "trulyUnusedHelper" in dead_names
+    end
+  end
+
   describe "find_dead_code/1 - additional convention files" do
     test "not-found.tsx default export excluded from dead code" do
       chunk = %{
