@@ -204,4 +204,98 @@ defmodule ElixirNexus.Search.ImpactAnalysisTest do
       assert "DerivedService" in affected_names
     end
   end
+
+  describe "analyze_impact/2 - same-named callers across files" do
+    @route_chunks [
+      %{
+        id: "rc_target",
+        file_path: "/app/infrastructure/gcp-connector.ts",
+        entity_type: :function,
+        name: "createGcpConnector",
+        content: "",
+        start_line: 1,
+        end_line: 5,
+        module_path: "createGcpConnector",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
+      # Three route handlers all named POST in different files — each calls the target.
+      %{
+        id: "rc_post_a",
+        file_path: "/app/api/validate/route.ts",
+        entity_type: :function,
+        name: "POST",
+        content: "",
+        start_line: 1,
+        end_line: 10,
+        module_path: "POST",
+        visibility: :public,
+        parameters: [],
+        calls: ["createGcpConnector"],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
+      %{
+        id: "rc_post_b",
+        file_path: "/app/api/connect/route.ts",
+        entity_type: :function,
+        name: "POST",
+        content: "",
+        start_line: 1,
+        end_line: 10,
+        module_path: "POST",
+        visibility: :public,
+        parameters: [],
+        calls: ["createGcpConnector"],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
+      %{
+        id: "rc_post_c",
+        file_path: "/app/api/test/route.ts",
+        entity_type: :function,
+        name: "POST",
+        content: "",
+        start_line: 1,
+        end_line: 10,
+        module_path: "POST",
+        visibility: :public,
+        parameters: [],
+        calls: ["createGcpConnector"],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@route_chunks)
+      GraphCache.rebuild_from_chunks(@route_chunks)
+      :ok
+    end
+
+    test "all same-named callers are counted, not collapsed by name" do
+      {:ok, result} = Queries.analyze_impact("createGcpConnector")
+
+      # All three POST handlers (distinct files) must appear — not collapsed to one.
+      affected_files =
+        result.impact
+        |> Enum.filter(&(&1.name == "POST"))
+        |> Enum.map(& &1.file_path)
+        |> Enum.uniq()
+
+      assert length(affected_files) == 3,
+             "expected all 3 POST route files, got: #{inspect(affected_files)}"
+
+      assert result.total_affected >= 3
+    end
+  end
 end

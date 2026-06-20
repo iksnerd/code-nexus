@@ -72,16 +72,17 @@ defmodule ElixirNexus.Search.ImpactAnalysis do
           []
         end
       end)
-      |> Enum.uniq_by(fn e -> e.entity["name"] end)
-      |> Enum.reject(fn e ->
-        entity_name = e.entity["name"] || ""
-        MapSet.member?(visited, entity_name)
-      end)
+      # Dedupe and track `visited` by {name, file_path}, NOT bare name. Same-named functions
+      # are everywhere in real codebases (every Next.js route.ts has GET/POST/PUT/DELETE); a
+      # name-only key collapsed all `POST` callers into one and stopped traversal after the
+      # first, so analyze_impact under-reported the blast radius vs find_all_callers.
+      |> Enum.uniq_by(&entity_key/1)
+      |> Enum.reject(fn e -> MapSet.member?(visited, entity_key(e)) end)
       |> CallerFinder.refine_entities_to_functions(name_lower, all_entities)
 
     Enum.map(callers, fn caller ->
       caller_name = caller.entity["name"]
-      new_visited = MapSet.put(visited, caller_name)
+      new_visited = MapSet.put(visited, entity_key(caller))
 
       %{
         name: caller_name,
@@ -93,6 +94,9 @@ defmodule ElixirNexus.Search.ImpactAnalysis do
       }
     end)
   end
+
+  # A caller's identity for dedup/visited — name alone collides across files.
+  defp entity_key(e), do: {e.entity["name"], e.entity["file_path"]}
 
   defp flatten_impact_tree(tree) do
     Enum.flat_map(tree, fn node ->
