@@ -10,7 +10,7 @@
 
 <p align="center">Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase.</p>
 
-Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Designed for large codebases with live incremental indexing.
+Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Indexing is incremental — only changed files are re-parsed — and runs live as files change, so it holds up on large codebases.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -302,7 +302,7 @@ MCP is served over HTTP (Streamable HTTP at `/mcp`) via Docker. For local develo
 
 ## Polyglot Support
 
-Elixir files are parsed via Sourceror (richer metadata). Other languages use Tree-sitter via a Rustler NIF, with language-specific extractors:
+Elixir files are parsed via Sourceror, which exposes macro and module metadata Tree-sitter doesn't. Other languages use Tree-sitter via a Rustler NIF, with language-specific extractors:
 
 | Language | Extensions | Parser | Extractor |
 |----------|------------|--------|-----------|
