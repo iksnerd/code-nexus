@@ -75,14 +75,29 @@ Path patterns with a `/` are matched relative to the project root — `docs/inte
 | `find_all_callers` | Find all callers of a function (calls + imports) |
 | `analyze_impact` | Transitive blast radius — callers-of-callers AND importers |
 | `get_community_context` | Find structurally coupled files via call graph and import edges |
-| `find_module_hierarchy` | Module parents (uses/implements) and children |
-| `find_dead_code` | Find exported functions with zero callers |
-| `get_graph_stats` | Structural overview with critical files (betweenness centrality) and current `project_path` |
+| `find_module_hierarchy` | Parents (uses/implements) and children (contained members) — Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
+| `find_dead_code` | Find exported functions with zero callers — honors `.nexus.toml` entry points and framework conventions |
+| `get_graph_stats` | Structural overview: node/edge counts, entity types, architectural layers, and critical files (deterministic betweenness centrality) |
 | `get_status` | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
+| `purge` | Wipe the current collection and caches for a clean re-index |
+| `load_resources` | List or read MCP resources for clients without native resource support |
+
+## Project Configuration (`.nexus.toml`)
+
+Optional, at the project root. `[entry_points]` globs exclude framework/DI-wired exports (route handlers, sitemaps, adapters) from `find_dead_code`; `[layers]` globs override the derived architectural layer. Without it, layers are inferred from directory conventions.
+
+```toml
+[entry_points]
+include = ["app/**/route.ts", "app/sitemap.ts"]
+
+[layers]
+ports = "core/ports/**"
+adapters = "infrastructure/**"
+```
 
 ## Supported Languages
 
-Elixir, JavaScript, TypeScript, TSX, Python, Go, Rust, Java.
+Elixir, JavaScript, TypeScript, TSX, Python, Go, Rust, Java, Ruby, Kotlin, Swift.
 
 ## Claude Code MCP Config
 
@@ -130,7 +145,7 @@ Add to your project's `.mcp.json`:
 
 ## Image Size
 
-The runtime image is **~593MB** (multi-stage build — Rust toolchain is build-only).
+The runtime image is **~594MB** (multi-stage build — Rust toolchain is build-only).
 
 
 [github.com/iksnerd/code-nexus](https://github.com/iksnerd/code-nexus)
