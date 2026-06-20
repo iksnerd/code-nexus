@@ -160,12 +160,14 @@ Hooks.CodeGraph = {
 
     const hullBox = g.append("g").attr("class", "cluster-hulls")
       .selectAll("g").data(groups).join("g");
-    // The box rect is clickable (click to isolate the package); the label rides along.
+    // The box rect is clickable in "boxes" select mode (click to isolate the package).
+    // It starts inert — default mode is "nodes" — and setMode() toggles pointer-events.
     hullBox.append("rect")
       .attr("rx", 16)
       .attr("fill", d => groupColor[d]).attr("fill-opacity", 0.06)
       .attr("stroke", d => groupColor[d]).attr("stroke-opacity", 0.3).attr("stroke-width", 1)
       .style("cursor", "pointer")
+      .style("pointer-events", "none")
       .on("mouseover", function(event, d) {
         if (isolatedGroup) return;
         d3.select(this).attr("fill-opacity", 0.12).attr("stroke-opacity", 0.6);
@@ -187,6 +189,8 @@ Hooks.CodeGraph = {
     // Click-to-isolate a package: highlight its box + nodes, dim everything else. Click the
     // same box again (or empty canvas) to clear. `setIsolation` is defined after node/link.
     let isolatedGroup = null;
+    // Select mode: "nodes" (hover/drag/inspect nodes) or "boxes" (click packages to isolate).
+    let selectMode = "nodes";
 
     // Type-aware link distance: contained methods tight to their struct, call/
     // import edges longer so the graph breathes.
@@ -216,6 +220,16 @@ Hooks.CodeGraph = {
       spacing: (v) => { simulation.force("collision").radius(d => Math.sqrt(d.val) * 8 + (+v)); reheat(); },
       // How tightly packages pull toward their cluster center (0 = free, 1 = rigid grid).
       cluster: (v) => { simulation.force("x").strength(+v); simulation.force("y").strength(+v); reheat(); }
+    };
+
+    // Segmented-button active-state helper for the template toggles.
+    window.segActivate = (btn) => {
+      Array.from(btn.parentNode.querySelectorAll("button")).forEach(b => {
+        b.classList.remove("bg-blue-600", "text-white");
+        b.classList.add("text-slate-400");
+      });
+      btn.classList.add("bg-blue-600", "text-white");
+      btn.classList.remove("text-slate-400");
     };
 
     // Frame the whole (wider-than-viewport) layout once it settles.
@@ -323,6 +337,8 @@ Hooks.CodeGraph = {
       .attr("stroke", d => d.callers_count >= 10 ? "#e2e8f0" : "#1e293b")
       .attr("stroke-width", d => d.callers_count >= 10 ? 2 : 1.5)
       .on("mouseover", (event, d) => {
+        // In "boxes" mode the package boxes are the focus — skip node hover-highlighting.
+        if (selectMode === "boxes") return;
         const connectedIds = neighbors.get(d.id) || new Set();
         // Dim non-connected nodes
         node.select("circle")
@@ -411,6 +427,19 @@ Hooks.CodeGraph = {
 
     // Click empty canvas to clear isolation.
     svg.on("click.isolate", () => setIsolation(null));
+
+    // Show only one edge type (calls / imports / contains) or all. Hides non-matching links.
+    window.graphControls.linkFilter = (type) => {
+      link.style("display", d => (type === "all" || d.type === type) ? null : "none");
+    };
+
+    // Toggle select mode: "nodes" (default) vs "boxes" (clickable package isolation).
+    window.graphControls.setMode = (mode) => {
+      selectMode = mode;
+      hullBox.select("rect").style("pointer-events", mode === "boxes" ? "all" : "none");
+      // Leaving box mode clears any active isolation so node mode starts clean.
+      if (mode !== "boxes") setIsolation(null);
+    };
 
     simulation.on("tick", () => {
       link

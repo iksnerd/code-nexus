@@ -99,6 +99,32 @@ defmodule ElixirNexus.GraphLive.Index do
             </button>
          </div>
 
+         <!-- Select mode: nodes vs package boxes -->
+         <div class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg p-2 w-48">
+           <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Select</p>
+           <div class="flex gap-1 bg-slate-800/60 rounded-md p-0.5">
+             <button onclick="window.graphControls.setMode('nodes'); window.segActivate(this)"
+                     class="flex-1 px-2 py-1 rounded text-xs font-medium bg-blue-600 text-white">Nodes</button>
+             <button onclick="window.graphControls.setMode('boxes'); window.segActivate(this)"
+                     class="flex-1 px-2 py-1 rounded text-xs font-medium text-slate-400">Boxes</button>
+           </div>
+         </div>
+
+         <!-- Edge-type filter -->
+         <div class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg p-2 w-48">
+           <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Edges</p>
+           <div class="flex gap-1 bg-slate-800/60 rounded-md p-0.5">
+             <button onclick="window.graphControls.linkFilter('all'); window.segActivate(this)"
+                     class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium bg-blue-600 text-white">All</button>
+             <button onclick="window.graphControls.linkFilter('calls'); window.segActivate(this)"
+                     class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium text-slate-400">Calls</button>
+             <button onclick="window.graphControls.linkFilter('imports'); window.segActivate(this)"
+                     class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium text-slate-400">Imports</button>
+             <button onclick="window.graphControls.linkFilter('contains'); window.segActivate(this)"
+                     class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium text-slate-400">Contains</button>
+           </div>
+         </div>
+
          <!-- Layout settings — live D3 force tuning -->
          <details class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg text-xs text-slate-400 w-48">
            <summary class="px-3 py-2 cursor-pointer select-none hover:text-slate-200 flex items-center gap-1.5">
@@ -126,7 +152,7 @@ defmodule ElixirNexus.GraphLive.Index do
                <input type="range" min="0.05" max="0.95" step="0.05" value="0.45"
                       oninput="window.graphControls && window.graphControls.cluster(this.value)" class="w-full accent-blue-500" />
              </label>
-             <p class="text-[10px] text-slate-500 leading-snug pt-0.5">Click a package box to isolate it; click empty space to clear.</p>
+             <p class="text-[10px] text-slate-500 leading-snug pt-0.5">In <b>Boxes</b> mode, click a package to isolate it; click empty space to clear.</p>
            </div>
          </details>
       </div>
