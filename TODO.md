@@ -7,24 +7,17 @@ lists its 6 implementors; dead-code 54 → 42 with all 6 `create*SyncAdapter` DI
 811 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
 published-image smoke test stood in.
 
-## 🔴 Known issues
+## Known issues
 
-### `analyze_impact` under-reports when callers share a name (found via MCP tool test, 2026-06-20)
+### ✅ FIXED (on main, unshipped) — `analyze_impact` under-reported with same-named callers
 
-Live on control-stack: `find_all_callers("createGcpConnector")` returns **4 callers in 4 files**, but
-`analyze_impact("createGcpConnector")` returns **2 affected** — it drops two of the three `POST` route
-handlers. **Severe for Next.js / route-handler codebases**, where `GET`/`POST`/`PUT`/`DELETE` repeat
-in every `route.ts` — exactly where blast-radius analysis matters most.
-
-Root cause in `lib/elixir_nexus/search/impact_analysis.ex`:
-- `build_impact_tree/5` line ~75: `Enum.uniq_by(fn e -> e.entity["name"] end)` collapses all
-  same-named callers (`POST`) into one.
-- line ~84: the `visited` set is keyed by bare `caller_name`, so once any `POST` is visited, no other
-  `POST` anywhere is ever traversed (compounds transitively).
-
-Fix: key both the dedup and the `visited` set on `{name, file_path}` (or the entity id), not the bare
-name. Add a regression test with same-named callers across files; assert the affected count matches
-`find_all_callers`. Low-risk, contained.
+Found via the MCP tool test (2026-06-20): `analyze_impact("createGcpConnector")` returned **2
+affected** while `find_all_callers` found **4** — it dropped two of three `POST` route handlers.
+`impact_analysis.ex` keyed both the caller dedup (`uniq_by(name)`) and the `visited` set on the bare
+name, so all `POST`s collapsed to one and traversal stopped after the first (endemic in Next.js, where
+every `route.ts` has GET/POST). Fixed by keying both on `{name, file_path}` (commit `2ea5b47`).
+Regression test asserts all 3 same-named POST callers across files are counted. **Ships in the next
+image** (currently live image is v1.18.2).
 
 ### Carried-over housekeeping
 
