@@ -1,13 +1,23 @@
 # CodeNexus TODO
 
-**Current version:** v1.17.0 (graph representation overhaul + switching robustness)
-**Status:** v1.17.0 tagged; 771 tests green (42 excluded)
+**Current version:** v1.18.0 (analysis-quality fixes + architecture awareness)
+**Status:** v1.18.0 shipped — `iksnerd/code-nexus:v1.18.0` + `:latest` (arm64) live on Docker Hub,
+smoke-tested in-image against control-stack; 803 tests green (42 excluded). CI skipped (GitHub
+Actions quota exhausted) — local gate + published-image smoke test stood in.
 
 ---
 
-## 🟡 Analysis-quality pass — "codebase analysis still not helpful" (2026-06-20, unreleased)
+## ✅ Shipped in v1.18.0 — analysis quality + architecture awareness (2026-06-20)
 
-Acted on user report + live re-test against `control-stack` (280 files, 2247 chunks). Root-caused
+Four phases, all live-verified against `control-stack` (hexagonal TS, 280 files / 2171 chunks) on the
+published image. Headline wins: `get_graph_stats` is now deterministic, `contains` edges 0 → 820,
+`find_module_hierarchy` works on TS interfaces/type aliases, and a derived `layers` breakdown shows
+the hexagonal shape (ports/adapters/services/…). Release paper cuts captured in the `nexus-release`
+skill (CI-down path, local-vs-CI warning discrepancy, recreate-don't-restart, in-image NIF check).
+
+### Phase 0 — analysis-quality (acted on user report + live re-test)
+
+Originally root-caused against `control-stack` (280 files, 2247 chunks). Root-caused
 why the aggregate/ranking tools felt untrustworthy and fixed six issues. 771 tests green, format +
 compile clean. **Not yet shipped (no Docker image cut).** See `elixir-nexus-issues` for the writeup.
 
@@ -102,11 +112,22 @@ Reindexed control-stack (280 files, 2171 chunks) on the local server with the re
   adapters (`createOktaSyncAdapter`, RBAC fns, `useSyncExternalStore` callbacks) — **this is the
   motivation for Phase 2 #2/#3** (layer + interface→impl edges) and `entry_points` config.
 
+### Shipped + verified in-image (v1.18.0)
+
+- [x] **Docker image cut + pushed** — `iksnerd/code-nexus:v1.18.0` + `:latest` (arm64), digest
+  `sha256:7fb09c2c…`. Container recreated from the published image and smoke-tested: `contains` 820,
+  `layers` breakdown (application 1018 / presentation 673 / adapters 151 / domain 115 / ports 23 / …),
+  `find_module_hierarchy("IntegrationRepository")` → its members. Linux NIF builds in-image.
+- [x] Phase 2 #2 (layer detection) — shipped (see above).
+
 ### Still open
 
-- [ ] **Cut + push Docker image** (Linux NIF rebuilds automatically) to make all of the above live in
-  the `code_nexus` container (currently still the old published image).
-- [ ] Phase 2 #2 (layer detection) + #3 (interface→implementor edges).
+- [ ] **Phase 2 #3 — interface→implementor edges** (structural / naming match). The last piece that
+  would resolve the residual DI-wired-adapter dead-code false positives the live run surfaced
+  (`createOktaSyncAdapter`, `createAwsSyncAdapter`, RBAC fns, `useSyncExternalStore` callbacks).
+- [ ] **Test-collection leakage** into shared Qdrant — `nexus_definitely_does_not_exist_xyz`,
+  `nexus_force_switched` still present (carried from the v1.17.0 follow-up).
+- [ ] Re-enable CI once GitHub Actions quota resets.
 
 ---
 
