@@ -19,6 +19,23 @@ mix test --exclude performance --exclude multi_project
 
 If any check fails, fix it before proceeding. Never tag a broken commit.
 
+**Paper cut — local Elixir newer than CI.** CI pins a specific Elixir/OTP
+(`.github/workflows/ci.yml` → `ELIXIR_VERSION` / `OTP_VERSION`; currently 1.19.5 / 27).
+A newer *local* Elixir (e.g. 1.20.x) runs a stricter set-theoretic type checker and can fail
+`mix compile --warnings-as-errors` on **pre-existing** code (e.g. `dirs == []` always-false,
+`get_embedding/1` inference) that the pinned CI version never flags. These are *not* regressions.
+Before treating such a warning as a blocker, confirm it predates your change:
+
+```bash
+git stash && mix compile --force --warnings-as-errors 2>&1 | grep -oE "lib/[^ ]+\.ex:[0-9]+" | sort -u > /tmp/head.txt
+git stash pop && mix compile --force --warnings-as-errors 2>&1 | grep -oE "lib/[^ ]+\.ex:[0-9]+" | sort -u > /tmp/mine.txt
+comm -23 /tmp/mine.txt /tmp/head.txt   # empty = you added zero new warnings → not your blocker
+```
+
+If the diff is empty, the warning is an environment artifact; rely on the pinned-version CI (or,
+when CI is unavailable, the published-image smoke test in step 8) as the authoritative gate. Don't
+"fix" pre-existing type-checker noise as part of a release — it's scope creep and risks behavior change.
+
 ## 2 — Bump version
 
 Edit the `VERSION` file (single source of truth — `mix.exs` reads it at compile time):
@@ -71,6 +88,20 @@ CI must show `completed / success` before building the Docker image. If it fails
 
 The CLI GitHub Release is created automatically by GoReleaser — no manual step needed.
 
+### CI unavailable (quota exhausted / Actions disabled) — local-only release
+
+GitHub Actions minutes can run out. When CI can't run, do **not** wait on it (the runs may sit
+`in_progress` forever or fail to start). Substitute a local gate instead:
+
+1. The **step 1 pre-push checks already passed locally** (tests + format) — that is the substantive
+   gate CI would have run. Confirm `mix test --exclude performance --exclude multi_project` is green
+   on the exact committed tree.
+2. Skip straight to step 7 (build) and step 8 (smoke test). **The published-image smoke test is the
+   real backstop** — it builds the Linux NIF from scratch and boots the actual artifact, catching
+   anything a green test suite wouldn't (NIF link errors, missing vendor JS, startup crashes).
+3. Note in the release post that CI was skipped and why, and that the local gate + image smoke test
+   stood in. Re-enable CI for the next release when quota resets.
+
 ## 7 — Build and push Docker image (multi-arch)
 
 ```bash
@@ -97,12 +128,20 @@ docker-compose down
 # Pull the new image (confirms the push landed correctly)
 docker pull iksnerd/code-nexus:vX.Y.Z
 
-# docker-compose.yml uses :latest — no edit needed, just start
-WORKSPACE=~/www docker-compose up -d
+# docker-compose.yml uses :latest — no edit needed, just start.
+# Prefer a bare `up` so it reads the full .env (WORKSPACE + WORKSPACE_2..5 mounts).
+# Passing only WORKSPACE=~/www on the CLI DROPS the other mounts.
+docker-compose up -d
 
 # Tail logs until "MCP HTTP server started" appears (30-60s)
 docker-compose logs -f elixir_nexus
 ```
+
+**Paper cut — recreate, don't restart.** To pick up the new `:latest`, the container must be
+*recreated* (`docker-compose down && up -d`). `docker start <container>` reuses the OLD image and
+silently tests nothing new. The mounts live in `.env` (`WORKSPACE`, `WORKSPACE_HOST`,
+`WORKSPACE_2..5`, `WORKSPACE_HOST_2..5`) — compose reads them automatically, so a bare `up` keeps
+the full multi-mount setup that an inline `WORKSPACE=...` would clobber.
 
 Look for these lines — if they all appear the container is healthy:
 ```
@@ -113,6 +152,14 @@ MCP HTTP server listening on port 3002
 ```
 
 Then do a minimal MCP round-trip: reindex a workspace project and run `search_code` or `get_graph_stats`. Only proceed to post-release once at least one reindex + search succeeds.
+
+**Paper cut — verify the in-image NIF, not just "it booted".** The Docker build compiles a fresh
+**Linux** tree-sitter NIF — a different binary from the macOS `.so` you tested locally (and the `.so`
+is gitignored, so it's never in the commit). A clean boot only proves the NIF *loaded*, not that it
+*parses correctly*. If the release touched `native/tree_sitter_nif/src/lib.rs` or any extractor,
+assert real parser output in the round-trip — e.g. on a known project `get_graph_stats` shows
+`edge_counts.contains > 0` and `find_module_hierarchy(<a known type>)` returns its members. Matching
+the chunk/edge counts from your local run is the strongest signal the in-image NIF is correct.
 
 **Also verify the dashboard UI works:** open `http://localhost:4100` in a browser and check that LiveView connects (buttons should be interactive, not dead). If LiveView fails to connect, check the browser console for `LiveView is not defined` — this means vendor JS files are missing from the image. See the `priv/static/js/` row in the key files table below.
 
