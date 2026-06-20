@@ -261,6 +261,8 @@ When adding a new skill, decide visibility by prefix. Don't expose internal-dev 
 | `lib/elixir_nexus/search/entity_resolution.ex` | Entity name matching — highest-centrality file; `matches_entity_name?/2`, `find_entity_multi_strategy/2` |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
 | `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |
+| `lib/elixir_nexus/project_config.ex` | Optional `.nexus.toml` loader — `entry_points` (dead-code exclusions) + `[layers]` overrides; `layer_for/2`, glob matcher; cached in app env at reindex |
+| `lib/elixir_nexus/layers.ex` | Derive-first architectural layer classification from directory conventions (`classify/1`) |
 | `lib/elixir_nexus/indexing_helpers.ex` | File processing, embedding, Qdrant storage |
 | `lib/elixir_nexus/mcp_server.ex` | MCP tool DSL + `handle_tool_call/3` dispatch — delegates to sub-modules |
 | `lib/elixir_nexus/mcp_server/index_management.ex` | Collection switching, dirty-file auto-reindex, deleted file cleanup |

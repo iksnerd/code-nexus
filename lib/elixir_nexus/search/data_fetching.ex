@@ -1,6 +1,11 @@
 defmodule ElixirNexus.Search.DataFetching do
   @moduledoc "Loads entities from ChunkCache (fast) or Qdrant scroll (fallback)."
 
+  # The ChunkCache path is already fully in memory, so the `limit` only bounds the Qdrant
+  # scroll fallback. Callers like find_dead_code / community_context need EVERY entity to
+  # build a complete call index — truncating there silently dropped call edges on any
+  # project over the cap (e.g. control-stack: 2247 chunks) and produced false dead-code
+  # positives. Pass :all to take everything; the cap stays only as a scroll-page bound.
   def get_all_entities_cached(limit) do
     chunks =
       try do
@@ -36,12 +41,23 @@ defmodule ElixirNexus.Search.DataFetching do
           }
         end)
 
-      {:ok, Enum.take(entities, limit)}
+      # ChunkCache is fully in memory — never truncate it. `:all` keeps every entity; a
+      # numeric limit is still honored for callers that explicitly want a bound.
+      case limit do
+        :all -> {:ok, entities}
+        n when is_integer(n) -> {:ok, Enum.take(entities, n)}
+        _ -> {:ok, entities}
+      end
     else
       # Fallback to Qdrant scroll — slow for large collections
-      get_all_entities(limit)
+      get_all_entities(scroll_limit(limit))
     end
   end
+
+  # Qdrant scroll needs a concrete upper bound. `:all` maps to a large ceiling.
+  defp scroll_limit(:all), do: 100_000
+  defp scroll_limit(n) when is_integer(n), do: n
+  defp scroll_limit(_), do: 100_000
 
   defp get_all_entities(limit) do
     scroll_all_points(limit, nil, [])

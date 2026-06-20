@@ -155,6 +155,38 @@ defmodule ElixirNexus.Search.GraphStatsTest do
     end
   end
 
+  describe "get_graph_stats layers" do
+    setup do
+      # Mirror production: reindex always stores {project_root, config}, so layers are
+      # classified on root-relative paths. Without this, the "/app" prefix would itself
+      # match the presentation "app" alias.
+      prev = Application.get_env(:elixir_nexus, :project_config)
+
+      Application.put_env(
+        :elixir_nexus,
+        :project_config,
+        {"/app", %ElixirNexus.ProjectConfig{}}
+      )
+
+      on_exit(fn ->
+        if prev,
+          do: Application.put_env(:elixir_nexus, :project_config, prev),
+          else: Application.delete_env(:elixir_nexus, :project_config)
+      end)
+
+      :ok
+    end
+
+    test "returns a layers breakdown" do
+      {:ok, stats} = Queries.get_graph_stats()
+
+      assert Map.has_key?(stats, :layers)
+      assert is_list(stats.layers)
+      # Fixtures live under /app/lib/* → root-relative "lib/*" → the "lib" layer.
+      assert Enum.any?(stats.layers, &(&1.layer == "lib"))
+    end
+  end
+
   describe "get_graph_stats critical_files" do
     test "returns critical_files field" do
       {:ok, stats} = Queries.get_graph_stats()

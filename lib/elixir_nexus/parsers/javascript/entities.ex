@@ -81,7 +81,10 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
         _ -> {:function, nil}
       end
 
-    if name do
+    # Skip destructuring/binding patterns (`const [a, setA] = useState()`,
+    # `const { x, y } = props`). The extractor captures the whole pattern as the "name",
+    # producing pseudo-entities that inflate the `variable` count and pollute rankings.
+    if name && not pattern_name?(name) do
       %CodeSchema{
         file_path: file_path,
         entity_type: entity_type,
@@ -225,5 +228,55 @@ defmodule ElixirNexus.Parsers.JavaScript.Entities do
     |> Enum.reject(&(&1 == ""))
   end
 
+  # TS `interface Foo { id: string; bar(): void }` — the body is `interface_body`,
+  # members are `property_signature` (fields) and `method_signature` (methods).
+  defp extract_contains(%{"kind" => "interface_declaration", "children" => children}) do
+    children
+    |> Enum.filter(&(&1["kind"] == "interface_body"))
+    |> Enum.flat_map(&member_names/1)
+  end
+
+  # TS `type Foo = { a: string; onClose(): void }` — the body is `object_type`
+  # wrapping the same member node kinds.
+  defp extract_contains(%{"kind" => "type_alias_declaration", "children" => children}) do
+    children
+    |> Enum.filter(&(&1["kind"] == "object_type"))
+    |> Enum.flat_map(&member_names/1)
+  end
+
+  # A binding pattern, not an identifier: `[a, b]`, `{ x, y }`, or anything with a comma/space.
+  defp pattern_name?(name) when is_binary(name) do
+    String.starts_with?(name, "[") or String.starts_with?(name, "{") or
+      String.contains?(name, ",") or String.contains?(name, " ")
+  end
+
+  defp pattern_name?(_), do: false
+
   defp extract_contains(_), do: []
+
+  # Collect member names from an interface_body / object_type node. Members are
+  # property_signature / method_signature; the name sits on the node or on a nested
+  # property_identifier child.
+  defp member_names(%{"children" => children}) do
+    children
+    |> Enum.filter(&(&1["kind"] in ["property_signature", "method_signature"]))
+    |> Enum.map(&member_name/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp member_names(_), do: []
+
+  defp member_name(%{"name" => name}) when is_binary(name) and name != "", do: name
+
+  defp member_name(%{"children" => children}) do
+    children
+    |> Enum.find(&(&1["kind"] == "property_identifier"))
+    |> case do
+      %{"name" => n} when is_binary(n) -> n
+      %{"text" => t} when is_binary(t) -> t
+      _ -> ""
+    end
+  end
+
+  defp member_name(_), do: ""
 end

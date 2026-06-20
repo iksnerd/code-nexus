@@ -12,7 +12,7 @@ defmodule ElixirNexus.Search.CommunityContext do
   def get_community_context(file_path, limit \\ 10) do
     Logger.info("Getting community context for: #{file_path}")
 
-    case DataFetching.get_all_entities_cached(2000) do
+    case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
         target_entities = Enum.filter(all_entities, &(&1.entity["file_path"] == file_path))
         target_names = MapSet.new(target_entities, & &1.entity["name"])
@@ -97,9 +97,12 @@ defmodule ElixirNexus.Search.CommunityContext do
           end)
           |> Enum.group_by(&elem(&1, 0))
           |> Enum.map(fn {path, entries} ->
-            score = entries |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-            connections = entries |> Enum.flat_map(&elem(&1, 2)) |> Enum.uniq()
-            %{file_path: path, coupling_score: score, connections: connections}
+            connections = entries |> Enum.flat_map(&elem(&1, 2)) |> dedupe_connections()
+            # Score reflects DISTINCT relationships. Previously it summed per-entity edge
+            # counts, so a file where every component imports `utils.ts` scored ~77 from one
+            # underlying fact ("this file imports utils.ts"). Import edges now collapse to one
+            # per direction, so coupling reflects real structure, not component count.
+            %{file_path: path, coupling_score: length(connections), connections: connections}
           end)
           |> Enum.sort_by(& &1.coupling_score, :desc)
           |> Enum.take(limit)
@@ -115,4 +118,33 @@ defmodule ElixirNexus.Search.CommunityContext do
         error
     end
   end
+
+  # Collapse the raw connection list into distinct, meaningful relationships:
+  #   * import / imported_by edges collapse to ONE per direction — the fact is
+  #     "file A imports file B", not "each of B's 30 components imports A".
+  #   * call edges (incoming/outgoing) stay per {from, to}, but drop destructuring/binding
+  #     patterns (`{ isMobile, state }`, `[open, setOpen]`, object literals) which the
+  #     extractor captures as pseudo-entities and which carry no coupling signal.
+  defp dedupe_connections(connections) do
+    {import_edges, call_edges} =
+      Enum.split_with(connections, &(&1.direction in [:imports, :imported_by]))
+
+    imports = import_edges |> Enum.uniq_by(& &1.direction)
+
+    calls =
+      call_edges
+      |> Enum.reject(fn c -> pattern_name?(c.from) or pattern_name?(c.to) end)
+      |> Enum.uniq_by(&{&1.from, &1.to, &1.direction})
+
+    imports ++ calls
+  end
+
+  defp pattern_name?(nil), do: true
+
+  defp pattern_name?(name) when is_binary(name) do
+    String.starts_with?(name, "[") or String.starts_with?(name, "{") or
+      String.contains?(name, ",") or String.contains?(name, " ")
+  end
+
+  defp pattern_name?(_), do: false
 end

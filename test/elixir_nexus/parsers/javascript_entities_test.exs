@@ -183,6 +183,106 @@ defmodule ElixirNexus.Parsers.JavaScriptEntitiesTest do
     end
   end
 
+  describe "interface and type member containment" do
+    test "interface contains its property and method signatures" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("interface_declaration",
+              name: "User",
+              children: [
+                make_node("interface_body",
+                  children: [
+                    make_node("property_signature", name: "id"),
+                    make_node("property_signature",
+                      children: [make_node("property_identifier", text: "name")]
+                    ),
+                    make_node("method_signature", name: "greet")
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities(
+          "user.ts",
+          ast,
+          "interface User { id: string; name: string; greet(): void }"
+        )
+
+      iface = Enum.find(entities, &(&1.name == "User"))
+      assert iface != nil
+      assert "id" in iface.contains
+      assert "name" in iface.contains
+      assert "greet" in iface.contains
+    end
+
+    test "type alias contains its object-type members" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("type_alias_declaration",
+              name: "Opts",
+              children: [
+                make_node("object_type",
+                  children: [
+                    make_node("property_signature", name: "width"),
+                    make_node("method_signature", name: "onClose")
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities(
+          "opts.ts",
+          ast,
+          "type Opts = { width: number; onClose(): void }"
+        )
+
+      ta = Enum.find(entities, &(&1.name == "Opts"))
+      assert ta != nil
+      assert "width" in ta.contains
+      assert "onClose" in ta.contains
+    end
+  end
+
+  describe "destructuring pattern filtering" do
+    test "destructuring binding is not captured as an entity" do
+      ast =
+        make_node("program",
+          children: [
+            make_node("lexical_declaration",
+              children: [
+                make_node("variable_declarator",
+                  name: "[open, setOpen]",
+                  children: [
+                    make_node("array_pattern",
+                      children: [
+                        make_node("identifier", text: "open"),
+                        make_node("identifier", text: "setOpen")
+                      ]
+                    ),
+                    make_node("call_expression", children: [])
+                  ]
+                )
+              ]
+            )
+          ]
+        )
+
+      entities =
+        JavaScriptExtractor.extract_entities("c.tsx", ast, "const [open, setOpen] = useState()")
+
+      refute Enum.any?(entities, &(&1.name == "[open, setOpen]")),
+             "destructuring pattern should not become an entity"
+    end
+  end
+
   describe "method extraction" do
     test "method_definition inside class is extracted" do
       ast =

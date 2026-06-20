@@ -548,6 +548,85 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
     end
   end
 
+  describe "find_dead_code/1 - .nexus.toml entry_points" do
+    @entry_chunks [
+      # An export in a declared entry-point file (route handler) — no in-repo caller,
+      # but reachable via the framework. Should be excluded once config declares it.
+      %{
+        id: "ep_route",
+        file_path: "/tmp/proj/app/api/feed/route.ts",
+        entity_type: :function,
+        name: "buildFeed",
+        content: "export function buildFeed() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "buildFeed",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      },
+      # A genuinely orphaned export outside any entry point — must still be flagged.
+      %{
+        id: "ep_orphan",
+        file_path: "/tmp/proj/lib/orphan.ts",
+        entity_type: :function,
+        name: "trulyUnused",
+        content: "export function trulyUnused() {}",
+        start_line: 1,
+        end_line: 1,
+        module_path: "trulyUnused",
+        visibility: :public,
+        parameters: [],
+        calls: [],
+        is_a: [],
+        contains: [],
+        language: :typescript
+      }
+    ]
+
+    setup do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(@entry_chunks)
+      GraphCache.rebuild_from_chunks(@entry_chunks)
+
+      prev = Application.get_env(:elixir_nexus, :project_config)
+
+      Application.put_env(
+        :elixir_nexus,
+        :project_config,
+        {"/tmp/proj", %ElixirNexus.ProjectConfig{entry_points: ["app/**/route.ts"]}}
+      )
+
+      on_exit(fn ->
+        if prev,
+          do: Application.put_env(:elixir_nexus, :project_config, prev),
+          else: Application.delete_env(:elixir_nexus, :project_config)
+      end)
+
+      :ok
+    end
+
+    test "excludes exports in entry_point files" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      refute "buildFeed" in dead_names,
+             "export in a declared entry_point (app/**/route.ts) should not be dead"
+    end
+
+    test "still flags orphans outside entry points" do
+      {:ok, result} = Queries.find_dead_code()
+      dead_names = Enum.map(result.dead_functions, & &1.name)
+
+      assert "trulyUnused" in dead_names,
+             "export outside any entry_point should still be flagged dead"
+    end
+  end
+
   describe "find_dead_code/1 - additional convention files" do
     test "not-found.tsx default export excluded from dead code" do
       chunk = %{

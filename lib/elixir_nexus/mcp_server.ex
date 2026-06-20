@@ -390,6 +390,8 @@ defmodule ElixirNexus.MCPServer do
           true ->
             IndexManagement.ensure_collection_for_project(index_root, display_path)
             Application.put_env(:elixir_nexus, :current_project_path, display_path)
+            # Load optional .nexus.toml (entry_points, layers) for this project root.
+            ElixirNexus.ProjectConfig.load_and_store(index_root)
             Logger.info("Indexing project at #{index_root} (requested: #{display_path}), directories: #{inspect(dirs)}")
 
             # Wire up file watchers before async indexing starts — they'll catch

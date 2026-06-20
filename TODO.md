@@ -1,7 +1,112 @@
 # CodeNexus TODO
 
-**Current version:** v1.14.0 (async reindex, indexing progress in get_status)
-**Status:** v1.14.0 tagged; 768 tests green (42 excluded)
+**Current version:** v1.17.0 (graph representation overhaul + switching robustness)
+**Status:** v1.17.0 tagged; 771 tests green (42 excluded)
+
+---
+
+## 🟡 Analysis-quality pass — "codebase analysis still not helpful" (2026-06-20, unreleased)
+
+Acted on user report + live re-test against `control-stack` (280 files, 2247 chunks). Root-caused
+why the aggregate/ranking tools felt untrustworthy and fixed six issues. 771 tests green, format +
+compile clean. **Not yet shipped (no Docker image cut).** See `elixir-nexus-issues` for the writeup.
+
+- [x] **Non-deterministic `critical_files`** (the long-standing "centrality shifts between calls"
+  report). `compute_critical_files` used `Enum.take_random` to pick 30 BFS sources, reseeded every
+  call — two back-to-back `get_graph_stats` on control-stack returned different lists. Now selects
+  the highest out-degree nodes deterministically and scales the sample to graph size.
+  **File:** `search/graph_stats.ex`.
+- [x] **Silent 2000-entity truncation** — `find_dead_code`, `get_community_context`, `analyze_impact`,
+  `find_module_hierarchy`, `find_callees/callers` all called `get_all_entities_cached(2000)`; the
+  in-memory ChunkCache was then truncated to an arbitrary 2000, dropping call edges (false dead-code
+  positives, missing impact) on any project >2000 chunks. ChunkCache path now returns all entities
+  (`:all`); the cap only bounds the Qdrant scroll fallback. **Files:** `search/data_fetching.ex` + 6 callers.
+- [x] **`top_connected` ranked imports, not hubs** — degree counted `is_a` (imports) as outgoing and
+  `incoming_count` was often 0, so provider/barrel modules (`ReactQueryProvider` 825) outranked real
+  hubs like `cn`. Now degree = call/contains out + call fan-in; import edges excluded. **File:** `search/graph_stats.ex`.
+- [x] **Destructuring/pattern noise in rankings** — `[canScrollNext, setCanScrollNext]`, `{ isMobile, state }`
+  leaked into top_connected and community_context. Added a `pattern_name?` filter (names with `[`/`{`/`,`/space).
+  **Files:** `search/graph_stats.ex`, `search/community_context.ex`.
+- [x] **`get_community_context` import-noise** — coupling_score summed one "imports utils.ts" fact per
+  component (sidebar.tsx scored 77 from a single relationship). Import edges now collapse to one per
+  direction; score = distinct connections. **File:** `search/community_context.ex`.
+- [x] **Dead-code false positives on Next.js** — lowercase convention exports (`manifest`, `sitemap`,
+  `robots`) leaked through the filter; `*.test.*`/`*.spec.*` helper functions were flagged. Added a
+  `name == basename` convention clause + `test_file?` skip. **File:** `search/dead_code_detection.ex`.
+- [x] **Hotspots dead-code summary permanently "0 of 0"** — `nexus://project/hotspots` filtered
+  `visibility == "public"`, but GraphCache nodes carried no `visibility` field. Added `visibility`
+  to all three node-build paths (via `Map.get`, tolerating partial chunks) and aligned the filter to
+  treat nil as public. **Files:** `graph_cache.ex`, `relationship_graph.ex`, `mcp_server/resources.ex`.
+### Parser: TS interface/type containment + destructuring filter (2026-06-20)
+
+Class-less (hexagonal) TS got **zero `contains` edges** — `find_module_hierarchy` was blind to ports
+(interfaces) and domain types. Root cause: the NIF filtered the member-carrying nodes.
+
+- [x] **NIF passes interface/type members** — `object_type` (body of `type X = {...}`) and
+  `property_signature` (non-method members like `id: string`) added to `is_significant_node`.
+  `interface_body` + `method_signature` already passed. NIF rebuilt (macOS `.so`; Docker rebuilds Linux).
+  **File:** `native/tree_sitter_nif/src/lib.rs`.
+- [x] **Extractor emits interface/type `contains`** — `extract_contains` now handles
+  `interface_declaration` (→ interface_body members) and `type_alias_declaration` (→ object_type
+  members), pulling property + method names. Verified end-to-end through the real NIF:
+  `interface UserRepository` → `["findById","save","tableName"]`; `type DownloadOpts` →
+  `["url","retries","onProgress"]`. **File:** `parsers/javascript/entities.ex`.
+- [x] **Dropped destructuring pseudo-entities** — `const [open,setOpen] = useState()` / `const {x,y} = props`
+  no longer become `variable` entities (the whole pattern was captured as a name, inflating counts +
+  rankings). **File:** `parsers/javascript/entities.ex`. 774 tests green (+3).
+
+### Architecture awareness — `.nexus.toml` + derive-first (decided 2026-06-20, in progress)
+
+User decision: **derive-first, config overrides.** Nexus infers layers from directory conventions
+(`core/ports`, `infrastructure`/`adapters`, `services`, `repositories`, `core/entities`) + interface→
+implementor edges; an optional `.nexus.toml` overrides layer globs and declares `entry_points`
+(which also kills dead-code false positives — route handlers, sitemap, DI-wired adapters).
+
+- [x] **Increment #1 — `.nexus.toml` loader + `entry_points` → dead-code** (790 tests, +16).
+  New `ElixirNexus.ProjectConfig` (`load/1`, `parse/1`, glob matcher, `entry_point?/2`); `toml ~> 0.7`
+  added as an explicit dep. Loaded at reindex time (`mcp_server.ex`, after collection setup) and cached
+  in Application env with the project root. `find_dead_code` excludes exports whose root-relative path
+  matches an `entry_points` glob — finally kills the recurring FP class (route handlers, sitemap, DI
+  adapters) *definitively and per-project*. Absent config = empty struct = no behavior change.
+  **Files:** `project_config.ex` (new), `mcp_server.ex`, `search/dead_code_detection.ex`, `mix.exs`.
+- [x] **Increment #2 — derive-first layer detection** (803 tests). New `ElixirNexus.Layers`
+  (`classify/1`) infers a layer from directory conventions (ports / adapters·infrastructure /
+  application·services / repositories / domain·core·entities / api / presentation / lib), checked
+  most-specific-first. `ProjectConfig.layer_for/2` lets `[layers]` globs override. `get_graph_stats`
+  now returns a `layers` breakdown (entities per layer), classified on root-relative paths.
+  **Files:** `layers.ex` (new), `project_config.ex`, `search/graph_stats.ex`. Also fixed the
+  `top_connected` `findControl ×6` dup (`uniq_by(name)`) found during live verify.
+- [ ] **Increment #3 — interface→implementor edges** (structural / naming match) for hexagonal
+  navigation — the last piece that would resolve the DI-adapter dead-code false positives the live
+  run surfaced (`createOktaSyncAdapter`, RBAC fns, etc.).
+
+### Docs (2026-06-20)
+
+- [x] README: fixed drift (`Ten tools` → 12, added `purge` + `load_resources` rows; `~725` →
+  `~800` tests; interface/type extraction marked Y for JS/TS); documented `.nexus.toml`
+  (`entry_points` + `[layers]`) and the derive-first layer breakdown.
+- [x] CLAUDE.md: added `project_config.ex` + `layers.ex` to the Key files table.
+
+### ✅ Live-verified against control-stack via the local mix loop (2026-06-20)
+
+Reindexed control-stack (280 files, 2171 chunks) on the local server with the rebuilt NIF. Confirmed:
+- **Determinism** — two consecutive `get_graph_stats` are now byte-identical (`critical_files`:
+  app-shell 647, sidebar 411, utils 282…). Scores are meaningful (was random 15/2/1).
+- **`contains` edges 0 → 820** — interface/type/class members now in the graph.
+- **`find_module_hierarchy` on ports works** — `RepositoryHost` → its members; `IntegrationRepository`
+  → `create/update/delete/listByOrg/listByOrgAndProvider`. Was empty for every TS interface before.
+- **`top_connected`** shows real domain hubs (findControl, evaluateGcpEvidence, createAwsConnector),
+  not import-floods. Fixed a dup artifact: same-named entities collapsed via `uniq_by(name)` (was
+  `findControl` ×6 — name-keyed fan-in credits every overload). **File:** `search/graph_stats.ex`.
+- **Dead-code** — `manifest`/`sitemap` no longer flagged. Still ~54 hits dominated by DI-wired
+  adapters (`createOktaSyncAdapter`, RBAC fns, `useSyncExternalStore` callbacks) — **this is the
+  motivation for Phase 2 #2/#3** (layer + interface→impl edges) and `entry_points` config.
+
+### Still open
+
+- [ ] **Cut + push Docker image** (Linux NIF rebuilds automatically) to make all of the above live in
+  the `code_nexus` container (currently still the old published image).
+- [ ] Phase 2 #2 (layer detection) + #3 (interface→implementor edges).
 
 ---
 

@@ -12,7 +12,16 @@ defmodule ElixirNexus.Search.GraphStats do
   # UI wrapper aliases (Comp, Box, Row, Col, Btn, Nav, Ref, Ctx…) — not real app logic.
   defp graph_noise_name?(name) do
     name in @graph_noise_names or
-      Regex.match?(~r/^[A-Z][a-z]{0,3}$/, name)
+      Regex.match?(~r/^[A-Z][a-z]{0,3}$/, name) or
+      pattern_name?(name)
+  end
+
+  # Destructuring/binding patterns (`[canScrollNext, setCanScrollNext]`, `{ isMobile, state }`)
+  # and object literals get captured as variable "entities" by the JS/TS extractor. Their
+  # names are syntax, not identifiers — exclude them from every ranking.
+  defp pattern_name?(name) do
+    String.starts_with?(name, "[") or String.starts_with?(name, "{") or
+      String.contains?(name, ",") or String.contains?(name, " ")
   end
 
   @doc """
@@ -45,21 +54,36 @@ defmodule ElixirNexus.Search.GraphStats do
         }
       end)
 
+    # Fan-in by callee name (downcased). Imports (`is_a`) are deliberately excluded so the
+    # ranking reflects real call relationships, not "this file imports the most" — otherwise
+    # provider/barrel modules dominate over genuine hubs.
+    nodes = Map.values(graph_nodes)
+
+    call_fan_in =
+      nodes
+      |> Enum.flat_map(fn node -> Enum.map(node["calls"] || [], &call_key/1) end)
+      |> Enum.frequencies()
+
     top_connected =
-      graph_nodes
-      |> Map.values()
+      nodes
       |> Enum.reject(fn node ->
         name = node["name"] || ""
         String.length(name) <= 2 or graph_noise_name?(name)
       end)
       |> Enum.map(fn node ->
-        degree = (node["outgoing_degree"] || 0) + (node["incoming_count"] || 0)
-        %{name: node["name"] || "?", degree: degree}
+        name = node["name"] || "?"
+        out = length(node["calls"] || []) + length(node["contains"] || [])
+        in_degree = Map.get(call_fan_in, String.downcase(name), 0)
+        %{name: name, degree: out + in_degree}
       end)
       |> Enum.sort_by(& &1.degree, :desc)
+      # Collapse same-named entities (overloads / re-declared helpers across files): fan-in is
+      # name-keyed, so N entities named `findControl` each get the full count. Keep the highest.
+      |> Enum.uniq_by(& &1.name)
       |> Enum.take(10)
 
     critical_files = compute_critical_files(graph_nodes)
+    layers = compute_layers(nodes)
 
     {:ok,
      %{
@@ -69,8 +93,38 @@ defmodule ElixirNexus.Search.GraphStats do
        edge_counts: %{calls: calls, imports: imports, contains: contains},
        top_connected: top_connected,
        languages: languages,
+       layers: layers,
        critical_files: critical_files
      }}
+  end
+
+  # Architectural layer breakdown (entities per derived/configured layer). Gives an instant
+  # read on the shape of a hexagonal/layered codebase. Layers with only "other" are omitted
+  # when they'd be the sole entry, so flat projects don't get a noise row.
+  defp compute_layers(nodes) do
+    {config_root, config} = ElixirNexus.ProjectConfig.current()
+
+    counts =
+      nodes
+      |> Enum.reduce(%{}, fn node, acc ->
+        path = node["file_path"] || ""
+        rel = if config_root, do: Path.relative_to(path, config_root), else: path
+        layer = ElixirNexus.ProjectConfig.layer_for(config, rel)
+        Map.update(acc, layer, 1, &(&1 + 1))
+      end)
+      |> Enum.map(fn {layer, count} -> %{layer: layer, count: count} end)
+      |> Enum.sort_by(& &1.count, :desc)
+
+    case counts do
+      [%{layer: "other"}] -> []
+      other -> other
+    end
+  end
+
+  # For fan-in matching: a call like "utils.cn" or "a.b.format" keys on the final segment,
+  # so a callee resolves to its bare-name node regardless of how the caller qualified it.
+  defp call_key(call) do
+    call |> to_string() |> String.downcase() |> String.split(".") |> List.last() |> Kernel.||("")
   end
 
   # Approximate betweenness centrality via sampled BFS.
@@ -87,10 +141,17 @@ defmodule ElixirNexus.Search.GraphStats do
         Map.put(acc, name, callees)
       end)
 
-    all_names = Map.keys(adj)
-    # Sample up to 30 source nodes for BFS
-    sample_count = min(30, length(all_names))
-    sources = Enum.take_random(all_names, sample_count)
+    # Deterministic source selection: BFS from the highest out-degree nodes (the natural
+    # path origins) instead of a random sample. Was `Enum.take_random`, which reseeded every
+    # call and made critical_files/centrality non-reproducible between identical queries.
+    # Scale the sample with graph size so large codebases still get meaningful coverage.
+    sample_count = min(max(50, div(map_size(graph_nodes), 10)), map_size(graph_nodes))
+
+    sources =
+      adj
+      |> Enum.sort_by(fn {name, callees} -> {-length(callees), name} end)
+      |> Enum.take(sample_count)
+      |> Enum.map(&elem(&1, 0))
 
     # Count how many shortest paths pass through each node
     centrality =

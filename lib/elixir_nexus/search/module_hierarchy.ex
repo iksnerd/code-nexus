@@ -11,7 +11,7 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
   def find_module_hierarchy(entity_name) do
     Logger.info("Finding module hierarchy for: #{entity_name}")
 
-    case DataFetching.get_all_entities_cached(2000) do
+    case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
         target = EntityResolution.find_entity_multi_strategy(entity_name, all_entities)
 

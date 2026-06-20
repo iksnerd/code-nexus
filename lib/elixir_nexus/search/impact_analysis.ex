@@ -12,7 +12,7 @@ defmodule ElixirNexus.Search.ImpactAnalysis do
     require Logger
     Logger.info("Analyzing impact of: #{entity_name}, depth: #{depth}")
 
-    case DataFetching.get_all_entities_cached(2000) do
+    case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
         # Build reverse edge index once: name_lower -> [referencing_entities]
         # Includes both calls and imports so import-only dependencies are tracked

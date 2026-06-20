@@ -152,6 +152,13 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "parenthesized_expression"
         || kind == "identifier"
         || kind == "property_identifier"
+        // TypeScript interface/type members. `interface_body` already passes (contains
+        // "interface"); `method_signature` passes (contains "method"). These two are the
+        // gap: `object_type` is the body of `type X = {...}`, and `property_signature` is a
+        // non-method member (`id: string`). Without them, interface/type-alias `contains`
+        // edges are empty — so find_module_hierarchy is blind to class-less (hexagonal) TS.
+        || kind == "object_type"
+        || kind == "property_signature"
         // Blocks and statements (needed to reach nested calls)
         || kind == "statement_block"
         || kind == "expression_statement"

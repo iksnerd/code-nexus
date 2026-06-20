@@ -314,11 +314,15 @@ defmodule ElixirNexus.MCPServer.Resources do
         |> Enum.sort_by(fn {_name, count} -> -count end)
         |> Enum.take(15)
 
-      # Dead code count
+      # Dead code count. Treat nil visibility as public (same convention as
+      # DeadCodeDetection) — many language extractors leave visibility unset for
+      # top-level functions. Restrict to functions/methods so structs/variables/modules
+      # don't inflate the denominator.
       public_nodes =
         node_list
         |> Enum.filter(fn n ->
-          n["visibility"] == "public" and (n["entity_type"] || n["type"]) != "module"
+          (n["entity_type"] || n["type"]) in ["function", "method"] and
+            n["visibility"] in ["public", nil]
         end)
 
       called_names = MapSet.new(Map.keys(callee_counts))

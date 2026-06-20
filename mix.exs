@@ -58,6 +58,7 @@ defmodule ElixirNexus.MixProject do
       # HTTP client
       {:httpoison, "~> 2.0"},
       {:jason, "~> 1.4"},
+      {:toml, "~> 0.7"},
 
       # Observability
       {:telemetry_metrics_prometheus_core, "~> 1.1"},

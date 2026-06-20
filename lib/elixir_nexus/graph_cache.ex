@@ -106,6 +106,7 @@ defmodule ElixirNexus.GraphCache do
             entity: %{
               "name" => chunk.name,
               "entity_type" => Atom.to_string(chunk.entity_type),
+              "visibility" => (v = Map.get(chunk, :visibility)) && to_string(v),
               "file_path" => chunk.file_path,
               "calls" => ElixirNexus.Search.filter_ast_noise(chunk.calls || []),
               "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a || []),
@@ -144,6 +145,9 @@ defmodule ElixirNexus.GraphCache do
         "id" => entity_id,
         "name" => chunk.name,
         "entity_type" => Atom.to_string(chunk.entity_type),
+        # Map.get — chunks from some call sites (incremental update, test fixtures) omit
+        # optional keys; dot-access would raise KeyError.
+        "visibility" => (v = Map.get(chunk, :visibility)) && to_string(v),
         "file_path" => chunk.file_path,
         "start_line" => chunk.start_line,
         "end_line" => chunk.end_line,

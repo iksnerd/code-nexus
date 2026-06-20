@@ -23,6 +23,7 @@ defmodule ElixirNexus.RelationshipGraph do
         "id" => entity_id,
         "name" => payload["name"],
         "type" => payload["entity_type"],
+        "visibility" => payload["visibility"],
         "file_path" => payload["file_path"],
         "start_line" => payload["start_line"],
         "end_line" => payload["end_line"],

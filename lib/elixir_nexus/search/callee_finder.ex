@@ -11,7 +11,7 @@ defmodule ElixirNexus.Search.CalleeFinder do
   def find_callees(entity_name, limit \\ 20) do
     Logger.info("Finding callees of: #{entity_name}")
 
-    case DataFetching.get_all_entities_cached(2000) do
+    case DataFetching.get_all_entities_cached(:all) do
       {:ok, [_ | _] = all_entities} ->
         # Try multi-strategy resolution first (exact, file-path, substring) —
         # same as find_module_hierarchy. Falls back to Qdrant exact match.

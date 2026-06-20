@@ -40,8 +40,9 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   """
   def find_dead_code(opts \\ []) do
     path_prefix = Keyword.get(opts, :path_prefix)
+    {config_root, config} = ElixirNexus.ProjectConfig.current()
 
-    case DataFetching.get_all_entities_cached(2000) do
+    case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
         # Build reverse call index (calls only, not imports).
         # Also build a suffix set: for dotted calls like "utils.format", store the short
@@ -84,18 +85,25 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             file_path = e.entity["file_path"] || ""
             basename = file_path |> Path.basename() |> String.replace(~r/\.[^.]+$/, "")
 
+            # User-declared entry points (.nexus.toml) — framework/DI-wired files whose
+            # exports have no in-repo caller (route handlers, sitemap, adapters).
+            # Test/spec files are exercised by the test runner, not by app code — their
+            # helpers (`daysAgo`, `createAttestation`) are not dead. Skip them wholesale.
             # Go test runner conventions — Test*, Benchmark*, Fuzz*, Example* are
             # called by `go test`, not user code.
             # PascalCase components in convention files are default exports called by the
             # framework (e.g. TorrentsLoading in loading.tsx, RootLayout in layout.tsx).
             # shadcn/ui components in `components/ui/` are library primitives — their
             # exports are intentional API surface, not user-defined call sites.
-            (lang == "elixir" and name in @elixir_framework_callbacks) or
+            entry_point?(file_path, config_root, config) or
+              test_file?(file_path) or
+              (lang == "elixir" and name in @elixir_framework_callbacks) or
               (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
                     (basename in @framework_convention_files and
-                       (Regex.match?(~r/^[A-Z]/, name) or
+                       (name == basename or
+                          Regex.match?(~r/^[A-Z]/, name) or
                           Regex.match?(~r/^(get|fetch|load|generate)[A-Z]/, name))) or
                     shadcn_ui_export?(file_path)))
           end)
@@ -150,6 +158,23 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   defp js_or_ts?(lang) do
     String.contains?(lang, "javascript") or String.contains?(lang, "typescript") or
       lang in ["tsx", "jsx"]
+  end
+
+  # A user-declared entry point (.nexus.toml entry_points). Matches the file path made
+  # relative to the configured project root against the entry_points globs.
+  defp entry_point?(_file, nil, _config), do: false
+
+  defp entry_point?(file_path, config_root, config) do
+    rel = Path.relative_to(file_path, config_root)
+    ElixirNexus.ProjectConfig.entry_point?(config, rel)
+  end
+
+  # Test/spec files across the supported ecosystems — their functions are entry points for
+  # the test runner, not dead app code.
+  defp test_file?(file_path) do
+    Regex.match?(~r/(\.|_)(test|spec)\.[^.\/]+$/, file_path) or
+      Regex.match?(~r/_test\.exs?$/, file_path) or
+      String.contains?(file_path, "/__tests__/")
   end
 
   # Matches shadcn/ui's canonical install path. Covers both bare `components/ui/`

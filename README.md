@@ -67,6 +67,26 @@ Once running, use the `reindex` MCP tool from Claude Code (or any MCP client) �
 
 To exclude paths from indexing, add a `.nexusignore` file to your project root (gitignore-style globs). CodeNexus also respects `.gitignore` automatically. A default deny list covers `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar noise.
 
+### Project configuration (`.nexus.toml`)
+
+Architecture awareness is derive-first: CodeNexus infers a file's layer from directory conventions (`ports`, `adapters`/`infrastructure`, `services`, `repositories`, `core`/`entities`, presentation) and surfaces the breakdown in `get_graph_stats`. No config is required.
+
+An optional `.nexus.toml` at the project root overrides what convention can't guess. Both sections are optional:
+
+```toml
+# Files reachable only through the framework or dependency injection — route
+# handlers, sitemaps, wired adapters. Their exports are excluded from find_dead_code.
+[entry_points]
+include = ["app/**/route.ts", "app/sitemap.ts", "app/manifest.ts"]
+
+# Override layer classification when directory names don't follow the convention.
+[layers]
+ports = "core/ports/**"
+adapters = "infrastructure/**"
+```
+
+Globs are gitignore-style: `**` spans directories, `*` matches within a path segment.
+
 ### CLI
 
 A standalone `nexus` CLI is available for scripting and terminal use — no Elixir required.
@@ -232,7 +252,7 @@ Strategy: `rest_for_one` — if a dependency crashes, all processes started afte
 
 ## MCP Tools
 
-Ten tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
+Twelve tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 
 | Tool | Description |
 |------|-------------|
@@ -241,11 +261,13 @@ Ten tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 | **find_all_callers**(entity_name, limit) | Find all callers of a function — follows both call edges and import references |
 | **analyze_impact**(entity_name, depth) | Transitive blast radius — walks callers-of-callers AND importers up to `depth` levels |
 | **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph and import edges (bidirectional) |
-| **get_graph_stats**() | Codebase overview: node counts, edge counts, entity types, languages, top connected, critical files (betweenness centrality) |
+| **get_graph_stats**() | Codebase overview: node/edge counts, entity types, languages, top connected, architectural layers, and critical files (deterministic betweenness centrality) |
 | **get_status**() | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
-| **find_module_hierarchy**(entity_name) | Module parents (behaviours/uses) and children — supports file-path and substring matching for TS/React components |
-| **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — proactively flag unused code |
+| **find_module_hierarchy**(entity_name) | Parents (uses/implements) and children (contained members) — works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
+| **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — honors `.nexus.toml` entry points and framework conventions |
 | **reindex**(path) | Parse and index source files to build the search index and call graph |
+| **purge**() | Wipe the current collection and caches for a clean re-index |
+| **load_resources**(uri) | List or read MCP resources for clients without native resource support |
 
 ### Transport
 
@@ -306,7 +328,7 @@ Elixir files are parsed via Sourceror (richer metadata). Other languages use Tre
 | Call graph | Y | Y | Y | Y | Y | partial |
 | Package-qualified calls | Y | - | Y | Y (`::`) | Y (`.`) | - |
 | Receiver/method extraction | - | - | Y | Y (`impl`) | Y | - |
-| Struct/interface extraction | - | - | Y | Y | Y | - |
+| Struct/interface extraction | Y (interface/type members) | - | Y | Y | Y | - |
 | Macro call detection | - | - | - | Y (`name!`) | - | - |
 | Arrow function classification | Y | - | - | - | - | - |
 | Barrel file resolution | Y | - | - | - | - | - |
@@ -351,7 +373,7 @@ The graph renders up to 500 nodes sorted by connectivity. Hover any node to high
 ## Testing
 
 ```bash
-mix test                        # All tests (~725)
+mix test                        # All tests (~800)
 mix test --trace                # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
