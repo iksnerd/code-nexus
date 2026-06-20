@@ -1,11 +1,31 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.2 (interface→implementor edges — Phase 2 #3)
-**Status:** v1.18.2 shipped — `iksnerd/code-nexus:v1.18.2` + `:latest` (arm64, digest `19522da8…`)
-live on Docker Hub. Verified in-image on control-stack (after purge+reindex): `SyncProviderAdapter`
-lists its 6 implementors; dead-code 54 → 42 with all 6 `create*SyncAdapter` DI factories dropped.
-811 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
-published-image smoke test stood in.
+**Current version:** v1.18.3 (graph UX overhaul + analyze_impact fix + MCP descriptions)
+**Status:** v1.18.3 shipped — `iksnerd/code-nexus:v1.18.3` + `:latest` (arm64, digest `4c6e82ea…`)
+live on Docker Hub. Verified in-image on control-stack (purge + full reindex, 2192 chunks): the
+giant `i` blob (val 5000) is GONE — biggest node is now `findControl` at 232; graph control panel
+(Select Nodes/Boxes, Edge filter, Layout sliders) renders. 812 tests green. CI skipped (Actions
+quota) — local gate + image smoke test stood in.
+
+## ✅ Shipped in v1.18.3 — graph UX + analyze_impact fix + MCP descriptions (2026-06-20)
+
+- **`analyze_impact` same-name fix** — keyed dedup + visited on `{name, file_path}` (was collapsing
+  every `POST` route handler into one). `impact_analysis.ex`.
+- **Graph: junk-blob root-cause fix** — `relationship_graph.resolve_ref_indexed` used a loose
+  `String.contains?` fallback, so `i`/`cn` matched as a substring of nearly every ref → `i` got 4999
+  phantom callers → huge blob. Now boundary-aware (dotted-suffix only) + skips refs ≤2 chars.
+- **Graph noise filter** — `build_d3_graph` drops single/double-char locals + wrapper aliases.
+- **Graph interactions** — clickable/isolatable package boxes; Select-mode toggle (Nodes/Boxes);
+  edge-type filter (All/Calls/Imports/Contains); live Layout sliders (distance/repulsion/spacing/
+  cluster). `app.js`, `graph_live.ex`. Validated live via chrome-devtools.
+- **MCP tool descriptions** refreshed (layers, implementors, dead-code filtering).
+
+### ⚠️ Observed during release — purge↔boot-reload race (worth a fix)
+After recreating the container, a `purge` issued while the boot auto-reload was still hydrating ETS
+from Qdrant let the subsequent `reindex` re-seed DirtyTracker from stale Qdrant data — so most files
+read as "unchanged" and were skipped, leaving a near-empty index (0 chunks). Recovery: purge again
+once the boot settles, then reindex (got a clean 2192 chunks). Possible fix: have `reindex`/`purge`
+wait for or invalidate the boot auto-reload, or skip DirtyTracker seeding immediately after a purge.
 
 ## Known issues
 
