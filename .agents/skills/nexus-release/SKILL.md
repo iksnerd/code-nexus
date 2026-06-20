@@ -185,7 +185,25 @@ docker rmi iksnerd/code-nexus:vOLD1 iksnerd/code-nexus:vOLD2
 
 `latest` and `vX.Y.Z` will both point to the same digest — only one copy is stored on disk.
 
-## 10 — Post-release (optional but recommended)
+## 10 — Dogfood the tool on its own codebase
+
+After the image is up and smoke-tested, point the MCP at **elixir-nexus itself** and run a
+quick self-analysis — it's the cheapest bug-finder we have and it validates the released image
+against real Elixir/Go/Rust code:
+
+```
+reindex(path: "elixir-nexus")
+find_dead_code(path_prefix: "/workspace/elixir-nexus/lib")
+get_graph_stats()
+```
+
+Triage every `find_dead_code` hit: a hit that's actually *called* is a tool bug (it found one in
+v1.18.5 — deeply-qualified `A.B.C.D.func` calls weren't resolving). Real unused fns are cleanup.
+`get_graph_stats` should look sane (no absurd `top_connected` degrees, layers populated). File any
+tool bug found and consider fixing it before the next release. Switch the active collection back to
+your working project afterwards (`reindex(path: "<project>")`).
+
+## 11 — Post-release (optional but recommended)
 
 - Post to the council hub `elixir-nexus-issues` room: what shipped, what's still open
 - Post to `elixir-nexus-oss-prep` if any OSS prep items were completed
