@@ -75,7 +75,7 @@ Path patterns with a `/` are matched relative to the project root — `docs/inte
 | `find_all_callers` | Find all callers of a function (calls + imports) |
 | `analyze_impact` | Transitive blast radius — callers-of-callers AND importers |
 | `get_community_context` | Find structurally coupled files via call graph and import edges |
-| `find_module_hierarchy` | Parents (uses/implements) and children (contained members) — Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
+| `find_module_hierarchy` | Parents, children (contained members), and implementors — Elixir modules, Go/Rust/Java types, TS classes/interfaces/type aliases. For an interface, lists what implements it |
 | `find_dead_code` | Find exported functions with zero callers — honors `.nexus.toml` entry points and framework conventions |
 | `get_graph_stats` | Structural overview: node/edge counts, entity types, architectural layers, and critical files (deterministic betweenness centrality) |
 | `get_status` | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |

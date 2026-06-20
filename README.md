@@ -263,7 +263,7 @@ Twelve tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 | **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph and import edges (bidirectional) |
 | **get_graph_stats**() | Codebase overview: node/edge counts, entity types, languages, top connected, architectural layers, and critical files (deterministic betweenness centrality) |
 | **get_status**() | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
-| **find_module_hierarchy**(entity_name) | Parents (uses/implements) and children (contained members) — works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
+| **find_module_hierarchy**(entity_name) | Parents (uses/implements), children (contained members), and implementors — works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases. For an interface, lists the functions/consts that implement it (return-type / typed-const edges) |
 | **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — honors `.nexus.toml` entry points and framework conventions |
 | **reindex**(path) | Parse and index source files to build the search index and call graph |
 | **purge**() | Wipe the current collection and caches for a clean re-index |

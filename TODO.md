@@ -1,10 +1,34 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.1 (dashboard architecture-layers panel)
-**Status:** v1.18.1 shipped — `iksnerd/code-nexus:v1.18.1` + `:latest` (arm64, digest `1fd6f57d…`)
-live on Docker Hub. Dashboard layers panel verified in-image (control-stack: all six layers render).
-804 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
+**Current version:** v1.18.2 (interface→implementor edges — Phase 2 #3)
+**Status:** v1.18.2 shipped — `iksnerd/code-nexus:v1.18.2` + `:latest` (arm64, digest `19522da8…`)
+live on Docker Hub. Verified in-image on control-stack (after purge+reindex): `SyncProviderAdapter`
+lists its 6 implementors; dead-code 54 → 42 with all 6 `create*SyncAdapter` DI factories dropped.
+811 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
 published-image smoke test stood in.
+
+## ✅ Shipped in v1.18.2 — interface→implementor edges (Phase 2 #3) (2026-06-20)
+
+The last Phase 2 increment: link a port interface to the functions/consts that satisfy it, resolving
+the DI-wired-adapter dead-code false positives that survived the earlier passes.
+
+- [x] **NIF** — `type_annotation` + `generic_type` made significant so a function's return type / a
+  typed const's annotation reaches the extractor (the only structural "implements" signal in
+  class-less hexagonal TS). NIF rebuilt; Docker rebuilds the Linux NIF. **File:** `native/.../lib.rs`.
+- [x] **Extractor** — emits an implements edge (into `is_a`) from a return-type / typed-const
+  annotation naming an interface; parameter types are excluded (they nest under `formal_parameters`).
+  `function createOktaSyncAdapter(): SyncProviderAdapter` → `is_a ["SyncProviderAdapter", …]`.
+  **File:** `parsers/javascript/entities.ex`.
+- [x] **find_dead_code** — a function/const whose `is_a` names a known interface is a port
+  implementor (DI-wired), not dead. Orphans implementing nothing still flagged. **File:** `search/dead_code_detection.ex`.
+- [x] **find_module_hierarchy** — new `implementors` field: for an interface/struct, the entities
+  that implement it (reverse edge). **File:** `search/module_hierarchy.ex`.
+- [x] Also fixed a clause-grouping warning introduced in the Phase 1 `extract_contains` work.
+- [x] Live-verified in-image: needed **purge + reindex** — incremental reindex hydrates unchanged
+  files from Qdrant and won't re-parse, so a parser/NIF change requires a purge to take effect on an
+  existing index. (Worth surfacing in `nexus-release` / client guidance.)
+
+---
 
 ## ✅ Shipped in v1.18.1 — dashboard architecture-layers panel (2026-06-20)
 
