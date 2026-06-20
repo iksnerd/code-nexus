@@ -10,6 +10,69 @@ defmodule ElixirNexus.DashboardLiveTest do
     end
   end
 
+  describe "architecture layers panel" do
+    test "renders the layers panel with derived layers when the graph has layered files", %{conn: conn} do
+      chunks = [
+        %{
+          id: "p1",
+          file_path: "/app/core/ports/user-repository.ts",
+          entity_type: :interface,
+          name: "UserRepository",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "UserRepository",
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: [],
+          language: :typescript
+        },
+        %{
+          id: "a1",
+          file_path: "/app/infrastructure/firebase-user-repository.ts",
+          entity_type: :function,
+          name: "createFirebaseUserRepository",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: "createFirebaseUserRepository",
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: [],
+          language: :typescript
+        }
+      ]
+
+      ElixirNexus.ChunkCache.clear()
+      ElixirNexus.GraphCache.clear()
+      ElixirNexus.ChunkCache.insert_many(chunks)
+      ElixirNexus.GraphCache.rebuild_from_chunks(chunks)
+      # Root-relative classification (mirrors get_graph_stats); without a root, "/app/..."
+      # would itself match the presentation "app" alias.
+      prev = Application.get_env(:elixir_nexus, :project_config)
+      Application.put_env(:elixir_nexus, :project_config, {"/app", %ElixirNexus.ProjectConfig{}})
+
+      on_exit(fn ->
+        ElixirNexus.ChunkCache.clear()
+        ElixirNexus.GraphCache.clear()
+
+        if prev,
+          do: Application.put_env(:elixir_nexus, :project_config, prev),
+          else: Application.delete_env(:elixir_nexus, :project_config)
+      end)
+
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ "Architecture Layers"
+      assert html =~ "ports"
+      assert html =~ "adapters"
+    end
+  end
+
   describe "handle_event" do
     test "toggle_errors toggles error panel", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/")

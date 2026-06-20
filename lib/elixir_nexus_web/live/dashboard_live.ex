@@ -11,6 +11,7 @@ defmodule ElixirNexus.DashboardLive.Index do
     <.status_bar {assigns} />
     <.primary_stats {assigns} />
     <.entity_language_grid {assigns} />
+    <.architecture_layers {assigns} />
     <.relationship_overview {assigns} />
     <.activity_errors_section {assigns} />
     <.mcp_tools_grid {assigns} />
@@ -197,6 +198,33 @@ defmodule ElixirNexus.DashboardLive.Index do
     """
   end
 
+  defp architecture_layers(assigns) do
+    ~H"""
+    <%= if @layer_distribution != [] do %>
+      <div class="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5 mb-8">
+        <h3 class="text-sm font-semibold text-slate-300 mb-1">Architecture Layers</h3>
+        <p class="text-xs text-slate-500 mb-4">Derived from directory conventions (override in <code>.nexus.toml</code>)</p>
+        <div class="space-y-3">
+          <%= for {layer, count} <- @layer_distribution do %>
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-medium text-slate-300 w-28 truncate capitalize"><%= layer %></span>
+              <div class="flex-1">
+                <div class="bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                  <div
+                    class={"h-full rounded-full #{layer_color(layer)}"}
+                    style={"width: #{bar_width(count, @graph_node_count)}%"}
+                  ></div>
+                </div>
+              </div>
+              <span class="text-slate-400 text-xs font-mono w-12 text-right"><%= count %></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
   defp relationship_overview(assigns) do
     ~H"""
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -275,11 +303,11 @@ defmodule ElixirNexus.DashboardLive.Index do
       </div>
       <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
         <h4 class="text-sm font-bold text-white mb-1">find_module_hierarchy</h4>
-        <p class="text-slate-500 text-xs">Module parents and contained functions</p>
+        <p class="text-slate-500 text-xs">Parents and members — modules, types, TS interfaces</p>
       </div>
       <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
         <h4 class="text-sm font-bold text-white mb-1">get_graph_stats</h4>
-        <p class="text-slate-500 text-xs">Codebase overview: nodes, edges, languages</p>
+        <p class="text-slate-500 text-xs">Overview: nodes, edges, languages, layers</p>
       </div>
       <a href="/vectors" class="group bg-slate-800/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
         <h4 class="text-sm font-bold text-white mb-1 group-hover:text-emerald-400">reindex</h4>
@@ -327,6 +355,7 @@ defmodule ElixirNexus.DashboardLive.Index do
       |> Enum.sort_by(fn {_, count} -> -count end)
 
     language_distribution = compute_language_distribution()
+    layer_distribution = compute_layer_distribution(graph_nodes)
 
     {calls, imports, contains} = count_relationships(graph_nodes)
 
@@ -377,6 +406,7 @@ defmodule ElixirNexus.DashboardLive.Index do
       qdrant_health: qdrant_health,
       entity_breakdown: entity_breakdown,
       language_distribution: language_distribution,
+      layer_distribution: layer_distribution,
       calls_count: calls,
       imports_count: imports,
       contains_count: contains,
@@ -394,6 +424,30 @@ defmodule ElixirNexus.DashboardLive.Index do
       e ->
         Logger.warning("Failed to compute language distribution: #{inspect(e)}")
         []
+    end
+  end
+
+  # Architectural layer breakdown — mirrors Search.GraphStats.compute_layers/1 so the
+  # dashboard agrees with get_graph_stats. Classified on root-relative paths; a lone "other"
+  # row (flat project, nothing to show) collapses to empty so the panel hides itself.
+  defp compute_layer_distribution(graph_nodes) do
+    {config_root, config} =
+      safe_call(fn -> ElixirNexus.ProjectConfig.current() end, {nil, %ElixirNexus.ProjectConfig{}})
+
+    counts =
+      graph_nodes
+      |> Map.values()
+      |> Enum.reduce(%{}, fn node, acc ->
+        path = node["file_path"] || ""
+        rel = if config_root, do: Path.relative_to(path, config_root), else: path
+        layer = ElixirNexus.ProjectConfig.layer_for(config, rel)
+        Map.update(acc, layer, 1, &(&1 + 1))
+      end)
+      |> Enum.sort_by(fn {_layer, count} -> -count end)
+
+    case counts do
+      [{"other", _}] -> []
+      other -> other
     end
   end
 
@@ -469,4 +523,14 @@ defmodule ElixirNexus.DashboardLive.Index do
   defp bar_color("macro"), do: "bg-amber-500/70"
   defp bar_color("struct"), do: "bg-emerald-500/70"
   defp bar_color(_), do: "bg-slate-500/70"
+
+  defp layer_color("ports"), do: "bg-cyan-500/70"
+  defp layer_color("adapters"), do: "bg-amber-500/70"
+  defp layer_color("application"), do: "bg-sky-500/70"
+  defp layer_color("domain"), do: "bg-violet-500/70"
+  defp layer_color("repositories"), do: "bg-emerald-500/70"
+  defp layer_color("api"), do: "bg-rose-500/70"
+  defp layer_color("presentation"), do: "bg-blue-500/70"
+  defp layer_color("lib"), do: "bg-teal-500/70"
+  defp layer_color(_), do: "bg-slate-500/70"
 end
