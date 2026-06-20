@@ -98,6 +98,37 @@ defmodule ElixirNexus.GraphLive.Index do
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" /></svg>
             </button>
          </div>
+
+         <!-- Layout settings — live D3 force tuning -->
+         <details class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg text-xs text-slate-400 w-48">
+           <summary class="px-3 py-2 cursor-pointer select-none hover:text-slate-200 flex items-center gap-1.5">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
+             Layout
+           </summary>
+           <div class="px-3 pb-3 pt-1 flex flex-col gap-2.5">
+             <label class="flex flex-col gap-1">
+               <span>Link distance</span>
+               <input type="range" min="0.4" max="2.5" step="0.1" value="1"
+                      oninput="window.graphControls && window.graphControls.linkDistance(this.value)" class="w-full accent-blue-500" />
+             </label>
+             <label class="flex flex-col gap-1">
+               <span>Repulsion</span>
+               <input type="range" min="-1500" max="-100" step="50" value="-520"
+                      oninput="window.graphControls && window.graphControls.charge(this.value)" class="w-full accent-blue-500" />
+             </label>
+             <label class="flex flex-col gap-1">
+               <span>Spacing</span>
+               <input type="range" min="10" max="70" step="2" value="30"
+                      oninput="window.graphControls && window.graphControls.spacing(this.value)" class="w-full accent-blue-500" />
+             </label>
+             <label class="flex flex-col gap-1">
+               <span>Cluster tightness</span>
+               <input type="range" min="0.05" max="0.95" step="0.05" value="0.45"
+                      oninput="window.graphControls && window.graphControls.cluster(this.value)" class="w-full accent-blue-500" />
+             </label>
+             <p class="text-[10px] text-slate-500 leading-snug pt-0.5">Click a package box to isolate it; click empty space to clear.</p>
+           </div>
+         </details>
       </div>
     </div>
     """
@@ -162,6 +193,19 @@ defmodule ElixirNexus.GraphLive.Index do
   # per language (e.g. Elixir module namespace, Java package from `package` decl).
   # Nodes sharing a group are pulled together so the graph mirrors the codebase's
   # structure instead of hairballing.
+  # Framework/utility name noise — single-char locals, common loop/error vars, and short
+  # PascalCase wrapper aliases (Comp, Slot, Box…). Kept in sync with GraphStats' filter.
+  @graph_noise_names ~w(cn clsx cva classnames twMerge cx Comp Slot forwardRef
+    createContext useContext createElement createPortal createRef memo Fragment Children
+    React i j k e x err key idx tmp val acc el ref ctx ev)
+
+  defp graph_noise_name?(name) do
+    name == "" or String.length(name) <= 2 or name in @graph_noise_names or
+      Regex.match?(~r/^[A-Z][a-z]{0,3}$/, name) or
+      String.starts_with?(name, "[") or String.starts_with?(name, "{") or
+      String.contains?(name, ",")
+  end
+
   defp group_for(nil), do: "?"
 
   defp group_for(path) do
@@ -186,6 +230,10 @@ defmodule ElixirNexus.GraphLive.Index do
     # Create list of nodes, capped to top N by degree to avoid overwhelming the browser
     nodes =
       nodes_map
+      # Drop framework/utility name noise (single-char locals like `i`/`e`, shadcn wrapper
+      # aliases like `Comp`/`Slot`, short PascalCase) — these aren't meaningful code entities
+      # and otherwise render as large junk blobs. Mirrors the GraphStats noise filter.
+      |> Enum.reject(fn {_id, node} -> graph_noise_name?(node["name"] || "") end)
       |> Enum.map(fn {id, node} ->
         %{
           id: id,

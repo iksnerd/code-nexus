@@ -224,10 +224,20 @@ defmodule ElixirNexus.RelationshipGraph do
       # Exact match (most common case)
       case Map.get(name_index, ref_lower) do
         nil ->
-          # Partial match fallback — check if any indexed name is contained in the ref or vice versa
-          Enum.find_value(name_index, fn {name, id} ->
-            if String.contains?(ref_lower, name) or String.contains?(name, ref_lower), do: id
-          end)
+          # Boundary-aware fallback: a ref resolves to a name only across a dotted-name
+          # boundary — qualified call `Mod.fn` ↔ bare `fn` — never an arbitrary substring.
+          # The old `String.contains?` matched any 1–2 char name (`i`, `cn`) inside nearly
+          # every reference, inflating incoming_count into giant phantom blobs (e.g. `i`
+          # showed 4999 callers). Skip very short refs entirely — they're never real targets.
+          if String.length(ref_lower) <= 2 do
+            nil
+          else
+            Enum.find_value(name_index, fn {name, id} ->
+              if String.ends_with?(ref_lower, "." <> name) or
+                   String.ends_with?(name, "." <> ref_lower),
+                 do: id
+            end)
+          end
 
         id ->
           id

@@ -159,15 +159,34 @@ Hooks.CodeGraph = {
     groups.forEach(gname => { nodesByGroup[gname] = nodes.filter(n => (n.group || "?") === gname); });
 
     const hullBox = g.append("g").attr("class", "cluster-hulls")
-      .selectAll("g").data(groups).join("g").style("pointer-events", "none");
+      .selectAll("g").data(groups).join("g");
+    // The box rect is clickable (click to isolate the package); the label rides along.
     hullBox.append("rect")
       .attr("rx", 16)
       .attr("fill", d => groupColor[d]).attr("fill-opacity", 0.06)
-      .attr("stroke", d => groupColor[d]).attr("stroke-opacity", 0.3).attr("stroke-width", 1);
+      .attr("stroke", d => groupColor[d]).attr("stroke-opacity", 0.3).attr("stroke-width", 1)
+      .style("cursor", "pointer")
+      .on("mouseover", function(event, d) {
+        if (isolatedGroup) return;
+        d3.select(this).attr("fill-opacity", 0.12).attr("stroke-opacity", 0.6);
+      })
+      .on("mouseout", function(event, d) {
+        if (isolatedGroup) return;
+        d3.select(this).attr("fill-opacity", 0.06).attr("stroke-opacity", 0.3);
+      })
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        setIsolation(isolatedGroup === d ? null : d);
+      });
     hullBox.append("text")
       .text(d => d)
       .attr("fill", d => groupColor[d]).attr("fill-opacity", 0.75)
-      .attr("font-size", "12px").attr("font-weight", "bold").attr("font-family", "monospace");
+      .attr("font-size", "12px").attr("font-weight", "bold").attr("font-family", "monospace")
+      .style("pointer-events", "none");
+
+    // Click-to-isolate a package: highlight its box + nodes, dim everything else. Click the
+    // same box again (or empty canvas) to clear. `setIsolation` is defined after node/link.
+    let isolatedGroup = null;
 
     // Type-aware link distance: contained methods tight to their struct, call/
     // import edges longer so the graph breathes.
@@ -180,6 +199,24 @@ Hooks.CodeGraph = {
       .force("y", d3.forceY(d => centerOf(d).y).strength(0.45));
 
     this.simulation = simulation;
+
+    // Live force controls — exposed to the settings panel in the graph template. Each
+    // re-tunes a force and gently reheats the simulation so the layout re-settles.
+    const reheat = () => simulation.alpha(0.5).restart();
+    window.graphControls = {
+      // Multiplier on the per-type base distances (contains/calls/imports).
+      linkDistance: (mult) => {
+        const m = +mult || 1;
+        simulation.force("link").distance(d => (linkDistance[d.type] || 175) * m);
+        reheat();
+      },
+      // Repulsion between nodes (more negative = more spread).
+      charge: (v) => { simulation.force("charge").strength(+v); reheat(); },
+      // Extra collision padding (node spacing).
+      spacing: (v) => { simulation.force("collision").radius(d => Math.sqrt(d.val) * 8 + (+v)); reheat(); },
+      // How tightly packages pull toward their cluster center (0 = free, 1 = rigid grid).
+      cluster: (v) => { simulation.force("x").strength(+v); simulation.force("y").strength(+v); reheat(); }
+    };
 
     // Frame the whole (wider-than-viewport) layout once it settles.
     simulation.on("end", () => {
@@ -345,6 +382,35 @@ Hooks.CodeGraph = {
       .attr("font-weight", d => d.callers_count >= 10 ? "bold" : "normal")
       .attr("font-family", "monospace")
       .style("pointer-events", "none");
+
+    // Isolate one package: full opacity for its nodes/box, heavy dim for the rest. Links
+    // touching the isolated package stay readable so cross-package coupling is still visible.
+    function setIsolation(group) {
+      isolatedGroup = group;
+      const inGroup = d => (d.group || "?") === group;
+
+      if (!group) {
+        node.style("opacity", 1);
+        link.style("opacity", null);
+        hullBox.select("rect").attr("fill-opacity", 0.06).attr("stroke-opacity", 0.3).attr("stroke-width", 1);
+        hullBox.select("text").attr("fill-opacity", 0.75);
+        return;
+      }
+
+      node.style("opacity", d => inGroup(d) ? 1 : 0.07);
+      link.style("opacity", d => {
+        const sg = d.source.group, tg = d.target.group;
+        return (sg === group || tg === group) ? 0.65 : 0.025;
+      });
+      hullBox.select("rect")
+        .attr("fill-opacity", d => d === group ? 0.14 : 0.02)
+        .attr("stroke-opacity", d => d === group ? 0.9 : 0.1)
+        .attr("stroke-width", d => d === group ? 2 : 1);
+      hullBox.select("text").attr("fill-opacity", d => d === group ? 1 : 0.2);
+    }
+
+    // Click empty canvas to clear isolation.
+    svg.on("click.isolate", () => setIsolation(null));
 
     simulation.on("tick", () => {
       link
