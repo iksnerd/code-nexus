@@ -149,6 +149,13 @@ Hooks.CodeGraph = {
     this.groupCenter = groupCenter;
     const centerOf = d => groupCenter[d.group || "?"] || {x: width / 2, y: height / 2};
 
+    // Base cluster-center positions, so the boxes-separation control can rescale the spread
+    // between packages live (forceX/forceY read groupCenter, so mutating it moves clusters).
+    const baseGroupCenter = {};
+    groups.forEach(gname => {
+      baseGroupCenter[gname] = {x: groupCenter[gname].x, y: groupCenter[gname].y};
+    });
+
     // Per-package color + a tinted container box drawn behind the graph, so each
     // cluster reads as a visible package region. Repositioned each tick to wrap
     // that package's nodes.
@@ -196,7 +203,7 @@ Hooks.CodeGraph = {
     // import edges longer so the graph breathes.
     const linkDistance = { "contains": 55, "calls": 175, "imports": 215 };
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 175).strength(0.2))
+      .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 175).strength(0.35))
       .force("charge", d3.forceManyBody().strength(-520).distanceMax(900))
       .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 8 + 30).strength(0.9))
       .force("x", d3.forceX(d => centerOf(d).x).strength(0.45))
@@ -219,7 +226,18 @@ Hooks.CodeGraph = {
       // Extra collision padding (node spacing).
       spacing: (v) => { simulation.force("collision").radius(d => Math.sqrt(d.val) * 8 + (+v)); reheat(); },
       // How tightly packages pull toward their cluster center (0 = free, 1 = rigid grid).
-      cluster: (v) => { simulation.force("x").strength(+v); simulation.force("y").strength(+v); reheat(); }
+      cluster: (v) => { simulation.force("x").strength(+v); simulation.force("y").strength(+v); reheat(); },
+      // Spread package clusters apart (scales each cluster center out from the viewport
+      // middle). Gives intra-cluster links room, which is what makes "link distance" visible.
+      boxesSeparation: (mult) => {
+        const m = +mult || 1;
+        const cx = width / 2, cy = height / 2;
+        groups.forEach(g => {
+          groupCenter[g].x = cx + (baseGroupCenter[g].x - cx) * m;
+          groupCenter[g].y = cy + (baseGroupCenter[g].y - cy) * m;
+        });
+        reheat();
+      }
     };
 
     // Segmented-button active-state helper for the template toggles.

@@ -89,7 +89,11 @@ defmodule ElixirNexus.Layouts do
           </nav>
         </div>
       </header>
-      <main class="max-w-7xl mx-auto px-6 py-8 animate-fade-in" phx-hook="FadeIn" id="main-content">
+      <main
+        class={"animate-fade-in #{if @current_path == "/graph", do: "w-full px-4 py-4", else: "max-w-7xl mx-auto px-6 py-8"}"}
+        phx-hook="FadeIn"
+        id="main-content"
+      >
         <%= @inner_content %>
       </main>
     </div>

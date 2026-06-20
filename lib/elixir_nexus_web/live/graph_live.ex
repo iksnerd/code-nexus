@@ -43,7 +43,7 @@ defmodule ElixirNexus.GraphLive.Index do
       </div>
     </div>
 
-    <div class="relative bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden" style="height: 700px;">
+    <div class="relative bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden" style="height: calc(100vh - 150px);">
       <%= if @nodes_count == 0 do %>
         <div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-sm z-20">
           <svg class="w-16 h-16 text-slate-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -151,6 +151,11 @@ defmodule ElixirNexus.GraphLive.Index do
                <span>Cluster tightness</span>
                <input type="range" min="0.05" max="0.95" step="0.05" value="0.45"
                       oninput="window.graphControls && window.graphControls.cluster(this.value)" class="w-full accent-blue-500" />
+             </label>
+             <label class="flex flex-col gap-1">
+               <span>Boxes separation</span>
+               <input type="range" min="0.5" max="2.5" step="0.1" value="1"
+                      oninput="window.graphControls && window.graphControls.boxesSeparation(this.value)" class="w-full accent-blue-500" />
              </label>
 
              <hr class="border-slate-700/60 my-1" />
