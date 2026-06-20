@@ -152,6 +152,33 @@ defmodule ElixirNexus.GraphLive.Index do
                <input type="range" min="0.05" max="0.95" step="0.05" value="0.45"
                       oninput="window.graphControls && window.graphControls.cluster(this.value)" class="w-full accent-blue-500" />
              </label>
+
+             <hr class="border-slate-700/60 my-1" />
+
+             <label class="flex flex-col gap-1">
+               <span>Min connections <span class="text-slate-500" id="minconn-val">0</span></span>
+               <input type="range" min="0" max="20" step="1" value="0"
+                      oninput="window.graphControls && window.graphControls.minConnections(this.value); document.getElementById('minconn-val').textContent = this.value" class="w-full accent-blue-500" />
+             </label>
+
+             <div class="flex flex-col gap-1">
+               <span>Labels</span>
+               <div class="flex gap-1 bg-slate-800/60 rounded-md p-0.5">
+                 <button onclick="window.graphControls.labels('auto'); window.segActivate(this)"
+                         class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium bg-blue-600 text-white">Auto</button>
+                 <button onclick="window.graphControls.labels('all'); window.segActivate(this)"
+                         class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium text-slate-400">All</button>
+                 <button onclick="window.graphControls.labels('none'); window.segActivate(this)"
+                         class="flex-1 px-1.5 py-1 rounded text-[11px] font-medium text-slate-400">None</button>
+               </div>
+             </div>
+
+             <label class="flex items-center gap-2 cursor-pointer pt-0.5">
+               <input type="checkbox"
+                      onchange="window.graphControls.toggleType('variable', this.checked)" class="accent-blue-500" />
+               <span>Hide variables</span>
+             </label>
+
              <p class="text-[10px] text-slate-500 leading-snug pt-0.5">In <b>Boxes</b> mode, click a package to isolate it; click empty space to clear.</p>
            </div>
          </details>

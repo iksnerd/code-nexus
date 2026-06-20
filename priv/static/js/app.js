@@ -428,9 +428,44 @@ Hooks.CodeGraph = {
     // Click empty canvas to clear isolation.
     svg.on("click.isolate", () => setIsolation(null));
 
-    // Show only one edge type (calls / imports / contains) or all. Hides non-matching links.
-    window.graphControls.linkFilter = (type) => {
-      link.style("display", d => (type === "all" || d.type === type) ? null : "none");
+    // Composed graph filters: edge-type + minimum connections + hidden node types all apply
+    // together (a node must clear every active filter to show; a link shows only when its
+    // type passes AND both endpoints are visible). One recompute keeps them consistent.
+    let edgeFilter = "all";
+    let minConnections = 0;
+    const hiddenTypes = new Set();
+    const degreeOf = d => (d.callers_count || 0) + (d.calls_count || 0);
+
+    function applyGraphFilters() {
+      const visible = new Set();
+      node.style("display", d => {
+        const show = degreeOf(d) >= minConnections && !hiddenTypes.has(d.type);
+        if (show) visible.add(d.id);
+        return show ? null : "none";
+      });
+      link.style("display", d => {
+        const s = typeof d.source === "object" ? d.source.id : d.source;
+        const t = typeof d.target === "object" ? d.target.id : d.target;
+        const typeOk = edgeFilter === "all" || d.type === edgeFilter;
+        return typeOk && visible.has(s) && visible.has(t) ? null : "none";
+      });
+    }
+
+    window.graphControls.linkFilter = (type) => { edgeFilter = type; applyGraphFilters(); };
+    // Hide nodes with fewer than n connections (callers + calls) — declutter low-signal leaves.
+    window.graphControls.minConnections = (n) => { minConnections = +n || 0; applyGraphFilters(); };
+    // Toggle a whole entity type on/off (e.g. hide all `variable` nodes).
+    window.graphControls.toggleType = (type, hidden) => {
+      if (hidden) hiddenTypes.add(type); else hiddenTypes.delete(type);
+      applyGraphFilters();
+    };
+    // Label density: "auto" (degree-gated, default), "all", or "none".
+    window.graphControls.labels = (mode) => {
+      node.select("text").style("display", d => {
+        if (mode === "none") return "none";
+        if (mode === "all") return null;
+        return d.val >= 3 || d.type === "struct" || d.type === "module" ? null : "none";
+      });
     };
 
     // Toggle select mode: "nodes" (default) vs "boxes" (clickable package isolation).
