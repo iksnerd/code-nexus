@@ -7,6 +7,32 @@ lists its 6 implementors; dead-code 54 → 42 with all 6 `create*SyncAdapter` DI
 811 tests green (42 excluded). CI skipped (GitHub Actions quota exhausted) — local gate +
 published-image smoke test stood in.
 
+## 🔴 Known issues
+
+### `analyze_impact` under-reports when callers share a name (found via MCP tool test, 2026-06-20)
+
+Live on control-stack: `find_all_callers("createGcpConnector")` returns **4 callers in 4 files**, but
+`analyze_impact("createGcpConnector")` returns **2 affected** — it drops two of the three `POST` route
+handlers. **Severe for Next.js / route-handler codebases**, where `GET`/`POST`/`PUT`/`DELETE` repeat
+in every `route.ts` — exactly where blast-radius analysis matters most.
+
+Root cause in `lib/elixir_nexus/search/impact_analysis.ex`:
+- `build_impact_tree/5` line ~75: `Enum.uniq_by(fn e -> e.entity["name"] end)` collapses all
+  same-named callers (`POST`) into one.
+- line ~84: the `visited` set is keyed by bare `caller_name`, so once any `POST` is visited, no other
+  `POST` anywhere is ever traversed (compounds transitively).
+
+Fix: key both the dedup and the `visited` set on `{name, file_path}` (or the entity id), not the bare
+name. Add a regression test with same-named callers across files; assert the affected count matches
+`find_all_callers`. Low-risk, contained.
+
+### Carried-over housekeeping
+
+- [ ] **Test-collection leakage** into shared Qdrant — `nexus_*_test` / `nexus_mcp_autoreindex_*`
+  collections reappear every test run (deleted manually 2026-06-20; will recur). Proper fix: namespace
+  test collections under one prefix and exclude it, or run tests against a separate Qdrant.
+- [ ] Re-enable CI once GitHub Actions quota resets.
+
 ## ✅ Shipped in v1.18.2 — interface→implementor edges (Phase 2 #3) (2026-06-20)
 
 The last Phase 2 increment: link a port interface to the functions/consts that satisfy it, resolving
@@ -156,14 +182,8 @@ Reindexed control-stack (280 files, 2171 chunks) on the local server with the re
   `find_module_hierarchy("IntegrationRepository")` → its members. Linux NIF builds in-image.
 - [x] Phase 2 #2 (layer detection) — shipped (see above).
 
-### Still open
-
-- [ ] **Phase 2 #3 — interface→implementor edges** (structural / naming match). The last piece that
-  would resolve the residual DI-wired-adapter dead-code false positives the live run surfaced
-  (`createOktaSyncAdapter`, `createAwsSyncAdapter`, RBAC fns, `useSyncExternalStore` callbacks).
-- [ ] **Test-collection leakage** into shared Qdrant — `nexus_definitely_does_not_exist_xyz`,
-  `nexus_force_switched` still present (carried from the v1.17.0 follow-up).
-- [ ] Re-enable CI once GitHub Actions quota resets.
+(Open items consolidated into the **Known issues** section at the top of this file —
+Phase 2 #3 shipped in v1.18.2.)
 
 ---
 
