@@ -1,11 +1,20 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.3 (graph UX overhaul + analyze_impact fix + MCP descriptions)
-**Status:** v1.18.3 shipped — `iksnerd/code-nexus:v1.18.3` + `:latest` (arm64, digest `4c6e82ea…`)
-live on Docker Hub. Verified in-image on control-stack (purge + full reindex, 2192 chunks): the
-giant `i` blob (val 5000) is GONE — biggest node is now `findControl` at 232; graph control panel
-(Select Nodes/Boxes, Edge filter, Layout sliders) renders. 812 tests green. CI skipped (Actions
-quota) — local gate + image smoke test stood in.
+**Current version:** v1.18.4 (purge↔boot-race fix + more graph shaping controls)
+**Status:** v1.18.4 shipped — `iksnerd/code-nexus:v1.18.4` + `:latest` (arm64, digest `b7a9733f…`)
+live on Docker Hub. **Purge-race fix verified in-image:** purge→reindex on a fresh container now
+gives a clean 2171 chunks on the FIRST attempt (the exact scenario that returned 0 chunks on
+v1.18.3). 813 tests green. CI skipped (Actions quota) — local gate + image smoke test stood in.
+
+## ✅ Shipped in v1.18.4 — purge race fix + graph shaping (2026-06-20)
+
+- **Purge↔boot-reload race FIXED** — `purge` arms a one-shot `force_full_reindex`; the next reindex
+  (sync or async) bypasses the seed-from-Qdrant dirty path and does a guaranteed full reparse, then
+  clears the flag. Regression test re-seeds DirtyTracker after purge and asserts chunks come back.
+  **Files:** `indexer.ex`, `indexer_directory_test.exs`.
+- **More graph shaping controls** — min-connections slider (declutter: 500→230 nodes at min=5),
+  Labels (Auto/All/None), Hide-variables toggle. Filters compose (edge-type + min-conn + node-type
+  in one recompute). **Files:** `app.js`, `graph_live.ex`.
 
 ## ✅ Shipped in v1.18.3 — graph UX + analyze_impact fix + MCP descriptions (2026-06-20)
 
