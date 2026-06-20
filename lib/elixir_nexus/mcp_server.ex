@@ -157,7 +157,7 @@ defmodule ElixirNexus.MCPServer do
       name("get_graph_stats")
 
       description(
-        "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, top connected modules, and project_path. Returns zeros / empty distributions when nothing is indexed yet (run reindex first). No arguments needed."
+        "Structural overview of the indexed codebase — use as a FIRST STEP to orient. Returns node/chunk counts, entity type breakdown, edge counts (calls/imports/contains), language distribution, top connected entities (by call fan-in/out), architectural `layers` (entities per derived layer: ports/adapters/services/domain/…), `critical_files` (deterministic betweenness centrality — stable across calls), and project_path. Returns zeros / empty distributions when nothing is indexed yet (run reindex first). No arguments needed."
       )
     end
 
@@ -173,7 +173,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_module_hierarchy")
 
       description(
-        "Find a module's parents (uses/implements) and children (contained functions). Use to understand API surface and behavioural contracts (e.g. 'what callbacks does this GenServer implement?'). Requires reindex first; returns empty parents/children if the module isn't in the indexed graph. Returns {name, file_path, parents, children} with resolution status."
+        "Find an entity's parents (uses/implements), children (contained members), and implementors. Works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases. Use to understand API surface and contracts (e.g. 'what callbacks does this GenServer implement?', 'what are this interface's methods?'). For an INTERFACE, `implementors` lists the functions/consts that satisfy it (return-type / typed-const edges) — the port→adapter mapping in hexagonal code. Requires reindex first. Returns {name, entity_type, file_path, parents, children, implementors} with resolution status."
       )
     end
 
@@ -191,7 +191,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_dead_code")
 
       description(
-        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Requires a fully reindexed call graph; returns an empty dead_functions list if nothing is indexed. False positives are possible for entry points (CLI mains, route handlers) called from outside the indexed code — verify with analyze_impact before deleting. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count}."
+        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Requires a fully reindexed call graph; returns an empty dead_functions list if nothing is indexed. Pre-filters known non-dead patterns: framework conventions (route handlers, page/layout/sitemap/manifest, Go Test*/Benchmark*), test/spec files, shadcn/ui primitives, port implementors (functions typed as a known interface — DI-wired), and any path matching `[entry_points]` in `.nexus.toml`. Residual false positives are still possible for code reached only via reflection or DI the graph can't see — verify with analyze_impact before deleting. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count, warning}."
       )
     end
 
