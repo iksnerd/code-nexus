@@ -142,8 +142,12 @@ defmodule ElixirNexus.Search do
         embedding
 
       {:error, _} ->
-        case ElixirNexus.TFIDFEmbedder.embed(query) do
-          {:ok, embedding} -> embedding
+        # TFIDFEmbedder.embed/1 always returns {:ok, _}; the only failure mode is
+        # a raise, so guard with rescue to keep the zero-vector safety net.
+        try do
+          {:ok, embedding} = ElixirNexus.TFIDFEmbedder.embed(query)
+          embedding
+        rescue
           _ -> List.duplicate(0.0, 768)
         end
     end

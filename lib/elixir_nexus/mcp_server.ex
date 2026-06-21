@@ -367,14 +367,11 @@ defmodule ElixirNexus.MCPServer do
 
     case PathResolution.resolve_path(path_arg, project_root) do
       {:ok, index_root, display_path} ->
+        # detect_indexable_dirs/1 always returns at least [index_root], so there is
+        # no empty-dirs case to guard here — IgnoreFilter prunes during the walk.
         dirs = ElixirNexus.IndexingHelpers.detect_indexable_dirs(index_root)
 
         cond do
-          dirs == [] ->
-            {:error,
-             "No indexable source directories found at '#{display_path}'." <>
-               PathResolution.workspace_hint(), state}
-
           ElixirNexus.Indexer.busy?() ->
             {:error, busy_message(display_path), state}
 
