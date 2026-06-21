@@ -3,17 +3,33 @@ name: CI
 on:
   push:
     branches: [main]
+    # Docs-only commits don't affect the test suite — skip the run.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".agents/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".agents/**"
   schedule:
     - cron: "0 6 * * 1"  # Weekly Monday 06:00 UTC — runs secret-scan job
+
+# Cancel an in-flight run when a newer commit lands on the same ref, so rapid
+# pushes don't pile up redundant runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 # Docker images are built and published locally via the Makefile (`make publish`).
 # CI only runs tests and secret-scan.
 #
-# main pushes run: test + secret-scan
+# main pushes run: test + secret-scan (skipped for docs-only changes)
 # PRs run: test only
 # Tag pushes run nothing — releases are local-only.
+# Add [skip ci] to a commit message to skip a run entirely.
 
 env:
   MIX_ENV: test
