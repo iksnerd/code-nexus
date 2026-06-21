@@ -7,19 +7,33 @@ defmodule ElixirNexus.HybridSearchTest do
   """
   use ExUnit.Case
 
+  defp qdrant_has_data? do
+    case ElixirNexus.QdrantClient.count_points() do
+      {:ok, %{"result" => %{"count" => count}}} -> count > 0
+      _ -> false
+    end
+  end
+
   describe "search quality - exact name matches" do
     test "exact function name ranks highly when data is available" do
-      case ElixirNexus.Search.search_code("search_code", 10) do
-        {:ok, results} when results != [] ->
-          names = Enum.map(results, & &1.entity["name"])
-          # If we have real data indexed, the exact match should be present
-          if Enum.any?(names, &(&1 == "search_code")) do
-            top5 = Enum.take(names, 5)
-            assert "search_code" in top5, "Expected 'search_code' in top 5, got: #{inspect(top5)}"
-          end
+      # The top-5 ranking bar is a hybrid-search quality guarantee that only holds
+      # when Qdrant has vectors to query. Other tests share this collection and may
+      # have reset it; with an empty collection, search_code falls back to keyword
+      # ranking (where modules can outrank the exact function match) — a different
+      # code path this assertion isn't testing. Skip unless the collection has data.
+      if qdrant_has_data?() do
+        case ElixirNexus.Search.search_code("search_code", 10) do
+          {:ok, results} when results != [] ->
+            names = Enum.map(results, & &1.entity["name"])
+            # If we have real data indexed, the exact match should be present
+            if Enum.any?(names, &(&1 == "search_code")) do
+              top5 = Enum.take(names, 5)
+              assert "search_code" in top5, "Expected 'search_code' in top 5, got: #{inspect(top5)}"
+            end
 
-        {:ok, []} ->
-          :ok
+          {:ok, []} ->
+            :ok
+        end
       end
     end
   end
