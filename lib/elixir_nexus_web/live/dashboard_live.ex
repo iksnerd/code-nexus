@@ -31,7 +31,8 @@ defmodule ElixirNexus.DashboardLive.Index do
         current_path: "/",
         activity: [],
         errors: [],
-        errors_expanded: false
+        errors_expanded: false,
+        tick_count: 0
       )
       |> assign_stats()
 
@@ -53,8 +54,23 @@ defmodule ElixirNexus.DashboardLive.Index do
 
   def handle_info(:tick, socket) do
     schedule_tick()
-    socket = maybe_sync_from_qdrant(socket)
-    {:noreply, assign_stats(socket)}
+    tick = socket.assigns.tick_count + 1
+    socket = assign(socket, tick_count: tick)
+
+    case maybe_sync_from_qdrant(socket) do
+      {:synced, socket} ->
+        # Qdrant diverged and we reloaded — the underlying data actually changed,
+        # so a full recompute is warranted.
+        {:noreply, assign_stats(socket)}
+
+      {:unchanged, socket} ->
+        # Nothing changed underneath us. The heavy stats (graph nodes, chunk
+        # materialization, per-node layer/relationship passes) only change on
+        # indexing events, which already refresh via PubSub. Recomputing them on
+        # every 3s tick pegged a core for as long as a tab stayed open, so on an
+        # idle tick we only refresh the cheap live indicators.
+        {:noreply, refresh_indicators(socket, tick)}
+    end
   end
 
   def handle_info({:indexing_complete, data}, socket) do
@@ -354,7 +370,12 @@ defmodule ElixirNexus.DashboardLive.Index do
       |> Enum.map(fn {type, nodes} -> {type, length(nodes)} end)
       |> Enum.sort_by(fn {_, count} -> -count end)
 
-    language_distribution = compute_language_distribution()
+    # Materialize the chunk cache once and reuse it for both the language
+    # breakdown and the unique-file count — this is the heaviest read in the
+    # function (full chunk payloads), so it must not be done twice.
+    chunks = safe_call(fn -> ElixirNexus.ChunkCache.all() end, [])
+
+    language_distribution = compute_language_distribution(chunks)
     layer_distribution = compute_layer_distribution(graph_nodes)
 
     {calls, imports, contains} = count_relationships(graph_nodes)
@@ -382,7 +403,7 @@ defmodule ElixirNexus.DashboardLive.Index do
 
     cached_file_count =
       try do
-        ElixirNexus.ChunkCache.all()
+        chunks
         |> Enum.map(& &1.file_path)
         |> Enum.uniq()
         |> length()
@@ -390,8 +411,9 @@ defmodule ElixirNexus.DashboardLive.Index do
         _ -> 0
       end
 
+    chunk_count = safe_call(fn -> ElixirNexus.ChunkCache.count() end, 0)
     indexed_files = if cached_file_count > 0, do: cached_file_count, else: indexer.indexed_files
-    total_chunks = if ElixirNexus.ChunkCache.count() > 0, do: ElixirNexus.ChunkCache.count(), else: indexer.total_chunks
+    total_chunks = if chunk_count > 0, do: chunk_count, else: indexer.total_chunks
 
     assign(socket,
       indexed_files: indexed_files,
@@ -414,9 +436,9 @@ defmodule ElixirNexus.DashboardLive.Index do
     )
   end
 
-  defp compute_language_distribution do
+  defp compute_language_distribution(chunks) do
     try do
-      ElixirNexus.ChunkCache.all()
+      chunks
       |> Enum.group_by(fn chunk -> to_string(chunk[:language] || chunk.language || "unknown") end)
       |> Enum.map(fn {lang, chunks} -> {lang, length(chunks)} end)
       |> Enum.sort_by(fn {_, count} -> -count end)
@@ -478,6 +500,41 @@ defmodule ElixirNexus.DashboardLive.Index do
 
   # Detect when Qdrant has been updated externally (e.g. by MCP in a separate BEAM)
   # and reload local ETS caches to stay in sync.
+  # How often (in ticks) to refresh the network-bound Ollama availability check.
+  # Qdrant health piggybacks on the count_points call we already make every tick
+  # for sync detection; Ollama has no such free signal, so we poll it less often
+  # to avoid an extra HTTP round-trip on every 3s idle tick.
+  @ollama_poll_every 5
+
+  # Cheap per-tick refresh: live status indicators that can change without an
+  # indexing PubSub event. Deliberately avoids the full-graph / full-chunk
+  # recomputation in assign_stats/1 — see handle_info(:tick). Qdrant health is set
+  # by maybe_sync_from_qdrant/1; indexer + watcher status are cheap local reads.
+  defp refresh_indicators(socket, tick) do
+    indexer = safe_call(fn -> ElixirNexus.Indexer.status() end, %{status: :idle, errors: []})
+    watcher = safe_call(fn -> ElixirNexus.FileWatcher.status() end, %{watching: 0, pending: 0})
+
+    indexer_status =
+      case indexer.status do
+        :indexing -> "indexing"
+        _ -> "ready"
+      end
+
+    socket =
+      assign(socket,
+        indexer_status: indexer_status,
+        errors: indexer.errors,
+        watcher_watching: watcher.watching,
+        watcher_pending: watcher.pending
+      )
+
+    if rem(tick, @ollama_poll_every) == 0 do
+      assign(socket, ollama_available: safe_call(fn -> ElixirNexus.EmbeddingModel.available?() end, false))
+    else
+      socket
+    end
+  end
+
   defp maybe_sync_from_qdrant(socket) do
     qdrant_count =
       safe_call(
@@ -490,14 +547,18 @@ defmodule ElixirNexus.DashboardLive.Index do
         nil
       )
 
+    # Reuse the count_points result as the Qdrant liveness signal — a successful
+    # count means Qdrant is reachable, so we avoid a separate health_check call.
+    socket = assign(socket, qdrant_health: if(qdrant_count, do: "ready", else: "error"))
+
     ets_count = safe_call(fn -> ElixirNexus.ChunkCache.count() end, 0)
 
     if qdrant_count && qdrant_count != ets_count && abs(qdrant_count - ets_count) > 5 do
       Logger.info("Dashboard: Qdrant has #{qdrant_count} points but ETS has #{ets_count}, syncing...")
       safe_call(fn -> ElixirNexus.ProjectSwitcher.reload_from_qdrant() end, :ok)
-      add_activity(socket, :synced, "Synced from Qdrant: #{qdrant_count} chunks loaded")
+      {:synced, add_activity(socket, :synced, "Synced from Qdrant: #{qdrant_count} chunks loaded")}
     else
-      socket
+      {:unchanged, socket}
     end
   end
 
