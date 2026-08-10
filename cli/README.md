@@ -121,4 +121,4 @@ make build    # stamps version from git tag
 make install  # installs to $GOPATH/bin
 ```
 
-The version shown in the CLI header (`v1.8.0`) is stamped at build time from the nearest git tag via `-ldflags`.
+The version shown in the CLI header is stamped at build time from the nearest git tag via `-ldflags`.

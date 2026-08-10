@@ -5,7 +5,7 @@ defmodule Mix.Tasks.McpHttp do
   ## Usage
 
       mix mcp_http
-      mix mcp_http --port 3001
+      mix mcp_http --port 3002
 
   This starts the MCP server listening on Streamable HTTP (POST-based JSON-RPC),
   suitable for Docker deployments where stdio transport is not available.
@@ -34,8 +34,8 @@ defmodule Mix.Tasks.McpHttp do
 
   defp parse_port(args) do
     case OptionParser.parse(args, strict: [port: :integer]) do
-      {opts, _, _} -> Keyword.get(opts, :port, 3001)
-      _ -> 3001
+      {opts, _, _} -> Keyword.get(opts, :port, 3002)
+      _ -> 3002
     end
   end
 end

@@ -358,9 +358,16 @@ defmodule ElixirNexus.QdrantClient do
   end
 
   def handle_call(:reset_collection, _from, state) do
-    http_delete("#{state.url}/collections/#{state.collection}")
-    result = http_put("#{state.url}/collections/#{state.collection}", collection_schema())
-    {:reply, result, state}
+    case http_delete("#{state.url}/collections/#{state.collection}") do
+      {:ok, _} ->
+        {:reply, http_put("#{state.url}/collections/#{state.collection}", collection_schema()), state}
+
+      {:error, {404, _}} ->
+        {:reply, http_put("#{state.url}/collections/#{state.collection}", collection_schema()), state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   # ── Callbacks: point writes ───────────────────────────────────────────────

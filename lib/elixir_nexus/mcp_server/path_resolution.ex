@@ -215,10 +215,14 @@ defmodule ElixirNexus.MCPServer.PathResolution do
   # Translate host filesystem paths to container paths using any active workspace mount.
   defp translate_host_path(path) do
     Enum.find_value(workspace_mounts(), path, fn {mount, host_prefix} ->
-      if host_prefix != "" and String.starts_with?(path, host_prefix) do
+      if host_prefix != "" and path_within_mount?(path, host_prefix) do
         Path.join(mount, String.replace_prefix(path, host_prefix, ""))
       end
     end)
+  end
+
+  defp path_within_mount?(path, mount) do
+    path == mount or String.starts_with?(path, mount <> "/")
   end
 
   defp find_project_root(path) do

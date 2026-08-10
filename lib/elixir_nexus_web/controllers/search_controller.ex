@@ -33,7 +33,12 @@ defmodule ElixirNexus.API.SearchController do
 
   def index(conn, %{"path" => path}) do
     docker_mode? = System.get_env("MCP_HTTP_PORT") != nil
-    in_workspace? = String.starts_with?(path, "/workspace")
+
+    in_workspace? =
+      Enum.any?(1..5, fn slot ->
+        mount = if slot == 1, do: "/workspace", else: "/workspace#{slot}"
+        path == mount or String.starts_with?(path, mount <> "/")
+      end)
 
     if docker_mode? and not in_workspace? do
       conn

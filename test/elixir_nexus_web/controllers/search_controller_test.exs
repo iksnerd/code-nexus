@@ -40,6 +40,21 @@ defmodule ElixirNexus.API.SearchControllerTest do
   end
 
   describe "POST /api/index" do
+    test "rejects paths that only share the /workspace prefix in Docker mode", %{conn: conn} do
+      previous_port = System.get_env("MCP_HTTP_PORT")
+      System.put_env("MCP_HTTP_PORT", "3002")
+
+      on_exit(fn ->
+        if previous_port,
+          do: System.put_env("MCP_HTTP_PORT", previous_port),
+          else: System.delete_env("MCP_HTTP_PORT")
+      end)
+
+      conn = post(conn, "/api/index", %{"path" => "/workspace_evil/project"})
+      assert conn.status == 403
+      assert json_response(conn, 403)["success"] == false
+    end
+
     test "returns error for non-existent path", %{conn: conn} do
       conn = post(conn, "/api/index", %{"path" => "/nonexistent/path"})
       response = json_response(conn, 200)

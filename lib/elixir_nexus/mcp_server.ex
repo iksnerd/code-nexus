@@ -6,7 +6,7 @@ defmodule ElixirNexus.MCPServer do
   via the MCP protocol.
 
   Start with stdio transport: `mix mcp`
-  Start with HTTP/SSE transport: `mix mcp_http` (port 3001)
+  Start with HTTP/SSE transport: `mix mcp_http` (port 3002)
   """
 
   use ExMCP.Server
@@ -48,7 +48,7 @@ defmodule ElixirNexus.MCPServer do
        description:
          "Code intelligence server — graph-powered semantic search, call graph traversal, " <>
            "transitive impact analysis, and structural coupling for the current project. " <>
-           "Supports Elixir, JavaScript/TypeScript/TSX, Python, Go, Rust, and Java. " <>
+           "Supports Elixir, JavaScript/TypeScript/TSX, Python, Go, Rust, Java, Ruby, Kotlin, and Swift. " <>
            "Use instead of Grep when you need to understand relationships between code. " <>
            "Run reindex first (and after code changes). Start with get_graph_stats to orient.",
        capabilities: %{tools: %{}, resources: %{}}
@@ -212,7 +212,7 @@ defmodule ElixirNexus.MCPServer do
       name("reindex")
 
       description(
-        "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Indexes the project root inclusively, applying .gitignore + .nexusignore + the built-in deny-list. Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java, Ruby. Returns {indexed_files, total_chunks, languages: [{lang, file_count}], skipped: {default_deny_dirs, gitignore_dirs, nexusignore_dirs, default_deny_files, gitignore_files, nexusignore_files, unsupported_extension}}. The skipped breakdown lets you debug ignore rules — if your .nexusignore patterns aren't excluding what you expect, the counts will show it. On failure, lists available workspace projects."
+        "Build the search index and call graph by parsing source files. MUST run before all other tools, and again after code changes. Indexes the project root inclusively, applying .gitignore + .nexusignore + the built-in deny-list. Supports Elixir, JS/TS/TSX, Python, Go, Rust, Java, Ruby, Kotlin, and Swift. Returns {indexed_files, total_chunks, languages: [{lang, file_count}], skipped: {default_deny_dirs, gitignore_dirs, nexusignore_dirs, default_deny_files, gitignore_files, nexusignore_files, unsupported_extension}}. The skipped breakdown lets you debug ignore rules — if your .nexusignore patterns aren't excluding what you expect, the counts will show it. On failure, lists available workspace projects."
       )
     end
 
@@ -569,7 +569,7 @@ defmodule ElixirNexus.MCPServer do
     case ElixirNexus.Search.find_module_hierarchy(name) do
       {:ok, result} -> ResponseFormat.json_reply(result, state)
       {:error, :not_found} -> {:error, "Module not found: #{name}", state}
-      {:error, reason} -> {:error, "Module hierarchy failed: #{inspect(reason)}", state}
+      {:error, reason} -> {:error, "Module hierarchy failed for #{name}: #{inspect(reason)}", state}
     end
   end
 

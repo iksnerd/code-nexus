@@ -105,7 +105,7 @@ COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # Expose ports (Phoenix + MCP HTTP)
-EXPOSE 4100 3001
+EXPOSE 4100 3002
 
 # Start both Phoenix and MCP HTTP servers
 CMD ["./docker-entrypoint.sh"]

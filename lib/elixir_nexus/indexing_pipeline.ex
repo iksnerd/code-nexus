@@ -61,8 +61,6 @@ defmodule ElixirNexus.IndexingPipeline do
           %{file: file_path}
         )
 
-        ElixirNexus.DirtyTracker.mark_clean(file_path)
-
         message
         |> Broadway.Message.put_data({file_path, chunks})
         |> Broadway.Message.put_batcher(:embed_and_store)
@@ -95,23 +93,35 @@ defmodule ElixirNexus.IndexingPipeline do
       file_chunks_pairs
       |> Enum.flat_map(fn {_path, chunks} -> chunks end)
 
-    if all_chunks != [] do
-      IndexingHelpers.embed_and_store(all_chunks)
+    if all_chunks == [] do
+      Enum.each(file_chunks_pairs, fn {file_path, chunks} ->
+        send(ElixirNexus.Indexer, {:file_indexed, file_path, length(chunks)})
+      end)
+    else
+      case IndexingHelpers.embed_and_store(all_chunks) do
+        :ok ->
+          # Insert into ETS cache only after durable storage succeeds.
+          ChunkCache.insert_many(all_chunks)
 
-      # Insert into ETS cache (graph rebuild happens once at pipeline completion)
-      ChunkCache.insert_many(all_chunks)
+          Enum.each(file_chunks_pairs, fn {file_path, _chunks} ->
+            ElixirNexus.DirtyTracker.mark_clean(file_path)
+          end)
 
-      # Broadcast progress
-      Events.broadcast_indexing_progress(%{
-        batch_chunks: length(all_chunks),
-        batch_files: length(messages)
-      })
+          Events.broadcast_indexing_progress(%{
+            batch_chunks: length(all_chunks),
+            batch_files: length(messages)
+          })
+
+          Enum.each(file_chunks_pairs, fn {file_path, chunks} ->
+            send(ElixirNexus.Indexer, {:file_indexed, file_path, length(chunks)})
+          end)
+
+        {:error, reason} ->
+          Enum.each(file_chunks_pairs, fn {file_path, _chunks} ->
+            send(ElixirNexus.Indexer, {:file_index_failed, file_path, reason})
+          end)
+      end
     end
-
-    # Send acks directly to the Indexer for completion tracking
-    Enum.each(file_chunks_pairs, fn {file_path, chunks} ->
-      send(ElixirNexus.Indexer, {:file_indexed, file_path, length(chunks)})
-    end)
 
     messages
   end

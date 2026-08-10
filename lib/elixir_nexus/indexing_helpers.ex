@@ -204,22 +204,39 @@ defmodule ElixirNexus.IndexingHelpers do
       ElixirNexus.TFIDFEmbedder.update_vocabulary(texts)
       keyword_texts = Enum.map(chunks, &ElixirNexus.Chunker.prepare_for_keywords/1)
 
-      chunks
-      |> Enum.zip(texts)
-      |> Enum.zip(keyword_texts)
-      |> Enum.chunk_every(@batch_size)
-      |> Task.async_stream(&process_sub_batch/1,
-        max_concurrency: sub_batch_concurrency,
-        ordered: false,
-        timeout: :infinity,
-        on_timeout: :kill_task
-      )
-      |> Stream.run()
+      results =
+        chunks
+        |> Enum.zip(texts)
+        |> Enum.zip(keyword_texts)
+        |> Enum.chunk_every(@batch_size)
+        |> Task.async_stream(&process_sub_batch/1,
+          max_concurrency: sub_batch_concurrency,
+          ordered: false,
+          timeout: :infinity,
+          on_timeout: :kill_task
+        )
+        |> Enum.to_list()
 
-      duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-      :telemetry.execute([:nexus, :embed_and_store], %{duration_ms: duration_ms, chunk_count: length(chunks)}, %{})
+      case Enum.find(results, fn
+             {:ok, :ok} -> false
+             {:ok, {:error, _}} -> true
+             {:exit, _} -> true
+           end) do
+        nil ->
+          duration_ms = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+          :telemetry.execute([:nexus, :embed_and_store], %{duration_ms: duration_ms, chunk_count: length(chunks)}, %{})
+          :ok
+
+        {:ok, {:error, reason}} ->
+          {:error, reason}
+
+        {:exit, reason} ->
+          {:error, {:task_exit, reason}}
+      end
     rescue
-      e -> Logger.error("Exception during embedding: #{inspect(e)}")
+      e ->
+        Logger.error("Exception during embedding: #{inspect(e)}")
+        {:error, e}
     end
   end
 
@@ -227,6 +244,14 @@ defmodule ElixirNexus.IndexingHelpers do
   # Runs inside a Task spawned by embed_and_store/1 so multiple sub-batches per
   # Broadway batch can hit Ollama and Qdrant concurrently.
   defp process_sub_batch(batch) do
+    do_process_sub_batch(batch)
+  rescue
+    exception ->
+      Logger.error("Exception processing embedding batch: #{inspect(exception)}")
+      {:error, exception}
+  end
+
+  defp do_process_sub_batch(batch) do
     batch_texts = Enum.map(batch, fn {{_, text}, _} -> text end)
     batch_chunks = Enum.map(batch, fn {{chunk, _}, _} -> chunk end)
     batch_kw_texts = Enum.map(batch, fn {{_, _}, kw} -> kw end)
@@ -287,6 +312,7 @@ defmodule ElixirNexus.IndexingHelpers do
       {:error, reason} ->
         Logger.error("Failed to store batch of #{length(points)} chunks: #{inspect(reason)}")
         :telemetry.execute([:nexus, :qdrant, :upsert_error], %{batch_size: length(points)}, %{reason: reason})
+        {:error, reason}
     end
   end
 

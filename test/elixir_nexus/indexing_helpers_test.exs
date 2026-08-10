@@ -1,6 +1,8 @@
 defmodule ElixirNexus.IndexingHelpersTest do
   use ExUnit.Case
 
+  import ElixirNexus.TestFixtures
+
   alias ElixirNexus.IndexingHelpers
 
   setup do
@@ -44,6 +46,24 @@ defmodule ElixirNexus.IndexingHelpersTest do
       counts = IndexingHelpers.count_languages(files)
 
       assert [%{lang: :elixir, file_count: 3}, %{lang: :go, file_count: 1}] = counts
+    end
+  end
+
+  describe "embed_and_store/1" do
+    test "returns the durable storage error instead of reporting success" do
+      previous_backend = System.get_env("EMBEDDING_BACKEND")
+      System.put_env("EMBEDDING_BACKEND", "tfidf")
+
+      on_exit(fn ->
+        if previous_backend,
+          do: System.put_env("EMBEDDING_BACKEND", previous_backend),
+          else: System.delete_env("EMBEDDING_BACKEND")
+      end)
+
+      assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
+               IndexingHelpers.embed_and_store([
+                 build_chunk(%{id: "0123456789abcdef", module_path: nil, docstring: nil})
+               ])
     end
   end
 

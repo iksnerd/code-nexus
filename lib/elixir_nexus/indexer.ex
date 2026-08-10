@@ -127,11 +127,13 @@ defmodule ElixirNexus.Indexer do
 
     case collect_files(path) do
       {:ok, [], stats} ->
-        clean_state = prepare_reindex(state)
-        result = build_index_result(files: 0, skipped: stats, error: zero_files_error([path]))
+        case prepare_empty_reindex(state, [path], stats) do
+          {:ok, clean_state} ->
+            {:reply, {:ok, empty_index_status(stats)}, clean_state}
 
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: stats}},
-         %{clean_state | last_index_result: result}}
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
 
       {:ok, files, stats} ->
         do_index_files(files, stats, from, state)
@@ -161,11 +163,13 @@ defmodule ElixirNexus.Indexer do
 
     case unique_files do
       [] ->
-        clean_state = prepare_reindex(state)
-        result = build_index_result(files: 0, skipped: combined_stats, error: zero_files_error(paths))
+        case prepare_empty_reindex(state, paths, combined_stats) do
+          {:ok, clean_state} ->
+            {:reply, {:ok, empty_index_status(combined_stats)}, clean_state}
 
-        {:reply, {:ok, %{indexed_files: 0, total_chunks: 0, languages: [], skipped: combined_stats}},
-         %{clean_state | last_index_result: result}}
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
 
       files ->
         do_index_files(files, combined_stats, from, state)
@@ -182,27 +186,35 @@ defmodule ElixirNexus.Indexer do
           case result do
             {:ok, chunks} ->
               # Embed and store synchronously (fast path for single file)
-              IndexingHelpers.embed_and_store(chunks)
+              case IndexingHelpers.embed_and_store(chunks) do
+                :ok ->
+                  ChunkCache.delete_by_file(file_path)
+                  ChunkCache.insert_many(chunks)
+                  GraphCache.update_file(file_path, chunks)
+                  ElixirNexus.DirtyTracker.mark_clean(file_path)
+                  Events.broadcast_file_reindexed(file_path)
 
-              # Update ETS caches
-              ChunkCache.delete_by_file(file_path)
-              ChunkCache.insert_many(chunks)
-              GraphCache.update_file(file_path, chunks)
+                  %{
+                    state
+                    | indexed_files: MapSet.put(state.indexed_files, file_path),
+                      total_chunks: state.total_chunks + length(chunks)
+                  }
 
-              # Broadcast file reindex event
-              Events.broadcast_file_reindexed(file_path)
-
-              %{
-                state
-                | indexed_files: MapSet.put(state.indexed_files, file_path),
-                  total_chunks: state.total_chunks + length(chunks)
-              }
+                {:error, reason} ->
+                  {:storage_error, reason}
+              end
 
             {:error, _} ->
               %{state | indexed_files: MapSet.put(state.indexed_files, file_path)}
           end
 
-        {:reply, result, new_state}
+        case new_state do
+          {:storage_error, reason} ->
+            {:reply, {:error, {:storage_error, reason}}, state}
+
+          state_after_index ->
+            {:reply, result, state_after_index}
+        end
 
       false ->
         Logger.error("File not found: #{file_path}")
@@ -234,14 +246,19 @@ defmodule ElixirNexus.Indexer do
 
   def handle_call(:purge, _from, state) do
     Logger.info("Purging current collection and caches")
-    clean_state = prepare_reindex(state)
 
-    {:reply, :ok,
-     %{
-       clean_state
-       | last_index_result: build_index_result(files: 0, error: nil),
-         force_full_reindex: true
-     }}
+    case prepare_reindex(state) do
+      {:ok, clean_state} ->
+        {:reply, :ok,
+         %{
+           clean_state
+           | last_index_result: build_index_result(files: 0, error: nil),
+             force_full_reindex: true
+         }}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call(:status, _from, state) do
@@ -284,11 +301,14 @@ defmodule ElixirNexus.Indexer do
     case unique_files do
       [] ->
         Logger.warning("Async reindex resolved to 0 indexable files for #{inspect(paths)}")
-        clean_state = prepare_reindex(state)
 
-        result = build_index_result(files: 0, skipped: combined_stats, error: zero_files_error(paths))
+        case prepare_empty_reindex(state, paths, combined_stats) do
+          {:ok, clean_state} ->
+            {:noreply, clean_state}
 
-        {:noreply, %{clean_state | last_index_result: result}}
+          {:error, reason} ->
+            {:noreply, failed_reindex_state(state, reason)}
+        end
 
       files ->
         do_async_index_files(files, combined_stats, state)
@@ -310,31 +330,70 @@ defmodule ElixirNexus.Indexer do
     end
   end
 
+  def handle_info({:file_index_failed, file_path, reason}, state) do
+    acked = Map.get(state, :acked_file_count, 0) + 1
+    total = state.pending_file_count
+    error = %{file: file_path, reason: inspect(reason)}
+
+    Logger.error("Indexer: failed to store #{Path.basename(file_path)}: #{inspect(reason)}")
+
+    new_state = %{
+      state
+      | acked_file_count: acked,
+        indexed_files: MapSet.delete(state.indexed_files, file_path),
+        errors: [error | state.errors]
+    }
+
+    if acked >= total and total > 0 do
+      finish_indexing(new_state)
+    else
+      {:noreply, new_state}
+    end
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
 
   defp prepare_reindex(state) do
     case ElixirNexus.QdrantClient.reset_collection() do
-      {:ok, _} -> Logger.info("Reset Qdrant collection before reindex")
-      {:error, reason} -> Logger.warning("Failed to reset collection: #{inspect(reason)}")
+      {:ok, _} ->
+        Logger.info("Reset Qdrant collection before reindex")
+
+        ElixirNexus.DirtyTracker.reset()
+        ChunkCache.clear()
+        GraphCache.clear()
+
+        {:ok,
+         %{
+           state
+           | indexed_files: MapSet.new(),
+             total_chunks: 0,
+             errors: [],
+             pending_reply: nil,
+             pending_file_count: 0,
+             acked_file_count: 0,
+             skip_stats: empty_skip_stats()
+         }}
+
+      {:error, reason} ->
+        Logger.error("Failed to reset collection; aborting reindex: #{inspect(reason)}")
+        {:error, {:reset_failed, reason}}
     end
-
-    ElixirNexus.DirtyTracker.reset()
-    ChunkCache.clear()
-    GraphCache.clear()
-
-    %{
-      state
-      | indexed_files: MapSet.new(),
-        total_chunks: 0,
-        errors: [],
-        pending_reply: nil,
-        pending_file_count: 0,
-        acked_file_count: 0,
-        skip_stats: empty_skip_stats()
-    }
   end
+
+  defp prepare_empty_reindex(state, paths, stats) do
+    case prepare_reindex(state) do
+      {:ok, clean_state} ->
+        result = build_index_result(files: 0, skipped: stats, error: zero_files_error(paths))
+        {:ok, %{clean_state | last_index_result: result}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp empty_index_status(stats), do: %{indexed_files: 0, total_chunks: 0, languages: [], skipped: stats}
 
   # Async variant of do_index_files — no pending_reply, never issues a GenServer reply.
   defp do_async_index_files(files, skip_stats, state) do
@@ -459,19 +518,25 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_full_reindex(files, skip_stats, from, state) do
-    clean_state = prepare_reindex(state)
-    ElixirNexus.IndexingProducer.push(files)
+    case prepare_reindex(state) do
+      {:ok, clean_state} ->
+        ElixirNexus.IndexingProducer.push(files)
 
-    {:noreply,
-     %{
-       clean_state
-       | status: :indexing,
-         indexed_files: MapSet.new(files),
-         pending_reply: from,
-         pending_file_count: length(files),
-         acked_file_count: 0,
-         skip_stats: skip_stats
-     }}
+        {:noreply,
+         %{
+           clean_state
+           | status: :indexing,
+             indexed_files: MapSet.new(files),
+             pending_reply: from,
+             pending_file_count: length(files),
+             acked_file_count: 0,
+             skip_stats: skip_stats
+         }}
+
+      {:error, reason} ->
+        reply_reindex_error(from, reason)
+        {:noreply, failed_reindex_state(state, reason)}
+    end
   end
 
   # Partial reindex: only dirty files get re-embedded. Clean files keep their
@@ -516,7 +581,8 @@ defmodule ElixirNexus.Indexer do
         files: file_count,
         chunks: chunk_count,
         languages: languages,
-        skipped: state.skip_stats
+        skipped: state.skip_stats,
+        error: if(state.errors == [], do: nil, else: "#{length(state.errors)} file(s) failed to store")
       )
 
     new_state = %{
@@ -534,16 +600,19 @@ defmodule ElixirNexus.Indexer do
         {:noreply, new_state}
 
       from ->
-        GenServer.reply(
-          from,
-          {:ok,
-           %{
-             indexed_files: file_count,
-             total_chunks: chunk_count,
-             languages: languages,
-             skipped: state.skip_stats
-           }}
-        )
+        reply = %{
+          indexed_files: file_count,
+          total_chunks: chunk_count,
+          languages: languages,
+          skipped: state.skip_stats,
+          errors: Enum.reverse(state.errors)
+        }
+
+        if state.errors == [] do
+          GenServer.reply(from, {:ok, reply})
+        else
+          GenServer.reply(from, {:error, {:indexing_failed, reply}})
+        end
 
         {:noreply, %{new_state | pending_reply: nil}}
     end
@@ -661,6 +730,20 @@ defmodule ElixirNexus.Indexer do
       finished_at: DateTime.utc_now()
     }
   end
+
+  defp failed_reindex_state(state, reason) do
+    %{
+      state
+      | status: :idle,
+        pending_reply: nil,
+        pending_file_count: 0,
+        acked_file_count: 0,
+        last_index_result: build_index_result(files: 0, error: inspect(reason))
+    }
+  end
+
+  defp reply_reindex_error(nil, _reason), do: :ok
+  defp reply_reindex_error(from, reason), do: GenServer.reply(from, {:error, reason})
 
   defp zero_files_error(paths) do
     "Indexed 0 files — the resolved path(s) #{inspect(paths)} contained no indexable source files " <>

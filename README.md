@@ -252,7 +252,7 @@ Strategy: `rest_for_one` — if a dependency crashes, all processes started afte
 
 ## MCP Tools
 
-Twelve tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
+Thirteen tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
 
 | Tool | Description |
 |------|-------------|
@@ -280,6 +280,7 @@ MCP is served over HTTP (Streamable HTTP at `/mcp`) via Docker. For local develo
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/metrics` | Prometheus metrics (text format 0.0.4) — search latency, indexing throughput, Qdrant ops, BEAM VM stats |
+| GET | `/health` | Readiness status for MCP, Qdrant, Ollama, and indexed projects |
 
 ### Search & Discovery
 
