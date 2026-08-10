@@ -54,10 +54,20 @@ defmodule ElixirNexus.IndexingHelpersTest do
       previous_backend = System.get_env("EMBEDDING_BACKEND")
       System.put_env("EMBEDDING_BACKEND", "tfidf")
 
+      # Point writes need the GenServer's own process state changed — its
+      # handle_call handlers read state.url captured at init, not live config,
+      # so an Application env override alone doesn't reach them. Point at an
+      # unreachable port so the connection fails deterministically instead of
+      # relying on ambient Qdrant being down.
+      original_state = :sys.get_state(ElixirNexus.QdrantClient)
+      :sys.replace_state(ElixirNexus.QdrantClient, &%{&1 | url: "http://localhost:1"})
+
       on_exit(fn ->
         if previous_backend,
           do: System.put_env("EMBEDDING_BACKEND", previous_backend),
           else: System.delete_env("EMBEDDING_BACKEND")
+
+        :sys.replace_state(ElixirNexus.QdrantClient, fn _ -> original_state end)
       end)
 
       assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
