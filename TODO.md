@@ -1,11 +1,42 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.10
-**Status:** v1.18.10 shipped — `iksnerd/code-nexus:v1.18.10` + `:latest` (arm64) live on Docker
-Hub. Both self-index bugs found while dogfooding v1.18.8/v1.18.9 are fixed and verified end-to-end
-against the released image: `reindex(path: "/app")` resolves correctly and completes cleanly
-(87 files, 2463 chunks, `error: null`) even chained right after another project's reindex in the
-same server session. 820 tests green, CI green.
+**Current version:** v1.18.11
+**Status:** v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
+Hub. Verified against a real polyglot codebase (`gpt-alpha`: 283 Python files + TS/TSX frontend +
+Go, 520 files total) — indexes cleanly, 3808 chunks, `error: null`. Python handling checked
+directly: class/method extraction, `find_module_hierarchy` correctly resolves a class's own
+methods, semantic `search_code` surfaces the right function for a natural-language query. 821
+tests green, CI green.
+
+## ✅ Shipped in v1.18.11 — fix truncated content corrupting embedding batches (2026-08-11)
+
+Found dogfooding on `gpt-alpha` (a real Python codebase, 283 `.py` files): indexing failed with
+`"32 file(s) failed to store"` even though none of the source files had invalid UTF-8 — confirmed
+by walking the whole repo tree and decoding every `.py` file.
+
+**Root cause:** `Chunker.truncate_content/1` used `binary_part/3` — a raw byte offset — to cap
+oversized chunk content at 4000 bytes. Any chunk larger than that with a multi-byte UTF-8
+character (accented letters, em-dashes, smart quotes, emoji — common in docstrings/comments)
+straddling the cutoff got its trailing byte(s) chopped off mid-character. The resulting
+invalid-UTF-8 binary flowed into `prepare_for_embedding/1`'s output, which then crashed
+`Jason.encode!` in the Ollama embedding request (`EmbeddingModel`) — silently dropping the entire
+Broadway sub-batch (~32 unrelated files sharing that one Ollama call) from the index.
+
+**Fix:** after the byte_size cutoff, back off byte-by-byte (bounded — UTF-8 sequences are at most
+4 bytes) until `String.valid?/1` holds again. New regression test constructs content with an
+em-dash positioned exactly at the 4000-byte boundary — reproduces the exact crash shape from the
+wild. **File:** `chunker.ex`.
+
+**Verified end-to-end against the released image**: re-reindexed `gpt-alpha` on v1.18.11 —
+`error: null`, 520 files (up from 488, all 32 previously-dropped files now included), 3808 chunks.
+`interp_viz.py` (the file whose content triggered the original crash) now indexes with 7 chunks,
+no errors in the logs.
+
+**Why this matters beyond gpt-alpha:** this bug affects any language, any large enough chunk with
+non-ASCII text near the 4000-byte mark — likely to have silently dropped chunks in other projects
+too, without any visible error to the user (just fewer search results than expected). Worth a
+`find_dead_code`/chunk-count sanity pass on previously-indexed large projects if this class of
+silent data loss matters for them.
 
 ## ✅ Shipped in v1.18.10 — fix reindex of a new project 404ing on every chunk (2026-08-11)
 
