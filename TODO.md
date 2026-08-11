@@ -1,10 +1,37 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.5 (full-screen graph + boxes separation + dead-code bug fixes)
-**Status:** v1.18.5 shipped — `iksnerd/code-nexus:v1.18.5` + `:latest` (arm64, digest `2885fa15…`)
-live on Docker Hub. **Dead-code fixes verified in-image** (dogfooded on elixir-nexus): 12→4 dead
-hits — `parent_mount_basename` (4-segment qualified call), all `*_controller.ex` actions, and
-`child_spec` no longer false-flagged. 814 tests green. CI skipped (Actions quota).
+**Current version:** v1.18.8
+**Status:** v1.18.8 shipped — `iksnerd/code-nexus:v1.18.8` + `:latest` (arm64, digest
+`c24b41d0b66a…`) live on Docker Hub. Dogfooded on elixir-nexus in-image: 185 files, 1251 chunks,
+`get_graph_stats` sane (5581 call edges, 4 languages, layers populated). 816 tests green, CI green.
+
+## ✅ Shipped in v1.18.8 — CI test-isolation fixes (2026-08-11)
+
+- **`embed_and_store/1` test bug** — the "durable storage error" test asserted a real `econnrefused`
+  but never forced one; it just hoped Qdrant was unreachable. Passed locally (no Qdrant running) but
+  failed in CI (Qdrant service container up) because the write silently succeeded. Fixed by mutating
+  the `QdrantClient` GenServer's own `state.url` via `:sys.replace_state` — its write handlers read
+  state captured at init, not live Application config, so an `Application.put_env` override alone
+  doesn't reach them. **File:** `test/elixir_nexus/indexing_helpers_test.exs`.
+- **v1.18.7 shipped the same day** but its CI run failed on this bug (tag `v1.18.7` / commit
+  `6a1235b` is public on Docker Hub only via GoReleaser CLI binaries — no Docker image was ever
+  built from it, so it's not a live release artifact, just superseded).
+- **Known flake (not fixed, not blocking):** a second CI run on v1.18.8 failed once more, this time
+  on `delete_file/1 removes file from ChunkCache and GraphCache` (`ChunkCache.all()` came back empty
+  right after a synchronous `index_file` call returned). 5+ local reruns with different seeds stayed
+  green; a CI rerun of the same commit also went green. Leading theory: `DashboardLive`'s 3s
+  `handle_info(:tick, ...)` → `ProjectSwitcher.reload_from_qdrant()` timer outlives its own
+  LiveView test and fires into a later, unrelated test's window, racing the global `ChunkCache`/
+  `QdrantClient` state. Not root-caused — worth a proper fix (e.g. assert dashboard LiveView tests
+  stop their socket in `on_exit`) before it costs another release cycle.
+- **Path-resolution bug found while dogfooding:** `find_project_root/1`
+  (`lib/elixir_nexus/mcp_server/path_resolution.ex`) treats any absolute path whose *last segment*
+  matches a common source-dir name (`lib`, `src`, `app`, …) as "caller passed a subdir, climb to the
+  parent." The container's own root is `/app` (Dockerfile `WORKDIR`), so `reindex(path: "/app")`
+  resolves to `/` and the Indexer hangs walking the whole container filesystem (`get_status` times
+  out at 5s, `GenServer.call` timeout). Workaround: never pass `/app` explicitly — omit `path`, or
+  use the workspace-relative project name. Worth hardening: don't climb past a directory that itself
+  looks like a project root (has `mix.exs`/`package.json`/`.git`).
 
 ## ✅ Shipped in v1.18.5 — graph polish + dead-code bug fixes (2026-06-20)
 
