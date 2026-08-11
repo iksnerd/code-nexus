@@ -64,13 +64,30 @@ defmodule ElixirNexus.Chunker do
 
   defp truncate_content(content) when is_binary(content) do
     if byte_size(content) > @max_content_chars do
-      binary_part(content, 0, @max_content_chars)
+      content
+      |> binary_part(0, @max_content_chars)
+      |> truncate_to_valid_utf8()
     else
       content
     end
   end
 
   defp truncate_content(other), do: other
+
+  # binary_part/3 cuts at a raw byte offset, which can land inside a multi-byte
+  # UTF-8 character (any non-ASCII text — accented letters, em-dashes, smart
+  # quotes, emoji in comments/docstrings). The resulting binary then fails
+  # Jason.encode! in the Ollama embedding request, dropping the whole batch.
+  # Back off byte-by-byte (bounded: UTF-8 sequences are at most 4 bytes) until
+  # the tail is valid UTF-8 again.
+  defp truncate_to_valid_utf8(binary) do
+    if String.valid?(binary) do
+      binary
+    else
+      size = byte_size(binary)
+      if size == 0, do: binary, else: truncate_to_valid_utf8(binary_part(binary, 0, size - 1))
+    end
+  end
 
   @doc """
   Prepare chunk for sparse keyword vector. Heavily weights the entity name

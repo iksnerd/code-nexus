@@ -28,6 +28,21 @@ defmodule ElixirNexus.ChunkerTest do
       assert String.contains?(text, "process_data")
       assert String.contains?(text, "def process_data")
     end
+
+    test "truncation of oversized content stays valid UTF-8 even when a multi-byte character straddles the cutoff" do
+      # An em-dash ("—") is 3 bytes (0xE2 0x80 0x94). Positioned so the raw
+      # 4000-byte cutoff lands right after its first byte, a naive binary_part
+      # truncation would produce an invalid trailing 0xE2 — this is exactly
+      # what crashed Jason.encode! in the Ollama embedding request in the wild.
+      prefix = String.duplicate("a", 3999)
+      content = prefix <> "—" <> String.duplicate("b", 500)
+
+      entity = %{@sample_entity | content: content}
+      chunk = hd(Chunker.chunk_entity(entity))
+      text = Chunker.prepare_for_embedding(chunk)
+
+      assert String.valid?(text)
+    end
   end
 
   describe "prepare_for_keywords/1" do

@@ -157,10 +157,10 @@ available as `vX.Y.Z` tags. See the [Docker Hub repository page](https://hub.doc
 for all tags, and the [GitHub tags page](https://github.com/iksnerd/code-nexus/tags)
 or `git log` for what each one shipped.
 
-The current release is `v1.18.10`:
+The current release is `v1.18.11`:
 
 ```bash
-docker pull iksnerd/code-nexus:v1.18.10
+docker pull iksnerd/code-nexus:v1.18.11
 ```
 
 The image exposes the Phoenix dashboard on port `4100` and MCP Streamable HTTP
