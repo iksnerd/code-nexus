@@ -137,23 +137,6 @@ defmodule ElixirNexus.QdrantClient do
     end
   end
 
-  # Kept for tests and explicit callers that want to pre-create the default collection.
-  @impl true
-  def handle_info(:ensure_collection, state) do
-    case http_put("#{state.url}/collections/#{state.collection}", collection_schema()) do
-      {:ok, _} ->
-        Logger.info("Collection '#{state.collection}' ready (named vectors + sparse vectors)")
-
-      {:error, {409, _body}} ->
-        Logger.debug("Collection '#{state.collection}' already exists, reusing")
-
-      {:error, reason} ->
-        Logger.warning("Could not create collection: #{inspect(reason)}")
-    end
-
-    {:noreply, state}
-  end
-
   # ── Public API: collection management ────────────────────────────────────
 
   def health_check do
@@ -175,6 +158,14 @@ defmodule ElixirNexus.QdrantClient do
   @doc "Switch collection without validating its existence in Qdrant."
   def switch_collection_force(name) do
     GenServer.call(__MODULE__, {:switch_collection_force, name}, @http_timeout)
+  end
+
+  @doc """
+  Idempotently create the active collection if it doesn't already exist. Unlike
+  reset_collection/0, never deletes existing points — safe to call unconditionally.
+  """
+  def ensure_collection do
+    GenServer.call(__MODULE__, :ensure_collection, @http_timeout)
   end
 
   def delete_collection do
@@ -345,6 +336,16 @@ defmodule ElixirNexus.QdrantClient do
   def handle_call({:switch_collection_force, name}, _from, state) do
     store_runtime_state(state.url, name)
     {:reply, :ok, %{state | collection: name}}
+  end
+
+  def handle_call(:ensure_collection, _from, state) do
+    case http_get("#{state.url}/collections/#{state.collection}") do
+      {:ok, _} ->
+        {:reply, {:ok, :exists}, state}
+
+      {:error, _} ->
+        {:reply, http_put("#{state.url}/collections/#{state.collection}", collection_schema()), state}
+    end
   end
 
   def handle_call(:delete_collection, _from, state) do

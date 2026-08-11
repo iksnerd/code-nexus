@@ -336,6 +336,43 @@ defmodule ElixirNexus.QdrantClientTest do
     end
   end
 
+  # ── ensure_collection/0 — idempotent create-if-missing ────────────────────
+
+  describe "ensure_collection/0" do
+    setup do
+      original = ElixirNexus.QdrantClient.active_collection()
+
+      on_exit(fn ->
+        ElixirNexus.QdrantClient.switch_collection_force(original)
+        ElixirNexus.QdrantClient.delete_collection("nexus_ensure_collection_test")
+      end)
+
+      :ok
+    end
+
+    test "creates the collection when it doesn't exist yet, and writes succeed after" do
+      :ok = ElixirNexus.QdrantClient.switch_collection_force("nexus_ensure_collection_test")
+
+      assert {:ok, _} = ElixirNexus.QdrantClient.ensure_collection()
+
+      vector = List.duplicate(0.5, 768)
+      assert {:ok, _} = ElixirNexus.QdrantClient.upsert_point(1, vector, %{"name" => "x"})
+    end
+
+    test "is a no-op (does not wipe existing points) when the collection already exists" do
+      :ok = ElixirNexus.QdrantClient.switch_collection_force("nexus_ensure_collection_test")
+      {:ok, _} = ElixirNexus.QdrantClient.ensure_collection()
+
+      vector = List.duplicate(0.5, 768)
+      {:ok, _} = ElixirNexus.QdrantClient.upsert_point(1, vector, %{"name" => "preserved"})
+
+      assert {:ok, :exists} = ElixirNexus.QdrantClient.ensure_collection()
+
+      assert {:ok, %{"result" => point}} = ElixirNexus.QdrantClient.get_point(1)
+      assert point["payload"]["name"] == "preserved"
+    end
+  end
+
   # ── collection management — needs Qdrant, lenient pass/fail ──────────────
 
   describe "list_collections/0" do

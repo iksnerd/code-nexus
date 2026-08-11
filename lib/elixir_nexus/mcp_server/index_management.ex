@@ -29,6 +29,13 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
       ElixirNexus.QdrantClient.switch_collection_force(collection)
       ElixirNexus.Events.broadcast_collection_changed(collection)
     end
+
+    # switch_collection_force doesn't validate existence, and the incremental/partial
+    # reindex path (taken whenever DirtyTracker still holds entries from a previously
+    # active project) never creates the collection either — only a full reindex does.
+    # Without this, reindexing a genuinely new project after any other project has
+    # already been indexed in the same server session 404s on every chunk store.
+    ElixirNexus.QdrantClient.ensure_collection()
   end
 
   # Decide what to name a project's Qdrant collection.
