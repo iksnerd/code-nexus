@@ -12,6 +12,8 @@ WORKSPACE=~/Documents docker-compose up -d
 
 This starts CodeNexus (Phoenix dashboard on `:4100`, MCP Streamable HTTP on `:3002`) and Qdrant (vector DB on `:6333`). The container reaches Ollama on the host via `host.docker.internal:11434`.
 
+Both services use `restart: unless-stopped`, so they come back automatically after a Docker daemon restart or host reboot — no manual re-launch needed unless you explicitly `docker stop` them first.
+
 ### Without docker-compose
 
 ```bash
@@ -37,15 +39,18 @@ Mount a host directory at `/workspace` to make your projects indexable:
 WORKSPACE=~/Documents docker-compose up -d
 ```
 
-Projects scattered across multiple directories? Add up to two more mounts:
+Projects scattered across multiple directories? Add up to four more mounts (five total):
 
 ```bash
 WORKSPACE=~/Documents WORKSPACE_HOST=~/Documents \
 WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects \
+WORKSPACE_3=~/PycharmProjects WORKSPACE_HOST_3=~/PycharmProjects \
+WORKSPACE_4=~/WebstormProjects WORKSPACE_HOST_4=~/WebstormProjects \
+WORKSPACE_5=~/other WORKSPACE_HOST_5=~/other \
 docker-compose up -d
 ```
 
-`WORKSPACE_HOST` / `WORKSPACE_HOST_2` / `WORKSPACE_HOST_3` tell the MCP server which host path maps to each container mount, enabling automatic path translation.
+`WORKSPACE_HOST` / `WORKSPACE_HOST_2` / … `WORKSPACE_HOST_5` tell the MCP server which host path maps to each container mount (`/workspace` … `/workspace5`), enabling automatic path translation.
 
 The `reindex` MCP tool resolves bare project names across all active mounts:
 
