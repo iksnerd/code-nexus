@@ -1,9 +1,47 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.8
-**Status:** v1.18.8 shipped — `iksnerd/code-nexus:v1.18.8` + `:latest` (arm64, digest
-`c24b41d0b66a…`) live on Docker Hub. Dogfooded on elixir-nexus in-image: 185 files, 1251 chunks,
-`get_graph_stats` sane (5581 call edges, 4 languages, layers populated). 816 tests green, CI green.
+**Current version:** v1.18.10
+**Status:** v1.18.10 shipped — `iksnerd/code-nexus:v1.18.10` + `:latest` (arm64) live on Docker
+Hub. Both self-index bugs found while dogfooding v1.18.8/v1.18.9 are fixed and verified end-to-end
+against the released image: `reindex(path: "/app")` resolves correctly and completes cleanly
+(87 files, 2463 chunks, `error: null`) even chained right after another project's reindex in the
+same server session. 820 tests green, CI green.
+
+## ✅ Shipped in v1.18.10 — fix reindex of a new project 404ing on every chunk (2026-08-11)
+
+Found while verifying the v1.18.9 fix in-image: `reindex(path: "/app")` no longer hung, but the
+reindex itself failed outright — `"87 file(s) failed to store"`, 0 chunks.
+
+**Root cause:** `DirtyTracker` is a single global tracker, not scoped per collection. Switching to
+a project whose Qdrant collection has never existed only creates it via
+`prepare_reindex`/`reset_collection`, which runs solely on the `do_full_reindex` path.
+`do_index_files_incremental` picks that path only when `DirtyTracker` is empty — but if any other
+project was already reindexed earlier in the same server session, `DirtyTracker` still holds its
+entries, so the new project incorrectly takes `do_partial_reindex` instead, which writes directly
+to a collection that was never created. Every chunk store then 404s.
+
+**Fix:** added `QdrantClient.ensure_collection/0` — idempotent create-if-missing (checks existence
+first, never deletes/wipes, unlike `reset_collection/0`) — called from
+`IndexManagement.ensure_collection_for_project` right after every collection switch, regardless of
+which reindex path follows. Also removed `handle_info(:ensure_collection, ...)`, near-identical
+create-collection logic that turned out to be dead code (nothing ever sent it). **Files:**
+`qdrant_client.ex`, `mcp_server/index_management.ex`. New regression tests in
+`qdrant_client_test.exs`.
+
+**Verified locally and in-image:** reindexed elixir-nexus, then `/app` right after (the exact
+original failure shape) — `error: null, chunks: 2463, files: 87`.
+
+## ✅ Shipped in v1.18.9 — fix find_project_root climbing /app to / (2026-08-11)
+
+`find_project_root/1` (`lib/elixir_nexus/mcp_server/path_resolution.ex`) treated any absolute path
+whose *last segment* matched a common source-dir name (`lib`, `src`, `app`, …) as "caller passed a
+subdir, climb to the parent." The container's own root is `/app` (Dockerfile `WORKDIR`), so
+`reindex(path: "/app")` resolved to `/` and the Indexer hung walking the whole container
+filesystem (`get_status` timed out at 5s, `GenServer.call` timeout).
+
+**Fix:** don't climb past a directory that already looks like a project root (has
+`mix.exs`/`package.json`/`go.mod`/`Cargo.toml`/`.git`/etc.) — it's the caller's intended target,
+not a source subdir. 2 new regression tests in `path_resolution_test.exs`.
 
 ## ✅ Shipped in v1.18.8 — CI test-isolation fixes (2026-08-11)
 
@@ -24,14 +62,8 @@
   LiveView test and fires into a later, unrelated test's window, racing the global `ChunkCache`/
   `QdrantClient` state. Not root-caused — worth a proper fix (e.g. assert dashboard LiveView tests
   stop their socket in `on_exit`) before it costs another release cycle.
-- **Path-resolution bug found while dogfooding:** `find_project_root/1`
-  (`lib/elixir_nexus/mcp_server/path_resolution.ex`) treats any absolute path whose *last segment*
-  matches a common source-dir name (`lib`, `src`, `app`, …) as "caller passed a subdir, climb to the
-  parent." The container's own root is `/app` (Dockerfile `WORKDIR`), so `reindex(path: "/app")`
-  resolves to `/` and the Indexer hangs walking the whole container filesystem (`get_status` times
-  out at 5s, `GenServer.call` timeout). Workaround: never pass `/app` explicitly — omit `path`, or
-  use the workspace-relative project name. Worth hardening: don't climb past a directory that itself
-  looks like a project root (has `mix.exs`/`package.json`/`.git`).
+- **Path-resolution bug found while dogfooding** — `find_project_root/1` climbing `/app` to `/`.
+  Fixed in v1.18.9, see below (and a second, deeper bug it uncovered, fixed in v1.18.10).
 
 ## ✅ Shipped in v1.18.5 — graph polish + dead-code bug fixes (2026-06-20)
 
