@@ -225,17 +225,27 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     path == mount or String.starts_with?(path, mount <> "/")
   end
 
+  @project_markers ~w(mix.exs package.json go.mod Cargo.toml pyproject.toml setup.py Gemfile pom.xml build.gradle .git)
+
   defp find_project_root(path) do
     basename = Path.basename(path)
 
     source_dirs =
       ~w(lib src app pages components utils packages services infrastructure repositories core hooks api modules controllers models views cmd internal pkg)
 
-    if basename in source_dirs and File.dir?(path) do
+    if basename in source_dirs and File.dir?(path) and not project_root?(path) do
       Path.dirname(path)
     else
       path
     end
+  end
+
+  # A path already at a project root (has a manifest/VCS marker) is the
+  # caller's intended target, not a source subdir to climb out of — this
+  # guards against e.g. "/app" (the container's own WORKDIR) being treated
+  # as a bare `app/` source dir and climbing to "/".
+  defp project_root?(path) do
+    Enum.any?(@project_markers, &File.exists?(Path.join(path, &1)))
   end
 
   defp extract_root_from_list(roots) when is_list(roots) do

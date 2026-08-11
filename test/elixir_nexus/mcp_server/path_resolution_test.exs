@@ -33,6 +33,27 @@ defmodule ElixirNexus.MCPServer.PathResolutionTest do
     end
   end
 
+  describe "resolve_path/2 — source-dir climbing" do
+    test "does not climb past a directory that is itself a project root" do
+      tmp = Path.join(System.tmp_dir!(), "path_resolution_test_#{:rand.uniform(1_000_000)}")
+      project_dir = Path.join(tmp, "app")
+      File.mkdir_p!(project_dir)
+      File.write!(Path.join(project_dir, "mix.exs"), "")
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      assert {:ok, ^project_dir, ^project_dir} = PathResolution.resolve_path(project_dir, "irrelevant")
+    end
+
+    test "still climbs to the parent for a markerless source subdir" do
+      tmp = Path.join(System.tmp_dir!(), "path_resolution_test_#{:rand.uniform(1_000_000)}")
+      lib_dir = Path.join(tmp, "lib")
+      File.mkdir_p!(lib_dir)
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      assert {:ok, ^tmp, ^lib_dir} = PathResolution.resolve_path(lib_dir, "irrelevant")
+    end
+  end
+
   describe "list_workspace_projects/0" do
     test "returns empty list when /workspace does not exist" do
       # In the test environment there is no /workspace mount
