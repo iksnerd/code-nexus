@@ -30,6 +30,7 @@ defmodule ElixirNexus.DashboardLive.Index do
       |> assign(
         current_path: "/",
         activity: [],
+        indexing_progress: %{},
         errors: [],
         errors_expanded: false,
         tick_count: 0
@@ -152,6 +153,11 @@ defmodule ElixirNexus.DashboardLive.Index do
       <div class="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2">
         <span class="text-slate-400 text-xs">Indexer</span>
         <.status_indicator status={@indexer_status} />
+        <%= if @indexer_status == "indexing" and (@indexing_progress[:total_files] || 0) > 0 do %>
+          <span class="text-amber-300 text-xs font-mono">
+            <%= @indexing_progress.files_done %>/<%= @indexing_progress.total_files %> files
+          </span>
+        <% end %>
       </div>
     </div>
     """
@@ -293,44 +299,47 @@ defmodule ElixirNexus.DashboardLive.Index do
     """
   end
 
+  # Generated from the server's own tool definitions so the card can't drift from
+  # what the MCP server exposes (it was hand-written and listed 8 of 12 tools).
   defp mcp_tools_grid(assigns) do
+    assigns = assign(assigns, :tools, mcp_tools())
+
     ~H"""
     <h3 class="text-sm font-semibold text-slate-300 mb-3">MCP Tools</h3>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <a href="/search" class="group bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
-        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-blue-400">search_code</h4>
-        <p class="text-slate-500 text-xs">Hybrid semantic + keyword search with graph re-ranking</p>
-      </a>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_callees</h4>
-        <p class="text-slate-500 text-xs">All functions called by a given function</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_callers</h4>
-        <p class="text-slate-500 text-xs">All functions that call a given function</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">analyze_impact</h4>
-        <p class="text-slate-500 text-xs">Transitive blast radius via callers-of-callers</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">get_community_context</h4>
-        <p class="text-slate-500 text-xs">Structurally coupled files via call-graph edges</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">find_module_hierarchy</h4>
-        <p class="text-slate-500 text-xs">Parents and members — modules, types, TS interfaces</p>
-      </div>
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <h4 class="text-sm font-bold text-white mb-1">get_graph_stats</h4>
-        <p class="text-slate-500 text-xs">Overview: nodes, edges, languages, layers</p>
-      </div>
-      <a href="/vectors" class="group bg-slate-800/50 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
-        <h4 class="text-sm font-bold text-white mb-1 group-hover:text-emerald-400">reindex</h4>
-        <p class="text-slate-500 text-xs">Parse and index source files for search + call graph</p>
-      </a>
+      <%= for {name, blurb, href} <- @tools do %>
+        <%= if href do %>
+          <a href={href} class="group bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-800 rounded-xl p-4 transition">
+            <h4 class="text-sm font-bold text-white mb-1 group-hover:text-blue-400"><%= name %></h4>
+            <p class="text-slate-500 text-xs"><%= blurb %></p>
+          </a>
+        <% else %>
+          <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-white mb-1"><%= name %></h4>
+            <p class="text-slate-500 text-xs"><%= blurb %></p>
+          </div>
+        <% end %>
+      <% end %>
     </div>
     """
+  end
+
+  @tool_pages %{"search_code" => "/search", "reindex" => "/vectors", "get_graph_stats" => "/graph"}
+
+  defp mcp_tools do
+    ElixirNexus.MCPServer.get_tools()
+    |> Map.values()
+    |> Enum.map(fn tool -> {tool.name, tool_blurb(tool[:description] || ""), @tool_pages[tool.name]} end)
+    |> Enum.sort_by(&elem(&1, 0))
+  end
+
+  # First clause of the tool description, e.g. "Transitive blast radius".
+  defp tool_blurb(description) do
+    description
+    |> String.split(~r/(?<=[.!?])\s|\s—\s|;\s/, parts: 2)
+    |> hd()
+    |> String.trim_trailing(".")
+    |> String.slice(0, 90)
   end
 
   defp page_footer(assigns) do
@@ -515,6 +524,7 @@ defmodule ElixirNexus.DashboardLive.Index do
     socket =
       assign(socket,
         indexer_status: indexer_status,
+        indexing_progress: Map.get(indexer, :indexing_progress) || %{},
         errors: indexer.errors,
         watcher_watching: watcher.watching,
         watcher_pending: watcher.pending

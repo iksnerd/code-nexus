@@ -134,6 +134,21 @@ defmodule ElixirNexus.DashboardLiveTest do
     end
   end
 
+  describe "MCP tools card" do
+    test "lists every tool the server exposes, under its real name", %{conn: conn} do
+      # The card was hand-written: 8 of 12 tools, and find_callees/find_callers
+      # instead of find_all_callees/find_all_callers.
+      {:ok, _view, html} = live(conn, "/")
+      card = html |> String.split("MCP Tools") |> Enum.at(1)
+
+      for name <- Map.keys(ElixirNexus.MCPServer.get_tools()) do
+        assert card =~ ">#{name}<", "missing tool #{name}"
+      end
+
+      refute card =~ ">find_callees<"
+    end
+  end
+
   describe "handle_event" do
     test "toggle_errors toggles error panel", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/")
