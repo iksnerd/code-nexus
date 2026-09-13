@@ -38,7 +38,16 @@ Hub room `code-nexus-dogfood-v1-18-12`.
 - [x] UI: Vectors "Re-index" indexed CodeNexus itself (and caused two flaky tests), wrong point/segment
   counts; dashboard tools card stale (8/12), no indexing progress; graph merged same-named folders, sized
   builtins as hubs, opened zoomed in, overlapping boxes; Tailwind play CDN replaced by a CLI build.
-- [ ] Container build + Chrome verification before tagging.
+- [x] **Verified in a locally built container** against real indexes and Chrome:
+  - transport check script 6/6
+  - control-stack and gpt-alpha reindexed with 0 foreign points; gpt-alpha 705 → 702 files, 6834 → 5009 chunks with the gitignored bundle gone
+  - weightless dead code = the 4 truly unused functions
+  - `find_all_callers` waits during the rebuild and returns `resolves_to`
+  - dashboard styled from compiled CSS with a clean console; Top Connected matches the tool
+  - Vectors counts agree
+  - gpt-alpha graph: 19 root-relative boxes, box overlap 109% → 49%, framed clear of the controls
+  - Found and fixed during verification: reconcile missed Qdrant-only foreign points, `resolves_to` dropped by
+    `compact_entity`, tool blurbs cut mid-word, box overlap defaults.
 
 ## ✅ v1.18.13 — MCP HTTP transport fixes (2026-09-13)
 
