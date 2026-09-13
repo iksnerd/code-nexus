@@ -141,6 +141,45 @@ defmodule ElixirNexus.IndexerDirectoryTest do
     end
   end
 
+  describe "gitignore handling" do
+    test "honors path patterns and .gitignore files in subdirectories", %{test_dir: test_dir} do
+      # gpt-alpha: speech/.gitignore lists `public/built/`, and the 40k-line
+      # webpack bundle under it was indexed anyway.
+      write = fn rel, content ->
+        path = Path.join(test_dir, rel)
+        File.mkdir_p!(Path.dirname(path))
+        File.write!(path, content)
+      end
+
+      write.(".gitignore", "/generated/\nlib/vendored/\n")
+      write.("lib/app.ex", "defmodule App do\n  def run, do: :ok\nend\n")
+      write.("lib/vendored/copy.ex", "defmodule Vendored do\n  def v, do: :ok\nend\n")
+      write.("generated/out.ex", "defmodule Generated do\n  def g, do: :ok\nend\n")
+      write.("speech/.gitignore", "public/built/\n*.gen.js\n")
+      write.("speech/public/built/worker.js", "function bundled() { return 1 }\n")
+      write.("speech/src/app.gen.js", "function generatedHelper() { return 2 }\n")
+      write.("speech/src/real.js", "function realSpeech() { return 3 }\n")
+      # A sibling of speech/ must not inherit speech/.gitignore.
+      write.("other/public/built/kept.js", "function keptBuilt() { return 4 }\n")
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      indexed =
+        ElixirNexus.ChunkCache.all()
+        |> Enum.map(&Path.relative_to(&1.file_path, test_dir))
+        |> Enum.uniq()
+
+      assert "lib/app.ex" in indexed
+      assert "speech/src/real.js" in indexed
+      assert "other/public/built/kept.js" in indexed
+      refute "lib/vendored/copy.ex" in indexed
+      refute "generated/out.ex" in indexed
+      refute "speech/public/built/worker.js" in indexed
+      refute "speech/src/app.gen.js" in indexed
+    end
+  end
+
   describe "reindex reconciliation" do
     test "purges chunks for files that dropped out of scope", %{test_dir: test_dir} do
       keep = Path.join(test_dir, "keep.ex")

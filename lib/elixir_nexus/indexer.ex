@@ -647,7 +647,13 @@ defmodule ElixirNexus.Indexer do
             :include ->
               case File.ls(full_path) do
                 {:ok, sub_entries} ->
-                  collect_files_recursive(root_path, full_path, sub_entries, filter, files, stats)
+                  # A .gitignore in this directory applies to its subtree only.
+                  sub_filter =
+                    if ".gitignore" in sub_entries,
+                      do: IgnoreFilter.merge_gitignore(filter, full_path, relative_path),
+                      else: filter
+
+                  collect_files_recursive(root_path, full_path, sub_entries, sub_filter, files, stats)
 
                 {:error, _} ->
                   {files, stats}

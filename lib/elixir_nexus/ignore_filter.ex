@@ -24,6 +24,7 @@ defmodule ElixirNexus.IgnoreFilter do
   @type t :: %__MODULE__{
           default_dirs: MapSet.t(),
           gitignore_dirs: MapSet.t(),
+          gitignore_path_patterns: [String.t()],
           nexusignore_dirs: MapSet.t(),
           nexusignore_path_patterns: [String.t()],
           default_file_regexes: [Regex.t()],
@@ -33,6 +34,7 @@ defmodule ElixirNexus.IgnoreFilter do
 
   defstruct default_dirs: MapSet.new(),
             gitignore_dirs: MapSet.new(),
+            gitignore_path_patterns: [],
             nexusignore_dirs: MapSet.new(),
             nexusignore_path_patterns: [],
             default_file_regexes: [],
@@ -41,7 +43,8 @@ defmodule ElixirNexus.IgnoreFilter do
 
   @doc "Load ignore patterns from defaults, .gitignore, and .nexusignore if present."
   def load(project_root) do
-    {git_dirs, git_patterns} = parse_ignore_file(Path.join(project_root, ".gitignore"))
+    {git_dirs, git_path_patterns, git_patterns} =
+      parse_ignore_file_extended(Path.join(project_root, ".gitignore"))
 
     {nexus_dirs, nexus_path_patterns, nexus_patterns} =
       parse_ignore_file_extended(Path.join(project_root, ".nexusignore"))
@@ -49,6 +52,7 @@ defmodule ElixirNexus.IgnoreFilter do
     %__MODULE__{
       default_dirs: MapSet.new(@default_dirs),
       gitignore_dirs: MapSet.new(git_dirs),
+      gitignore_path_patterns: git_path_patterns,
       nexusignore_dirs: MapSet.new(nexus_dirs),
       nexusignore_path_patterns: nexus_path_patterns,
       default_file_regexes: Enum.flat_map(@default_file_patterns, &compile_glob/1),
@@ -103,13 +107,40 @@ defmodule ElixirNexus.IgnoreFilter do
   """
   @spec classify_dir_path(String.t(), t()) :: classification()
   def classify_dir_path(relative_path, %__MODULE__{} = filter) do
-    if Enum.any?(filter.nexusignore_path_patterns, fn pattern ->
-         relative_path == pattern or String.starts_with?(relative_path, pattern <> "/")
-       end) do
-      {:ignored, :nexusignore}
-    else
-      classify_dir(Path.basename(relative_path), filter)
+    cond do
+      path_match?(filter.nexusignore_path_patterns, relative_path) -> {:ignored, :nexusignore}
+      path_match?(filter.gitignore_path_patterns, relative_path) -> {:ignored, :gitignore}
+      true -> classify_dir(Path.basename(relative_path), filter)
     end
+  end
+
+  @doc """
+  Add the rules of a `.gitignore` inside a subdirectory. Git applies them only
+  below that directory, so pass the returned filter to that subtree's walk and
+  keep using the original for its siblings. Path patterns are relative to the
+  `.gitignore`'s directory and are re-rooted with `relative_dir`.
+  """
+  @spec merge_gitignore(t(), String.t(), String.t()) :: t()
+  def merge_gitignore(%__MODULE__{} = filter, dir, relative_dir) do
+    case parse_ignore_file_extended(Path.join(dir, ".gitignore")) do
+      {[], [], []} ->
+        filter
+
+      {dirs, path_patterns, globs} ->
+        %{
+          filter
+          | gitignore_dirs: MapSet.union(filter.gitignore_dirs, MapSet.new(dirs)),
+            gitignore_path_patterns:
+              filter.gitignore_path_patterns ++ Enum.map(path_patterns, &Path.join(relative_dir, &1)),
+            gitignore_file_regexes: filter.gitignore_file_regexes ++ Enum.flat_map(globs, &compile_glob/1)
+        }
+    end
+  end
+
+  defp path_match?(patterns, relative_path) do
+    Enum.any?(patterns, fn pattern ->
+      relative_path == pattern or String.starts_with?(relative_path, pattern <> "/")
+    end)
   end
 
   @doc "Check if a directory name or file path should be ignored."
@@ -128,32 +159,27 @@ defmodule ElixirNexus.IgnoreFilter do
     classify_file(filename, filter) != :include
   end
 
-  # Like parse_ignore_file/1 but also returns path patterns (patterns with an
-  # internal slash, no globs) as a separate list for root-relative matching.
+  # Returns {simple dir names, path patterns (contain a slash, no globs), globs}.
   defp parse_ignore_file_extended(path) do
     case File.read(path) do
       {:ok, content} ->
         stripped = normalize_ignore_lines(content)
         dirs = stripped |> Enum.filter(&simple_dir_pattern?/1) |> Enum.map(&Path.basename/1)
-        path_patterns = Enum.filter(stripped, &path_only_pattern?/1)
+
+        # A leading slash anchors the pattern to the ignore file's directory, so
+        # `/generated` is a path pattern for that one directory, not a name that
+        # matches at any depth.
+        path_patterns =
+          stripped
+          |> Enum.filter(&path_only_pattern?/1)
+          |> Enum.map(&String.trim_leading(&1, "/"))
+          |> Enum.reject(&(&1 == ""))
+
         glob_patterns = Enum.filter(stripped, &glob_pattern?/1)
         {dirs, path_patterns, glob_patterns}
 
       {:error, _} ->
         {[], [], []}
-    end
-  end
-
-  defp parse_ignore_file(path) do
-    case File.read(path) do
-      {:ok, content} ->
-        stripped = normalize_ignore_lines(content)
-        dirs = stripped |> Enum.filter(&simple_dir_pattern?/1) |> Enum.map(&Path.basename/1)
-        patterns = Enum.filter(stripped, &glob_pattern?/1)
-        {dirs, patterns}
-
-      {:error, _} ->
-        {[], []}
     end
   end
 
