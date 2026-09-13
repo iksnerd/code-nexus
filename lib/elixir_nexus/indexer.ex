@@ -680,7 +680,14 @@ defmodule ElixirNexus.Indexer do
   # Returns the count of purged files. Keeps reindex reconciling rather than additive.
   defp purge_out_of_scope(in_scope_files) do
     scope_set = MapSet.new(in_scope_files)
-    stale = Enum.reject(ElixirNexus.DirtyTracker.known_files(), &MapSet.member?(scope_set, &1))
+
+    # DirtyTracker only knows files indexed in this server session. The cache can
+    # also hold chunks it never saw: hydrated from Qdrant after a restart, or
+    # written by a stray watcher event from another project.
+    stale =
+      (ElixirNexus.DirtyTracker.known_files() ++ ChunkCache.file_paths())
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(scope_set, &1))
 
     Enum.each(stale, fn path ->
       ElixirNexus.QdrantClient.delete_points_by_file(path)

@@ -164,6 +164,27 @@ defmodule ElixirNexus.IndexerDirectoryTest do
       refute drop in ElixirNexus.DirtyTracker.known_files()
     end
 
+    test "purges cached chunks from outside the project root", %{test_dir: test_dir} do
+      # Chunks from another project can sit in the collection (a stray watcher
+      # event, or hydration from Qdrant after a restart) without DirtyTracker
+      # knowing the file. Reindex must evict them too.
+      File.write!(Path.join(test_dir, "own.ex"), "defmodule Own do\n  def own, do: :ok\nend\n")
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      foreign = "/elsewhere/other_project/lib/foreign.ex"
+
+      ElixirNexus.ChunkCache.insert_many([
+        %{id: "foreign-1", file_path: foreign, name: "foreign", entity_type: :function, content: "def foreign"}
+      ])
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      refute Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == foreign))
+      assert Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == Path.join(test_dir, "own.ex")))
+    end
+
     test "purge/0 clears the index", %{test_dir: test_dir} do
       File.write!(Path.join(test_dir, "x.ex"), "defmodule X do\n  def x, do: :ok\nend\n")
 

@@ -39,7 +39,14 @@ defmodule ElixirNexus.FileWatcher do
   def handle_call(:unwatch_all, _from, state) do
     Enum.each(state.watchers, fn {path, pid} ->
       Logger.info("Unwatching directory: #{path}")
-      Process.exit(pid, :normal)
+      # Not Process.exit(pid, :normal): that signal is ignored by a process that
+      # isn't trapping exits, so the watcher kept running and kept indexing its
+      # old directory into whatever collection was active next.
+      try do
+        GenServer.stop(pid, :normal, 5_000)
+      catch
+        :exit, _already_gone -> :ok
+      end
     end)
 
     {:reply, :ok, %{state | watchers: %{}, pending: %{}}}
@@ -64,7 +71,7 @@ defmodule ElixirNexus.FileWatcher do
 
   @impl true
   def handle_info({:file_event, _watcher_pid, {path, events}}, state) do
-    if indexable_file?(path) and not ignored_path?(path) do
+    if indexable_file?(path) and not ignored_path?(path) and watched?(path, state) do
       if file_deleted?(events, path) do
         # File was deleted — clean up immediately (no debounce needed)
         Logger.info("File deleted, removing from index: #{path}")
@@ -93,7 +100,9 @@ defmodule ElixirNexus.FileWatcher do
   end
 
   def handle_info({:flush, path}, state) do
-    if Map.has_key?(state.pending, path) do
+    # Re-check at flush time: the watchers may have moved to another project
+    # during the debounce window.
+    if Map.has_key?(state.pending, path) and watched?(path, state) do
       reindex_if_dirty(path)
       {:noreply, %{state | pending: Map.delete(state.pending, path)}}
     else
@@ -122,6 +131,33 @@ defmodule ElixirNexus.FileWatcher do
       {:error, _} ->
         :ok
     end
+  end
+
+  # Only act on paths under a directory currently being watched. Anything else
+  # belongs to a project that is no longer active. Each root is matched both as
+  # given and resolved, because FSEvents reports resolved paths (a watched
+  # /var/... directory produces /private/var/... events on macOS).
+  defp watched?(path, state) do
+    state.watchers
+    |> Map.keys()
+    |> Enum.flat_map(&Enum.uniq([&1, resolve_symlinks(&1)]))
+    |> Enum.any?(fn dir ->
+      path == dir or String.starts_with?(path, String.trim_trailing(dir, "/") <> "/")
+    end)
+  end
+
+  defp resolve_symlinks(path) do
+    path
+    |> Path.expand()
+    |> Path.split()
+    |> Enum.reduce(fn segment, resolved ->
+      candidate = Path.join(resolved, segment)
+
+      case :file.read_link_all(candidate) do
+        {:ok, target} -> Path.expand(to_string(target), resolved)
+        _ -> candidate
+      end
+    end)
   end
 
   # Check if file system events indicate deletion and file is gone from disk

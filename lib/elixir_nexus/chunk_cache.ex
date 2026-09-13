@@ -82,15 +82,18 @@ defmodule ElixirNexus.ChunkCache do
     _ -> 0
   end
 
-  @doc "Number of distinct files with chunks in the cache (the table is a bag keyed by file path)."
-  def file_count do
+  @doc "Distinct file paths with chunks in the cache (the table is a bag keyed by file path)."
+  def file_paths do
     if :ets.info(@table) != :undefined do
       :ets.foldl(fn {file_path, _chunk}, acc -> MapSet.put(acc, file_path) end, MapSet.new(), @table)
-      |> MapSet.size()
+      |> MapSet.to_list()
     else
-      0
+      []
     end
   end
+
+  @doc "Number of distinct files with chunks in the cache."
+  def file_count, do: length(file_paths())
 
   def clear do
     :ets.delete_all_objects(@table)
