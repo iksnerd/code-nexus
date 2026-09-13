@@ -1,6 +1,8 @@
 defmodule ElixirNexus.Search.GraphStats do
   @moduledoc "Aggregate codebase statistics, top-connected entities, and critical-file centrality."
 
+  alias ElixirNexus.Search.{Builtins, EntityResolution}
+
   # Common framework/utility names that flood graph stats on shadcn/tailwind/React projects.
   @graph_noise_names ~w(
     cn clsx cva classnames twMerge cx Comp Slot forwardRef
@@ -54,33 +56,8 @@ defmodule ElixirNexus.Search.GraphStats do
         }
       end)
 
-    # Fan-in by callee name (downcased). Imports (`is_a`) are deliberately excluded so the
-    # ranking reflects real call relationships, not "this file imports the most" — otherwise
-    # provider/barrel modules dominate over genuine hubs.
     nodes = Map.values(graph_nodes)
-
-    call_fan_in =
-      nodes
-      |> Enum.flat_map(fn node -> Enum.map(node["calls"] || [], &call_key/1) end)
-      |> Enum.frequencies()
-
-    top_connected =
-      nodes
-      |> Enum.reject(fn node ->
-        name = node["name"] || ""
-        String.length(name) <= 2 or graph_noise_name?(name)
-      end)
-      |> Enum.map(fn node ->
-        name = node["name"] || "?"
-        out = length(node["calls"] || []) + length(node["contains"] || [])
-        in_degree = Map.get(call_fan_in, String.downcase(name), 0)
-        %{name: name, degree: out + in_degree}
-      end)
-      |> Enum.sort_by(& &1.degree, :desc)
-      # Collapse same-named entities (overloads / re-declared helpers across files): fan-in is
-      # name-keyed, so N entities named `findControl` each get the full count. Keep the highest.
-      |> Enum.uniq_by(& &1.name)
-      |> Enum.take(10)
+    top_connected = top_connected(graph_nodes, 10)
 
     critical_files = compute_critical_files(graph_nodes)
     layers = compute_layers(nodes)
@@ -123,6 +100,76 @@ defmodule ElixirNexus.Search.GraphStats do
 
   # For fan-in matching: a call like "utils.cn" or "a.b.format" keys on the final segment,
   # so a callee resolves to its bare-name node regardless of how the caller qualified it.
+  @doc """
+  Entities ranked by degree: calls out to project entities, contained members,
+  and call fan-in. Shared by get_graph_stats and the dashboard so they agree.
+
+  Imports (`is_a`) are excluded so barrel/provider modules don't outrank real
+  hubs. Test files are left out entirely. Builtin and stdlib calls (`len`, `Map.get`, `new Error`) count for
+  nothing. A qualified call `q.name` credits an entity only when `q` appears in
+  its name (`Server.handle_call`) or when `q` is a variable and the entity is a
+  method (`store.WritePiece`), so `searchParams.get` doesn't credit a `GET`
+  route handler.
+  """
+  def top_connected(graph_nodes, limit) do
+    # Test code is neither a hub nor evidence of one: a const repeated across test
+    # files would top the list, and test call sites inflate what they exercise.
+    nodes = graph_nodes |> Map.values() |> Enum.reject(&EntityResolution.test_file?(&1["file_path"] || ""))
+    project_keys = MapSet.new(nodes, &call_key(&1["name"] || ""))
+    by_key = Enum.group_by(nodes, &call_key(&1["name"] || ""))
+
+    fan_in =
+      Enum.reduce(nodes, %{}, fn caller, acc ->
+        lang = caller["language"]
+
+        caller["calls"]
+        |> List.wrap()
+        |> Enum.reject(&Builtins.builtin_call?(&1, lang))
+        |> Enum.reduce(acc, fn call, acc ->
+          by_key
+          |> Map.get(call_key(call), [])
+          |> Enum.filter(&credits?(call, &1))
+          |> Enum.reduce(acc, fn target, acc -> Map.update(acc, node_id(target), 1, &(&1 + 1)) end)
+        end)
+      end)
+
+    nodes
+    |> Enum.reject(fn node ->
+      name = node["name"] || ""
+      String.length(name) <= 2 or graph_noise_name?(name)
+    end)
+    |> Enum.map(fn node ->
+      lang = node["language"]
+
+      out =
+        Enum.count(node["calls"] || [], fn call ->
+          not Builtins.builtin_call?(call, lang) and MapSet.member?(project_keys, call_key(call))
+        end)
+
+      %{name: node["name"] || "?", degree: out + length(node["contains"] || []) + Map.get(fan_in, node_id(node), 0)}
+    end)
+    |> Enum.sort_by(& &1.degree, :desc)
+    # Collapse same-named entities (overloads / re-declared helpers across files). Keep the highest.
+    |> Enum.uniq_by(& &1.name)
+    |> Enum.take(limit)
+  end
+
+  defp credits?(call, target) do
+    case String.split(to_string(call), ".") do
+      [_bare] ->
+        true
+
+      parts ->
+        qualifier = parts |> Enum.drop(-1) |> List.last()
+        target_name = String.downcase(target["name"] || "")
+
+        String.contains?(target_name, String.downcase(qualifier)) or
+          (Regex.match?(~r/^[a-z_]/, qualifier) and (target["entity_type"] || target["type"]) == "method")
+    end
+  end
+
+  defp node_id(node), do: {node["file_path"], node["name"]}
+
   defp call_key(call) do
     call |> to_string() |> String.downcase() |> String.split(".") |> List.last() |> Kernel.||("")
   end
@@ -172,9 +219,18 @@ defmodule ElixirNexus.Search.GraphStats do
         file -> Map.update(acc, file, score, &(&1 + score))
       end
     end)
+    # Tests and generated code sit on many paths without being places anyone edits.
+    |> Enum.reject(fn {file, _score} -> EntityResolution.test_file?(file) or generated_file?(file) end)
     |> Enum.sort_by(fn {_f, s} -> -s end)
     |> Enum.take(10)
     |> Enum.map(fn {file, score} -> %{file_path: file, centrality_score: score} end)
+  end
+
+  defp generated_file?(path) do
+    base = Path.basename(path)
+
+    String.contains?(base, ["generated", ".gen.", "_pb.", ".pb.", ".min."]) or
+      String.contains?(path, ["/dist/", "/build/", "/built/", "/__generated__/"])
   end
 
   defp bfs_centrality(source, adj, scores) do

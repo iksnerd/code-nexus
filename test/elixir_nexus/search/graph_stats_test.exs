@@ -414,4 +414,141 @@ defmodule ElixirNexus.Search.GraphStatsTest do
              "Legitimate high-connectivity function should appear in top_connected"
     end
   end
+
+  describe "get_graph_stats/0 - builtins and stdlib calls don't make hubs" do
+    defp gnode(attrs) do
+      attrs = Map.new(attrs)
+
+      Map.merge(
+        %{
+          id: "#{attrs[:file_path]}:#{attrs[:name]}",
+          entity_type: :function,
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: nil,
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: []
+        },
+        attrs
+      )
+    end
+
+    defp stats(chunks) do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+      {:ok, stats} = Queries.get_graph_stats()
+      stats
+    end
+
+    test "language builtins and stdlib-qualified calls don't credit same-named project entities" do
+      # gpt-alpha: `len` 178 and `sorted` 111 topped the list from Python builtin
+      # calls; elixir-nexus: `get` and `info` from Map.get / Logger.info.
+      callers =
+        for i <- 1..12 do
+          gnode(
+            name: "step_#{i}",
+            language: :python,
+            file_path: "/w/train_#{i}.py",
+            calls: ["len", "sorted", "print", "train_model"]
+          )
+        end
+
+      elixir_callers =
+        for i <- 1..12 do
+          gnode(
+            name: "Worker#{i}.run",
+            language: :elixir,
+            file_path: "/w/lib/worker_#{i}.ex",
+            calls: ["Map.get", "Logger.info", "Enum.map"]
+          )
+        end
+
+      result =
+        stats(
+          callers ++
+            elixir_callers ++
+            [
+              gnode(name: "len", language: :python, file_path: "/w/utils/shape.py"),
+              gnode(name: "train_model", language: :python, file_path: "/w/train.py"),
+              gnode(name: "Cache.get", language: :elixir, file_path: "/w/lib/cache.ex"),
+              gnode(name: "Log.info", language: :elixir, file_path: "/w/lib/log.ex")
+            ]
+        )
+
+      top = Enum.map(result.top_connected, & &1.name)
+      assert hd(top) == "train_model"
+      refute "len" in Enum.take(top, 3)
+      refute "Cache.get" in Enum.take(top, 3)
+      refute "Log.info" in Enum.take(top, 3)
+    end
+
+    test "test files neither rank nor inflate production entities" do
+      # control-stack: `evidence` (a const in five test files) ranked first at 309,
+      # and findControl's 273 was mostly test call sites.
+      test_nodes =
+        for i <- 1..15 do
+          gnode(
+            name: "evidence",
+            entity_type: :variable,
+            language: :typescript,
+            file_path: "/app/services/evaluator_#{i}.test.ts",
+            start_line: i,
+            calls: ["findControl", "evidence"]
+          )
+        end
+
+      prod_callers =
+        for i <- 1..3 do
+          gnode(
+            name: "evaluate_#{i}",
+            language: :typescript,
+            file_path: "/app/services/eval_#{i}.ts",
+            calls: ["createEvidence"]
+          )
+        end
+
+      result =
+        stats(
+          test_nodes ++
+            prod_callers ++
+            [
+              gnode(name: "findControl", language: :typescript, file_path: "/app/services/find.ts"),
+              gnode(name: "createEvidence", language: :typescript, file_path: "/app/services/create.ts")
+            ]
+        )
+
+      top = Enum.map(result.top_connected, & &1.name)
+      refute "evidence" in top
+      assert hd(top) == "createEvidence"
+    end
+
+    test "critical_files leaves out test and generated files" do
+      chain = fn prefix, file ->
+        [
+          gnode(name: "#{prefix}_a", language: :typescript, file_path: file, calls: ["#{prefix}_b"]),
+          gnode(name: "#{prefix}_b", language: :typescript, file_path: file, calls: ["#{prefix}_c"]),
+          gnode(name: "#{prefix}_c", language: :typescript, file_path: file, calls: ["#{prefix}_d"]),
+          gnode(name: "#{prefix}_d", language: :typescript, file_path: file)
+        ]
+      end
+
+      result =
+        stats(
+          chain.("gen", "/app/src/wire/generated.js") ++
+            chain.("spec", "/app/src/wire/conformance.test.ts") ++
+            chain.("real", "/app/src/lib/restore-client.ts")
+        )
+
+      files = Enum.map(result.critical_files, & &1.file_path)
+      assert "/app/src/lib/restore-client.ts" in files
+      refute "/app/src/wire/generated.js" in files
+      refute "/app/src/wire/conformance.test.ts" in files
+    end
+  end
 end

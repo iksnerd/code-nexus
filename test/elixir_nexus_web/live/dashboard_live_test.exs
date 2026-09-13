@@ -73,6 +73,67 @@ defmodule ElixirNexus.DashboardLiveTest do
     end
   end
 
+  describe "top connected panel" do
+    test "shows the same ranking as get_graph_stats", %{conn: conn} do
+      # The dashboard computed its own degree (outgoing_degree + incoming_count),
+      # so it disagreed with the MCP tool (weightless: runGet 42 vs HandleAPI 27).
+      base = %{
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: nil,
+        visibility: :public,
+        parameters: [],
+        is_a: [],
+        contains: [],
+        language: :go,
+        entity_type: :function
+      }
+
+      callers =
+        for i <- 1..4,
+            do:
+              Map.merge(base, %{
+                id: "c#{i}",
+                name: "caller#{i}",
+                file_path: "/w/c#{i}.go",
+                calls: ["HubTarget", "fmt.Println", "len"]
+              })
+
+      chunks =
+        callers ++
+          [
+            Map.merge(base, %{id: "h", name: "HubTarget", file_path: "/w/hub.go", calls: []}),
+            Map.merge(base, %{
+              id: "n",
+              name: "NoisyMain",
+              file_path: "/w/main.go",
+              calls: Enum.map(1..30, &"fmt.Println#{&1}") ++ List.duplicate("len", 20)
+            })
+          ]
+
+      ElixirNexus.ChunkCache.clear()
+      ElixirNexus.GraphCache.clear()
+      ElixirNexus.ChunkCache.insert_many(chunks)
+      ElixirNexus.GraphCache.rebuild_from_chunks(chunks)
+
+      on_exit(fn ->
+        ElixirNexus.ChunkCache.clear()
+        ElixirNexus.GraphCache.clear()
+      end)
+
+      {:ok, stats} = ElixirNexus.Search.Queries.get_graph_stats()
+      {:ok, _view, html} = live(conn, "/")
+
+      [top_tool | _] = stats.top_connected
+      assert top_tool.name == "HubTarget"
+
+      panel = html |> String.split("Top Connected") |> Enum.at(1) |> String.slice(0, 1500)
+      assert panel =~ "HubTarget"
+      refute panel =~ "NoisyMain", "builtin-heavy callers must not rank on the dashboard either"
+    end
+  end
+
   describe "handle_event" do
     test "toggle_errors toggles error panel", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/")

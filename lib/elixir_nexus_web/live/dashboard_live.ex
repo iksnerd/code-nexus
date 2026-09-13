@@ -380,19 +380,11 @@ defmodule ElixirNexus.DashboardLive.Index do
 
     {calls, imports, contains} = count_relationships(graph_nodes)
 
+    # Same ranking as the get_graph_stats MCP tool, so the two views agree.
     top_connected =
       graph_nodes
-      |> Map.values()
-      |> Enum.reject(fn node ->
-        name = node["name"] || ""
-        String.length(name) <= 2
-      end)
-      |> Enum.map(fn node ->
-        degree = (node["outgoing_degree"] || 0) + (node["incoming_count"] || 0)
-        {node["name"] || "?", degree}
-      end)
-      |> Enum.sort_by(fn {_, d} -> -d end)
-      |> Enum.take(5)
+      |> ElixirNexus.Search.GraphStats.top_connected(5)
+      |> Enum.map(&{&1.name, &1.degree})
 
     indexer_status =
       case indexer.status do
