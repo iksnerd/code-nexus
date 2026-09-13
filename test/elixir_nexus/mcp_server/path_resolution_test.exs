@@ -54,6 +54,59 @@ defmodule ElixirNexus.MCPServer.PathResolutionTest do
     end
   end
 
+  describe "resolve_bare_name/2 — multiple mounts" do
+    setup do
+      tmp = Path.join(System.tmp_dir!(), "path_resolution_test_#{:rand.uniform(1_000_000)}")
+      mounts = for n <- 1..2, do: Path.join(tmp, "workspace#{n}")
+      Enum.each(mounts, &File.mkdir_p!/1)
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      [m1, m2] = mounts
+      {:ok, m1: m1, m2: m2, mounts: [{m1, "/Users/me/www"}, {m2, "/Users/me/GolandProjects"}]}
+    end
+
+    test "single match resolves to it", %{m2: m2, mounts: mounts} do
+      File.mkdir_p!(Path.join(m2, "weightless"))
+
+      assert PathResolution.resolve_bare_name("weightless", mounts) == {:ok, Path.join(m2, "weightless")}
+    end
+
+    test "prefers the mount where the name is a real project over an empty dir", ctx do
+      File.mkdir_p!(Path.join(ctx.m1, "weightless"))
+      File.mkdir_p!(Path.join(ctx.m2, "weightless"))
+      File.write!(Path.join([ctx.m2, "weightless", "go.mod"]), "module weightless\n")
+
+      assert PathResolution.resolve_bare_name("weightless", ctx.mounts) ==
+               {:ok, Path.join(ctx.m2, "weightless")}
+    end
+
+    test "reports ambiguity with host paths when the name is a real project in several mounts", ctx do
+      for m <- [ctx.m1, ctx.m2] do
+        File.mkdir_p!(Path.join([m, "shared", "lib"]))
+      end
+
+      assert PathResolution.resolve_bare_name("shared", ctx.mounts) ==
+               {:ambiguous, ["/Users/me/www/shared", "/Users/me/GolandProjects/shared"]}
+    end
+
+    test "falls back to the first match when none look like a project", ctx do
+      File.mkdir_p!(Path.join(ctx.m1, "empty"))
+      File.mkdir_p!(Path.join(ctx.m2, "empty"))
+
+      assert PathResolution.resolve_bare_name("empty", ctx.mounts) == {:ok, Path.join(ctx.m1, "empty")}
+    end
+
+    test "resolves a single-project mount by its host basename", %{m1: m1} do
+      File.write!(Path.join(m1, "mix.exs"), "")
+
+      assert PathResolution.resolve_bare_name("council-hub", [{m1, "/Users/me/council-hub"}]) == {:ok, m1}
+    end
+
+    test "returns :not_found when no mount has the name", %{mounts: mounts} do
+      assert PathResolution.resolve_bare_name("nope", mounts) == :not_found
+    end
+  end
+
   describe "list_workspace_projects/0" do
     test "returns empty list when /workspace does not exist" do
       # In the test environment there is no /workspace mount

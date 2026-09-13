@@ -60,7 +60,7 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 ## Testing
 
 ```bash
-mix test                    # All tests (~728, 0 compile warnings)
+mix test                    # All tests (0 compile warnings)
 mix test --trace            # Verbose output
 mix test --include performance  # Performance benchmarks (32 tests)
 mix test test/elixir_nexus/parsers/  # Parser tests
@@ -69,6 +69,11 @@ mix test test/elixir_nexus/indexer_directory_test.exs # Directory indexing tests
 ```
 
 Tests run with `skip_compilation?: true` so they don't need Rust/Cargo in PATH.
+
+Tests share the dev Qdrant (`localhost:6333`) with real project collections:
+
+- **Restoring the collection:** a test that switches collections must restore it with `QdrantClient.switch_collection_force(original)` in `on_exit`. Restoring the `:qdrant_runtime` app env alone isn't enough, because writes use the GenServer's own `state.collection`. That mismatch caused the weekly CI flake fixed after v1.18.11.
+- **Cleanup:** `test_helper.exs` `after_suite` deletes suite-generated collections by exact name or regex. If a new test creates a collection, add its name there. Never widen it to a broad `_test` match.
 
 ## Running
 
@@ -88,8 +93,8 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 Set `WORKSPACE` to mount an external directory at `/workspace:ro` inside the container. Up to four additional mounts are supported via `WORKSPACE_2`…`WORKSPACE_5` (each needs a matching `WORKSPACE_HOST_N` for path translation): `WORKSPACE=~/www WORKSPACE_HOST=~/www WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects WORKSPACE_3=~/WebstormProjects WORKSPACE_HOST_3=~/WebstormProjects docker-compose up -d`. Without `WORKSPACE`, only `/app` (the CodeNexus repo) is indexable. `WORKSPACE_HOST` env var tells the container what host path maps to `/workspace`, enabling automatic path translation in `resolve_path/2` in `mcp_server/path_resolution.ex`.
 
 **Path resolution order** (`reindex` path argument):
-1. `nil` / omitted → indexes `/app` (CodeNexus itself)
-2. Bare project name (e.g. `"claude-vision"`) → `/workspace/claude-vision` if it exists
+1. `nil` / omitted → the only workspace project if exactly one is mounted; an error listing projects if several; `/app` (CodeNexus itself) only in local dev with no workspace (Docker mode with no workspace errors)
+2. Bare project name (e.g. `"claude-vision"`) → `/workspaceN/claude-vision` via `resolve_bare_name/2`. If the name exists in several mounts, a real project (manifest/VCS marker or source dirs) wins over an empty dir; several real projects → error listing the host paths
 3. Full host path (e.g. `"/Users/yourname/Documents/claude-vision"`) → stripped via matching `WORKSPACE_HOST_N` → `/workspaceN/claude-vision`
 4. Container path (e.g. `"/workspace/claude-vision"`) → passthrough
 

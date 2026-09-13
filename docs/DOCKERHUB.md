@@ -12,7 +12,7 @@ WORKSPACE=~/Documents docker-compose up -d
 
 This starts CodeNexus (Phoenix dashboard on `:4100`, MCP Streamable HTTP on `:3002`) and Qdrant (vector DB on `:6333`). The container reaches Ollama on the host via `host.docker.internal:11434`.
 
-Both services use `restart: unless-stopped`, so they come back automatically after a Docker daemon restart or host reboot — no manual re-launch needed unless you explicitly `docker stop` them first.
+Both services use `restart: always`, so they come back after a Docker daemon restart or host reboot. `unless-stopped` isn't enough on Docker Desktop: it records its own shutdown as a manual stop and then skips the auto-start.
 
 ### Without docker-compose
 
@@ -56,11 +56,13 @@ The `reindex` MCP tool resolves bare project names across all active mounts:
 
 | Input | Resolves to |
 |-------|------------|
-| `"my-project"` | first mount where `/workspaceN/my-project` exists |
+| `"my-project"` | `/workspaceN/my-project` in whichever mount has it (see below) |
 | `"/Users/you/Documents/my-project"` | `/workspace/my-project` (auto-translated) |
 | `"/workspace/my-project"` | `/workspace/my-project` (passthrough) |
 | _(omitted, one project mounted)_ | that project (auto-selected) |
 | _(omitted, no workspace)_ | `/app` (CodeNexus itself) |
+
+If a bare name exists in more than one mount, the one that is a real project (has a manifest like `go.mod`/`package.json`/`mix.exs`, a `.git`, or source dirs) wins over an empty directory of the same name. If it's a real project in several mounts, `reindex` returns an error listing the host paths; pass the full path to pick one.
 
 If a project isn't found, the error lists all available projects across all mounts.
 
@@ -150,10 +152,7 @@ Add to your project's `.mcp.json`:
 
 ## Image Size
 
-The runtime image is **~594MB** (multi-stage build — Rust toolchain is build-only).
-
-
-[github.com/iksnerd/code-nexus](https://github.com/iksnerd/code-nexus)
+The runtime image is about 596MB. It's a multi-stage build, so the Rust toolchain stays in the build stage.
 
 ## Tags
 
@@ -162,10 +161,10 @@ available as `vX.Y.Z` tags. See the [Docker Hub repository page](https://hub.doc
 for all tags, and the [GitHub tags page](https://github.com/iksnerd/code-nexus/tags)
 or `git log` for what each one shipped.
 
-The current release is `v1.18.11`:
+The current release is `v1.18.12`:
 
 ```bash
-docker pull iksnerd/code-nexus:v1.18.11
+docker pull iksnerd/code-nexus:v1.18.12
 ```
 
 The image exposes the Phoenix dashboard on port `4100` and MCP Streamable HTTP

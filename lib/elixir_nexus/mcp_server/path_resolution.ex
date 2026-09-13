@@ -61,15 +61,28 @@ defmodule ElixirNexus.MCPServer.PathResolution do
           {:ok, root, path}
         else
           bare = Path.basename(path)
-          did_you_mean = if resolve_bare_name(bare), do: " Did you mean '#{bare}'?", else: ""
+
+          did_you_mean =
+            if resolve_bare_name(bare, workspace_mounts()) != :not_found,
+              do: " Did you mean '#{bare}'?",
+              else: ""
+
           {:error, "Path '#{path}' not found (resolved to '#{root}').#{did_you_mean}" <> workspace_hint()}
         end
 
       # Bare project name — resolve against any active workspace mount
       true ->
-        case resolve_bare_name(path) do
-          nil -> {:error, "Project '#{path}' not found in workspace." <> workspace_hint()}
-          workspace_path -> {:ok, workspace_path, path}
+        case resolve_bare_name(path, workspace_mounts()) do
+          {:ok, workspace_path} ->
+            {:ok, workspace_path, path}
+
+          {:ambiguous, host_paths} ->
+            {:error,
+             "Project '#{path}' exists in several workspace mounts: #{Enum.join(host_paths, ", ")}. " <>
+               "Pass the full path to pick one."}
+
+          :not_found ->
+            {:error, "Project '#{path}' not found in workspace." <> workspace_hint()}
         end
     end
   end
@@ -194,23 +207,46 @@ defmodule ElixirNexus.MCPServer.PathResolution do
     end)
   end
 
-  defp resolve_bare_name(name) do
-    Enum.find_value(workspace_mounts(), fn {mount, host_prefix} ->
-      cond do
-        # Mount contains a child dir matching the name: /workspace2/llm-memory
-        File.dir?(Path.join(mount, name)) ->
-          Path.join(mount, name)
+  @doc """
+  Resolve a bare project name against `mounts` (`[{container_path, host_prefix}]`).
 
-        # Mount itself is a single-project mount whose host basename matches:
-        # WORKSPACE_HOST_4=/Users/yourname/council-hub → bare "council-hub" resolves to /workspace4
-        host_prefix != "" and Path.basename(host_prefix) == name and File.dir?(mount) ->
-          mount
+  When the name matches in more than one mount, a match that looks like a real
+  project wins over an empty or markerless dir of the same name (e.g. a stray
+  `~/www/weightless` next to the real `~/GolandProjects/weightless`). If several
+  real projects match, returns `{:ambiguous, host_paths}` so the caller can ask
+  for a full path. If none look like a project, the first match is kept — the
+  indexer then reports the empty result loudly.
+  """
+  def resolve_bare_name(name, mounts) do
+    candidates =
+      Enum.flat_map(mounts, fn {mount, host_prefix} ->
+        cond do
+          # Mount contains a child dir matching the name: /workspace2/llm-memory
+          File.dir?(Path.join(mount, name)) ->
+            [{Path.join(mount, name), host_display(host_prefix, mount, name)}]
 
-        true ->
-          nil
-      end
-    end)
+          # Mount itself is a single-project mount whose host basename matches:
+          # WORKSPACE_HOST_4=/Users/yourname/council-hub → bare "council-hub" resolves to /workspace4
+          host_prefix != "" and Path.basename(host_prefix) == name and File.dir?(mount) ->
+            [{mount, host_prefix}]
+
+          true ->
+            []
+        end
+      end)
+
+    case {candidates, Enum.filter(candidates, fn {path, _} -> real_project?(path) end)} do
+      {[], _} -> :not_found
+      {_, [{path, _}]} -> {:ok, path}
+      {[{path, _} | _], []} -> {:ok, path}
+      {_, real} -> {:ambiguous, Enum.map(real, fn {_, display} -> display end)}
+    end
   end
+
+  defp host_display("", mount, name), do: Path.join(mount, name)
+  defp host_display(host_prefix, _mount, name), do: Path.join(host_prefix, name)
+
+  defp real_project?(path), do: project_root?(path) or looks_like_project_root?(path)
 
   # Translate host filesystem paths to container paths using any active workspace mount.
   defp translate_host_path(path) do

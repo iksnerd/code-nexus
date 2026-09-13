@@ -8,6 +8,37 @@ directly: class/method extraction, `find_module_hierarchy` correctly resolves a 
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
+## 🚧 Unreleased (on main, next patch) — test isolation + bare-name resolution (2026-09-13)
+
+- [x] **Weekly scheduled CI flake root-caused and fixed.** The scheduled run failed Aug 17 and Sep 7
+  (passed Aug 24/31 on the same commit) on `delete_file/1 removes file from ChunkCache and GraphCache`
+  (`indexer_file_test.exs:98`, `chunks_before` empty). The v1.18.8 theory below (dashboard tick timer)
+  was wrong. Real cause: the `switch_collection_force/1` describe in `qdrant_client_test.exs`
+  force-switched to `nexus_definitely_does_not_exist_xyz` and its `on_exit` restored only the
+  `:qdrant_runtime` app env. Reads use that env; writes use the `QdrantClient` GenServer's own
+  `state.collection`, which stayed on the fake name. When that test was the last collection switch in
+  the random order, later upserts 404'd and nothing reached ChunkCache. Fix: `on_exit` calls
+  `switch_collection_force(original_collection)`, which resets both. Verified with a throwaway test
+  (old teardown leaves writes ≠ reads, new one keeps them in sync).
+- [x] **Test collections no longer leak into the shared Qdrant.** Same env-only restore bug in
+  `mcp_server_reindex_test.exs` left the GenServer pointed at a deleted per-test collection, which a
+  later reset recreated. Fixed the teardown, renamed the `mcp_autoreindex_` tmp dir to
+  `mcp_autoreindex_test_` (so `test_collection?/1` hides it), and `test_helper.exs` `after_suite` now
+  sweeps suite-generated collections by exact name/regex. It never matches a broad `_test` pattern,
+  since the suite shares Qdrant with real projects. Two back-to-back full runs: the first removed 8
+  leaked collections and created none, the second changed nothing.
+- [x] **Bare project name in several mounts.** `PathResolution.resolve_bare_name/2` now collects every
+  matching mount. A match that is a real project (manifest/VCS marker or source dirs) wins over an
+  empty dir of the same name, so `weightless` resolves to `~/GolandProjects/weightless` instead of the
+  empty `~/www/weightless`. Several real matches return an error listing the host paths and asking for
+  a full path. If no match looks like a project, the first one is kept (the indexer's 0-file error
+  stays loud). 6 new tests in `path_resolution_test.exs`.
+- [x] Docs: README drift pass (tool count, mount count, WORKSPACE_HOST in quick start, CLI Go
+  version) with reference sections split into `docs/`; DOCKERHUB.md and CLAUDE.md path-resolution
+  notes updated.
+
+818 tests green (51 excluded), compile + format clean.
+
 ## ✅ Shipped in v1.18.11 — fix truncated content corrupting embedding batches (2026-08-11)
 
 Found dogfooding on `gpt-alpha` (a real Python codebase, 283 `.py` files): indexing failed with
@@ -85,7 +116,7 @@ not a source subdir. 2 new regression tests in `path_resolution_test.exs`.
 - **v1.18.7 shipped the same day** but its CI run failed on this bug (tag `v1.18.7` / commit
   `6a1235b` is public on Docker Hub only via GoReleaser CLI binaries — no Docker image was ever
   built from it, so it's not a live release artifact, just superseded).
-- **Known flake (not fixed, not blocking):** a second CI run on v1.18.8 failed once more, this time
+- **Known flake (fixed 2026-09-13, see Unreleased — the theory below was wrong):** a second CI run on v1.18.8 failed once more, this time
   on `delete_file/1 removes file from ChunkCache and GraphCache` (`ChunkCache.all()` came back empty
   right after a synchronous `index_file` call returned). 5+ local reruns with different seeds stayed
   green; a CI rerun of the same commit also went green. Leading theory: `DashboardLive`'s 3s
@@ -131,7 +162,7 @@ not a source subdir. 2 new regression tests in `path_resolution_test.exs`.
   cluster). `app.js`, `graph_live.ex`. Validated live via chrome-devtools.
 - **MCP tool descriptions** refreshed (layers, implementors, dead-code filtering).
 
-### ⚠️ Observed during release — purge↔boot-reload race (worth a fix)
+### ✅ Observed during release — purge↔boot-reload race (fixed in v1.18.4)
 After recreating the container, a `purge` issued while the boot auto-reload was still hydrating ETS
 from Qdrant let the subsequent `reindex` re-seed DirtyTracker from stale Qdrant data — so most files
 read as "unchanged" and were skipped, leaving a near-empty index (0 chunks). Recovery: purge again
@@ -140,22 +171,19 @@ wait for or invalidate the boot auto-reload, or skip DirtyTracker seeding immedi
 
 ## Known issues
 
-### ✅ FIXED (on main, unshipped) — `analyze_impact` under-reported with same-named callers
+### ✅ Shipped in v1.18.3 — `analyze_impact` under-reported with same-named callers
 
 Found via the MCP tool test (2026-06-20): `analyze_impact("createGcpConnector")` returned **2
 affected** while `find_all_callers` found **4** — it dropped two of three `POST` route handlers.
 `impact_analysis.ex` keyed both the caller dedup (`uniq_by(name)`) and the `visited` set on the bare
 name, so all `POST`s collapsed to one and traversal stopped after the first (endemic in Next.js, where
 every `route.ts` has GET/POST). Fixed by keying both on `{name, file_path}` (commit `2ea5b47`).
-Regression test asserts all 3 same-named POST callers across files are counted. **Ships in the next
-image** (currently live image is v1.18.2).
+Regression test asserts all 3 same-named POST callers across files are counted.
 
 ### Carried-over housekeeping
 
-- [ ] **Test-collection leakage** into shared Qdrant — `nexus_*_test` / `nexus_mcp_autoreindex_*`
-  collections reappear every test run (deleted manually 2026-06-20; will recur). Proper fix: namespace
-  test collections under one prefix and exclude it, or run tests against a separate Qdrant.
-- [ ] Re-enable CI once GitHub Actions quota resets.
+- [x] **Test-collection leakage** into shared Qdrant — fixed 2026-09-13 (see Unreleased).
+- [x] Re-enable CI once GitHub Actions quota resets — CI runs again (push + weekly schedule).
 
 ## ✅ Shipped in v1.18.2 — interface→implementor edges (Phase 2 #3) (2026-06-20)
 
@@ -272,7 +300,7 @@ implementor edges; an optional `.nexus.toml` overrides layer globs and declares 
   now returns a `layers` breakdown (entities per layer), classified on root-relative paths.
   **Files:** `layers.ex` (new), `project_config.ex`, `search/graph_stats.ex`. Also fixed the
   `top_connected` `findControl ×6` dup (`uniq_by(name)`) found during live verify.
-- [ ] **Increment #3 — interface→implementor edges** (structural / naming match) for hexagonal
+- [x] **Increment #3 — interface→implementor edges** (shipped in v1.18.2) (structural / naming match) for hexagonal
   navigation — the last piece that would resolve the DI-adapter dead-code false positives the live
   run surfaced (`createOktaSyncAdapter`, RBAC fns, etc.).
 
@@ -389,7 +417,7 @@ returns fields + 12 receiver methods, bare-name `weightless` now returns a loud
   - **Files:** `native/tree_sitter_nif/src/lib.rs` (NIF rebuilt), `parsers/go/entities.ex`. NIF + parser integration tests added.
 - [x] **Go `imports` edges (0)** — same string-literal NIF bug; `ImportsPackage.extract_imports` now recovers paths, propagated to all entities' `is_a`. Verified end-to-end on `weightless`.
 - [x] Rebuild + push Docker image (`v1.15.0` + `latest`, arm64) and re-verify against `weightless` — done, all four findings confirmed fixed live.
-- [ ] **Bare-name multi-mount ambiguity** — `weightless` exists under BOTH `/workspace` (www, empty) and `/workspace4` (GolandProjects, the real Go project). `resolve_bare_name` picks `/workspace` first. The loud 0-file error now makes this obvious, but consider: when a bare name matches multiple mounts, prefer the non-empty one or report the ambiguity. Low priority now that the failure is loud.
+- [x] **Bare-name multi-mount ambiguity** (fixed 2026-09-13, see Unreleased) — `weightless` exists under BOTH `/workspace` (www, empty) and `/workspace4` (GolandProjects, the real Go project). `resolve_bare_name` picks `/workspace` first. The loud 0-file error now makes this obvious, but consider: when a bare name matches multiple mounts, prefer the non-empty one or report the ambiguity. Low priority now that the failure is loud.
 
 ---
 
@@ -467,15 +495,15 @@ returns fields + 12 receiver methods, bare-name `weightless` now returns a loud
 
 ### Cross-language support gaps
 - [x] **Go module hierarchy:** Method receivers linked as struct children — shipped v1.11.0
-- [ ] **Path aliases:** `@/` and tsconfig `paths` resolution (partially done; needs alias expansion)
+- [ ] **Path aliases:** `search/entity_resolution.ex` already applies tsconfig `compilerOptions.paths` and strips `@/`. Needs verification on a real aliased Next.js project before checking off
 
 ### Graph visualization (D3)
 - [ ] Grouped/clustered layout — file containers with collapsible modules (v0.8.0 → deferred)
 - [ ] Filter framework noise in `get_graph_stats` top-connected (partially done; could improve)
 
 ### Upstream / OSS
-- [ ] ExMCP timeout patch: upstream configurable timeout support or remove `sed` patch
-- [ ] Secret audit: run `gitleaks` in CI (scheduled weekly — already wired)
+- [ ] ExMCP timeout patch: upstream configurable timeout support or remove `sed` patch. `ex_mcp` 1.3 is out (we pin 0.9.0); check whether it exposes the tool-call timeout and header-length options before a major-version bump
+- [x] Secret audit: `gitleaks` runs in CI (`secret-scan` job, push + weekly schedule)
 - [x] GitHub topics: `mcp`, `code-intelligence`, `tree-sitter`, `qdrant` + 10 more — already set
 
 ---
@@ -491,7 +519,7 @@ mix test --exclude performance --exclude multi_project  # Tests pass
 
 **Full test suite:**
 ```bash
-mix test                           # All 763+ tests
+mix test                           # Full suite
 mix test --include performance     # + 32 benchmarks
 ```
 

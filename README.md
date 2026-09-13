@@ -8,29 +8,33 @@
 
 <h1 align="center">CodeNexus</h1>
 
-<p align="center">Code intelligence MCP server — graph-powered semantic search, call graph traversal, and impact analysis for any codebase.</p>
+<p align="center">An MCP server that gives AI agents semantic search, call graphs, and impact analysis over your codebase.</p>
 
-Built on Elixir/OTP with Ollama for dense embeddings, Qdrant for hybrid vector + keyword search (RRF fusion), and Sourceror/Tree-sitter for polyglot AST parsing. Indexing is incremental — only changed files are re-parsed — and runs live as files change, so it holds up on large codebases.
+Grep finds strings. An agent refactoring code needs to know who calls a function, what a change breaks two hops out, and where the code for "retry logic in the HTTP client" lives when nothing is named `retry`. CodeNexus parses your project into a call graph, embeds each function, and serves both over MCP to Claude Code, Cursor, or any other MCP client.
+
+It runs on Elixir/OTP. Ollama produces the dense embeddings, Qdrant does hybrid vector + keyword search with RRF fusion, and Sourceror plus Tree-sitter parse ten languages. Indexing is incremental: only changed files are re-parsed, and a file watcher keeps the index current while you edit.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
 ## Quick Start
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com) running with the embedding model pulled:
+You need [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com) with the embedding model pulled:
 
 ```bash
 ollama pull embeddinggemma:300m
 ```
 
-Then start CodeNexus with access to your projects:
+No Ollama? Set `EMBEDDING_BACKEND=tfidf` to use local TF-IDF embeddings instead. Indexing is faster; semantic matches are weaker.
+
+Start CodeNexus with read access to your projects:
 
 ```bash
-WORKSPACE=~/projects docker-compose up -d
+WORKSPACE=~/projects WORKSPACE_HOST=~/projects docker-compose up -d
 ```
 
-`WORKSPACE` sets which host directory CodeNexus can read for indexing. It's mounted read-only at `/workspace` inside the container. MCP `reindex(path)` accepts host paths (e.g. `~/projects/my-app`) — they're automatically translated to container paths.
+`WORKSPACE` is mounted read-only at `/workspace` in the container. `WORKSPACE_HOST` tells the server which host path that is, so `reindex` accepts host paths like `~/projects/my-app` and translates them. Without `WORKSPACE`, only the CodeNexus repo itself (`/app`) is indexable.
 
-Projects scattered across multiple directories? Add up to two more mounts:
+Projects spread across several directories? Add up to four more mounts, each with its own `WORKSPACE_HOST_N`:
 
 ```bash
 WORKSPACE=~/projects WORKSPACE_HOST=~/projects \
@@ -38,17 +42,25 @@ WORKSPACE_2=~/GolandProjects WORKSPACE_HOST_2=~/GolandProjects \
 docker-compose up -d
 ```
 
-Without `WORKSPACE`, only the CodeNexus repo itself (`/app`) is indexable.
+This starts two containers:
 
-This starts three services in a single BEAM instance:
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `code_nexus` | `localhost:4100` | Phoenix dashboard (search, graph, vectors, stats) |
+| `code_nexus` | `localhost:3002` | MCP server (Streamable HTTP at `/mcp`) |
+| `qdrant` | `localhost:6333` | Vector database |
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Phoenix Dashboard | `localhost:4100` | Web UI for search, vectors, stats |
-| MCP HTTP Server | `localhost:3002` | MCP tools for AI agents |
-| Qdrant | `localhost:6333` | Vector database |
+The dashboard and the MCP server run in the same BEAM, so they share caches and live updates.
 
-**Connect Claude Code** — add to your project's `.mcp.json`:
+Check that everything came up:
+
+```bash
+curl -s localhost:4100/health
+```
+
+It returns JSON with the status of MCP, Qdrant, and Ollama, and responds with HTTP 503 if any of them is down. An unreachable Ollama is the usual culprit; the container expects it at `host.docker.internal:11434`.
+
+**Connect Claude Code** by adding this to your project's `.mcp.json`:
 
 ```json
 {
@@ -63,18 +75,24 @@ This starts three services in a single BEAM instance:
 
 ### Indexing
 
-Once running, use the `reindex` MCP tool from Claude Code (or any MCP client) — it accepts a path to your project and is the recommended approach. Claude Code will call it automatically when you ask about code.
+Nothing is searchable until a project is indexed. Call the `reindex` MCP tool with your project; Claude Code usually does this on its own when you ask about code. The first index of a large project takes a while, since every chunk goes through Ollama. After that, only changed files are re-parsed. The path can be:
 
-To exclude paths from indexing, add a `.nexusignore` file to your project root (gitignore-style globs). CodeNexus also respects `.gitignore` automatically. A default deny list covers `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar noise.
+- a bare project name, like `my-app`, found in any mounted workspace
+- a host path, like `~/projects/my-app`
+- a container path, like `/workspace/my-app`
+
+If a bare name exists in more than one mount, the directory that is a real project (has a manifest, a `.git`, or source dirs) wins over an empty one. If it's a real project in several mounts, `reindex` asks for the full path.
+
+To exclude paths, add a `.nexusignore` file (gitignore-style globs) to the project root. `.gitignore` is respected too, and a built-in deny list already skips `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar.
 
 ### Project configuration (`.nexus.toml`)
 
-Architecture awareness is derive-first: CodeNexus infers a file's layer from directory conventions (`ports`, `adapters`/`infrastructure`, `services`, `repositories`, `core`/`entities`, presentation) and surfaces the breakdown in `get_graph_stats`. No config is required.
+CodeNexus infers each file's architectural layer from directory names (`ports`, `adapters`/`infrastructure`, `services`, `repositories`, `core`/`entities`, presentation) and reports the breakdown in `get_graph_stats`. No config is required.
 
-An optional `.nexus.toml` at the project root overrides what convention can't guess. Both sections are optional:
+An optional `.nexus.toml` at the project root covers what the conventions can't guess. Both sections are optional:
 
 ```toml
-# Files reachable only through the framework or dependency injection — route
+# Files reachable only through the framework or dependency injection: route
 # handlers, sitemaps, wired adapters. Their exports are excluded from find_dead_code.
 [entry_points]
 include = ["app/**/route.ts", "app/sitemap.ts", "app/manifest.ts"]
@@ -85,34 +103,20 @@ ports = "core/ports/**"
 adapters = "infrastructure/**"
 ```
 
-Globs are gitignore-style: `**` spans directories, `*` matches within a path segment.
+Globs are gitignore-style: `**` spans directories, `*` matches within one path segment.
 
 ### CLI
 
-A standalone `nexus` CLI is available for scripting and terminal use — no Elixir required.
+The `nexus` CLI talks to a running server from the terminal or scripts. It's a standalone binary, so it doesn't need Elixir installed. Pick your platform:
 
-**macOS (Apple Silicon)**
 ```bash
+# macOS Apple Silicon: nexus_darwin_arm64   macOS Intel: nexus_darwin_amd64
+# Linux x86-64:        nexus_linux_amd64    Linux ARM:   nexus_linux_arm64
 curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_darwin_arm64.tar.gz | tar xz
 sudo mv nexus /usr/local/bin/
 ```
 
-**macOS (Intel)**
-```bash
-curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_darwin_amd64.tar.gz | tar xz
-sudo mv nexus /usr/local/bin/
-```
-
-**Linux (amd64)**
-```bash
-curl -L https://github.com/iksnerd/code-nexus/releases/latest/download/nexus_linux_amd64.tar.gz | tar xz
-sudo mv nexus /usr/local/bin/
-```
-
-Or build from source (requires Go 1.21+):
-```bash
-cd cli && make build && sudo mv nexus /usr/local/bin/
-```
+Or build from source (Go 1.26+): `cd cli && make build && sudo mv nexus /usr/local/bin/`
 
 ```bash
 nexus search "error handling in HTTP client"
@@ -123,21 +127,30 @@ nexus status
 nexus reindex ~/projects/myapp
 ```
 
-Run `nexus` with no arguments for an interactive command picker. All commands accept `--server` (default `http://localhost:3002`) or `NEXUS_URL` env var to point at a remote server.
+Run `nexus` with no arguments for an interactive command picker. Every command takes `--server` (default `http://localhost:3002`) or reads `NEXUS_URL`. More in [cli/README.md](cli/README.md).
 
-### Local Development
+## MCP Tools
 
-For building and testing CodeNexus itself:
+Twelve tools, usable from Claude Code, Claude Desktop, Cursor, or any MCP client:
 
-```bash
-docker-compose up -d qdrant   # Qdrant only
-mix deps.get
-mix phx.server                # Phoenix dashboard on :4100
-mix mcp                       # MCP stdio transport
-mix mcp_http --port 3002      # MCP HTTP transport
-```
+| Tool | Description |
+|------|-------------|
+| **search_code**(query, limit) | Hybrid semantic + keyword search, ranked by vector similarity and graph centrality |
+| **find_all_callees**(entity_name, limit) | Functions called by a given function |
+| **find_all_callers**(entity_name, limit) | Callers of a function, following both call edges and import references |
+| **analyze_impact**(entity_name, depth) | Transitive blast radius: callers of callers and importers, up to `depth` levels |
+| **get_community_context**(file_path, limit) | Files structurally coupled to this one through call and import edges, in both directions |
+| **get_graph_stats**() | Node and edge counts, entity types, languages, top connected entities, architectural layers, and critical files (deterministic betweenness centrality) |
+| **get_status**() | Indexed project, Qdrant and Ollama health, file count, collections, workspace projects |
+| **find_module_hierarchy**(entity_name) | Parents (uses/implements), children (contained members), and implementors. Works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
+| **find_dead_code**(path_prefix) | Exported functions and methods with zero callers. Honors `.nexus.toml` entry points and framework conventions |
+| **reindex**(path) | Parse and index a project to build the search index and call graph |
+| **purge**() | Wipe the current collection and caches for a clean re-index |
+| **load_resources**(uri) | List or read MCP resources, for clients without native resource support |
 
-## Architecture
+MCP is served over Streamable HTTP at `/mcp`. For local development, stdio (`mix mcp`) works too.
+
+## How it works
 
 ```mermaid
 graph TB
@@ -196,7 +209,9 @@ graph TB
     QD & GC --> MCP_HTTP & REST & PHX
 ```
 
-### Search Pipeline
+Each file is parsed into entities (functions, modules, classes, interfaces) with their calls, imports, and contained members. Entities become chunks, and each chunk gets two vectors: a 768-dim dense embedding from Ollama (`embeddinggemma:300m` by default, override with `OLLAMA_MODEL`) and a sparse TF-IDF keyword vector. Qdrant stores both. The call graph is cached in ETS, so graph queries normally run in memory.
+
+### Search pipeline
 
 ```mermaid
 graph LR
@@ -208,33 +223,19 @@ graph LR
     GR --> R["Results"]
 ```
 
-1. **Dense embedding** via Ollama (default `embeddinggemma:300m`, falls back to TF-IDF)
-2. **Sparse keyword vector** via TF-IDF feature hashing
-3. **Qdrant hybrid query** with prefetch + RRF fusion (server-side)
-4. **Deduplication** by name + entity type
-5. **Graph re-ranking** using relationship boost from call graph
-6. **Filter & limit** (remove temp files, sort by score)
+1. Dense embedding via Ollama (falls back to TF-IDF if Ollama is unavailable)
+2. Sparse keyword vector via TF-IDF feature hashing
+3. Qdrant hybrid query with prefetch and server-side RRF fusion
+4. Deduplication by name and entity type
+5. Re-ranking with a boost from the call graph
+6. Filtering (temp files dropped), sorting, and limit
 
-### Deployment
-
-```mermaid
-graph TB
-    subgraph Docker["Docker (docker-compose up)"]
-        direction LR
-        PHX_D["Phoenix :4100"]
-        MCP_D["MCP HTTP :3002"]
-        PHX_D & MCP_D --- BEAM_D["Single BEAM Instance"]
-        BEAM_D --- QD_D["Qdrant :6333"]
-    end
-
-    CC_D["Claude Code<br/>url: localhost:3002/mcp"] --> MCP_D
-```
-
-### Supervision Tree
+### Supervision tree
 
 ```mermaid
 graph TD
     SUP["ElixirNexus.Supervisor<br/>(rest_for_one)"]
+    SUP --> TEL["Telemetry"]
     SUP --> PS["PubSub"]
     SUP --> DT["DirtyTracker"]
     SUP --> TF["TFIDFEmbedder"]
@@ -248,155 +249,46 @@ graph TD
     SUP --> TS["TaskSupervisor"]
 ```
 
-Strategy: `rest_for_one` — if a dependency crashes, all processes started after it restart. This ensures the Indexer restarts when CacheOwner or QdrantClient crash.
-
-## MCP Tools
-
-Thirteen tools for AI agents (Claude Code, Claude Desktop, Cursor, etc.):
-
-| Tool | Description |
-|------|-------------|
-| **search_code**(query, limit) | Hybrid semantic + keyword search, ranked by vector similarity and graph centrality |
-| **find_all_callees**(entity_name, limit) | Find all functions called by a given function |
-| **find_all_callers**(entity_name, limit) | Find all callers of a function — follows both call edges and import references |
-| **analyze_impact**(entity_name, depth) | Transitive blast radius — walks callers-of-callers AND importers up to `depth` levels |
-| **get_community_context**(file_path, limit) | Discover structurally coupled files via call-graph and import edges (bidirectional) |
-| **get_graph_stats**() | Codebase overview: node/edge counts, entity types, languages, top connected, architectural layers, and critical files (deterministic betweenness centrality) |
-| **get_status**() | Server health: indexed project, Qdrant/Ollama status, file count, collections, workspace projects |
-| **find_module_hierarchy**(entity_name) | Parents (uses/implements), children (contained members), and implementors — works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases. For an interface, lists the functions/consts that implement it (return-type / typed-const edges) |
-| **find_dead_code**(path_prefix) | Find exported functions/methods with zero callers — honors `.nexus.toml` entry points and framework conventions |
-| **reindex**(path) | Parse and index source files to build the search index and call graph |
-| **purge**() | Wipe the current collection and caches for a clean re-index |
-| **load_resources**(uri) | List or read MCP resources for clients without native resource support |
-
-### Transport
-
-MCP is served over HTTP (Streamable HTTP at `/mcp`) via Docker. For local development, stdio (`mix mcp`) is also available.
-
-## REST API
-
-### Observability
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/metrics` | Prometheus metrics (text format 0.0.4) — search latency, indexing throughput, Qdrant ops, BEAM VM stats |
-| GET | `/health` | Readiness status for MCP, Qdrant, Ollama, and indexed projects |
-
-### Search & Discovery
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/search` | Hybrid semantic + keyword search |
-| POST | `/api/callees` | Find callees of a function |
-| POST | `/api/index` | Trigger indexing |
-
-### Vector Management
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/vectors/info` | Collection metadata |
-| GET | `/api/vectors/count` | Point count |
-| POST | `/api/vectors/scroll` | Paginated point listing |
-| GET | `/api/vectors/:id` | Get a single point |
-| POST | `/api/vectors/delete` | Delete points by ID |
-| POST | `/api/vectors/reset` | Reset the collection |
-
-## Polyglot Support
-
-Elixir files are parsed via Sourceror, which exposes macro and module metadata Tree-sitter doesn't. Other languages use Tree-sitter via a Rustler NIF, with language-specific extractors:
-
-| Language | Extensions | Parser | Extractor |
-|----------|------------|--------|-----------|
-| Elixir | `.ex`, `.exs` | Sourceror | RelationshipExtractor |
-| JavaScript | `.js`, `.jsx`, `.mjs` | Tree-sitter | JavaScriptExtractor |
-| TypeScript | `.ts`, `.tsx` | Tree-sitter | JavaScriptExtractor |
-| Python | `.py` | Tree-sitter | PythonExtractor |
-| Go | `.go` | Tree-sitter | GoExtractor |
-| Rust | `.rs` | Tree-sitter | RustExtractor |
-| Java | `.java` | Tree-sitter | JavaExtractor |
-| Ruby | `.rb` | Tree-sitter | GenericExtractor |
-| Kotlin | `.kt`, `.kts` | Tree-sitter | GenericExtractor |
-| Swift | `.swift` | Tree-sitter | GenericExtractor |
-
-**Extractor capabilities:**
-
-| Feature | JS/TS | Python | Go | Rust | Java | Generic (Ruby/Kotlin/Swift) |
-|---------|-------|--------|----|------|------|---------|
-| Functions/classes/methods | Y | Y | Y | Y | Y | Y |
-| Import extraction | Y | Y | Y | Y | Y | partial |
-| Export extraction | Y | - | - | - | - | - |
-| Decorator extraction | - | Y | - | - | - | - |
-| Call graph | Y | Y | Y | Y | Y | partial |
-| Package-qualified calls | Y | - | Y | Y (`::`) | Y (`.`) | - |
-| Receiver/method extraction | - | - | Y | Y (`impl`) | Y | - |
-| Struct/interface extraction | Y (interface/type members) | - | Y | Y | Y | - |
-| Macro call detection | - | - | - | Y (`name!`) | - | - |
-| Arrow function classification | Y | - | - | - | - | - |
-| Barrel file resolution | Y | - | - | - | - | - |
-| Visibility (uppercase convention) | - | - | Y | - | - | - |
-| Visibility (`_private` convention) | - | Y | - | - | - | - |
-| Visibility (`pub` modifier) | - | - | - | Y | - | - |
-| Visibility (`public`/`private`/`protected` modifier) | - | - | - | - | Y | - |
-
-The NIF ships pre-built in the Docker image. Local development requires the Rust toolchain to compile the NIF — see `CLAUDE.md` for instructions. Without it, only Elixir files are indexed.
-
-### Embedding Strategy
-
-| Vector Type | Model | Purpose |
-|-------------|-------|---------|
-| Dense (768-dim) | `embeddinggemma:300m` via Ollama (override with `OLLAMA_MODEL`) | Semantic similarity |
-| Sparse | TF-IDF feature hashing (ETS-backed IDF) | Keyword/exact match |
-| Fusion | Qdrant RRF | Combines both server-side |
+The supervisor uses `rest_for_one`: when a process crashes, everything started after it restarts too. So if CacheOwner or QdrantClient crashes, the Indexer restarts with it.
 
 ## Web Dashboard
 
-Phoenix LiveView UI at `http://localhost:4100`:
+The Phoenix LiveView UI at `http://localhost:4100` has four pages:
 
-- **Dashboard** — Indexing statistics, entity/edge counts, language distribution, architecture-layer breakdown, top connected modules, MCP tool reference. Auto-syncs from Qdrant when MCP reindexes externally.
-- **Search** — Interactive hybrid search with scored results, entity badges, code preview, call/is_a tags.
-- **Graph** — Interactive D3.js force-directed graph showing code relationships. Three edge types (calls, imports, contains) with distinct visual styles. Hover to highlight connected nodes and see detailed metadata.
-- **Vectors** — Browse, filter, inspect, and manage stored vectors.
-
-### Search
+- **Dashboard**: indexing stats, entity and edge counts, language distribution, architecture-layer breakdown, top connected modules. Picks up reindexes triggered over MCP automatically.
+- **Search**: hybrid search with scores, entity badges, code preview, and call/import tags.
+- **Graph**: a D3 force-directed graph of calls, imports, and containment, clustered into package boxes. Capped at the 500 most-connected nodes, with filters and layout sliders.
+- **Vectors**: browse, filter, inspect, and delete stored vectors.
 
 ![Search](docs/screenshots/search.png)
 
-### Graph Visualization
-
 ![Graph](docs/screenshots/graph.png)
-
-The graph renders up to 500 nodes sorted by connectivity. Hover any node to highlight its neighbors and see file path, line range, calls, and imports in the detail panel. Zoom, pan, and drag nodes to explore.
-
-### Vectors
 
 ![Vectors](docs/screenshots/vectors.png)
 
-## Testing
+## Local development
+
+For working on CodeNexus itself:
 
 ```bash
-mix test                        # All tests (~800)
-mix test --trace                # Verbose output
-mix test --include performance  # Performance benchmarks (32 tests)
-mix test test/elixir_nexus/parsers/  # Parser tests
+docker-compose up -d qdrant   # Qdrant only
+mix deps.get
+mix phx.server                # Phoenix dashboard on :4100
+mix mcp                       # MCP stdio transport
+mix mcp_http --port 3002      # MCP HTTP transport
 ```
 
-## Performance Benchmarks
+Run the tests with `mix test` (add `--include performance` for the benchmarks). The tests expect Qdrant on `localhost:6333`. `CLAUDE.md` covers the NIF build, the fast local iteration loop, and the pre-push checks.
 
-Run with `mix test --include performance`:
+## Documentation
 
-| Operation | Latency | Scale |
-|-----------|---------|-------|
-| ETS insert 10K chunks | 4ms | |
-| ETS search 10K chunks | 13ms | |
-| ETS 100 concurrent searches (p99) | 53ms | 10K chunks |
-| Graph rebuild | 458ms | 1K chunks |
-| Ollama single embed | 29ms | 768-dim |
-| TF-IDF single embed | 0.09ms | 768-dim (~456x faster) |
-| Hybrid search e2e (p50) | 21ms | |
-| analyze_impact | 3.5ms | 500 entities |
-| get_community_context | 1.2ms | 500 entities |
-| Index 20 files (Broadway) | 2.0s | |
-| PubSub 100 subscribers | 0.17ms max | |
+- [docs/languages.md](docs/languages.md): supported languages and the per-extractor capability matrix
+- [docs/rest-api.md](docs/rest-api.md): REST, health, and Prometheus metrics endpoints
+- [docs/benchmarks.md](docs/benchmarks.md): performance benchmark results
+- [docs/ui.md](docs/ui.md): dashboard architecture and cross-BEAM sync
+- [docs/DOCKERHUB.md](docs/DOCKERHUB.md): Docker image usage, including `docker run` without compose and every environment variable
+- [cli/README.md](cli/README.md): the `nexus` CLI
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md)
 
 ## Changelog
 

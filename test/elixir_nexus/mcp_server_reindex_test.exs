@@ -8,8 +8,14 @@ defmodule ElixirNexus.MCPServerReindexTest do
   # the active one for subsequent test modules.
   setup do
     original_runtime = Application.get_env(:elixir_nexus, :qdrant_runtime)
+    original_collection = ElixirNexus.QdrantClient.active_collection()
 
     on_exit(fn ->
+      # Restore the GenServer's collection too — writes and collection resets use
+      # its own state, so restoring the env alone leaves it pointing at this
+      # test's (deleted) collection, which a later reset then recreates.
+      ElixirNexus.QdrantClient.switch_collection_force(original_collection)
+
       if original_runtime do
         Application.put_env(:elixir_nexus, :qdrant_runtime, original_runtime)
       else
@@ -78,7 +84,7 @@ defmodule ElixirNexus.MCPServerReindexTest do
 
   describe "auto-reindex dirty files before queries" do
     test "search_code auto-reindexes dirty files" do
-      tmp_dir = Path.join(System.tmp_dir!(), "mcp_autoreindex_#{System.unique_integer([:positive])}")
+      tmp_dir = Path.join(System.tmp_dir!(), "mcp_autoreindex_test_#{System.unique_integer([:positive])}")
       lib_dir = Path.join(tmp_dir, "lib")
       File.mkdir_p!(lib_dir)
       File.write!(Path.join(lib_dir, "original.ex"), "defmodule Original do\n  def hello, do: :world\nend\n")

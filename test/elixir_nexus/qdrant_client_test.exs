@@ -298,8 +298,14 @@ defmodule ElixirNexus.QdrantClientTest do
   describe "switch_collection_force/1" do
     setup do
       original = Application.get_env(:elixir_nexus, :qdrant_runtime)
+      original_collection = ElixirNexus.QdrantClient.active_collection()
 
       on_exit(fn ->
+        # Writes (upsert/delete) use the GenServer's own state.collection, not the
+        # app env — restoring the env alone leaves later tests writing to a
+        # nonexistent collection (404s, empty ChunkCache).
+        ElixirNexus.QdrantClient.switch_collection_force(original_collection)
+
         if original do
           Application.put_env(:elixir_nexus, :qdrant_runtime, original)
         else

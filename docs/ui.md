@@ -30,6 +30,17 @@ The ElixirNexus web dashboard is a Phoenix LiveView application at `http://local
    - Re-index codebase button
    - Collection metadata and point counts
 
+4. **GraphLive** — Interactive code relationship graph
+   - D3.js force-directed graph via `CodeGraph` LiveView hook, full-width canvas
+   - Three edge types: calls (solid), imports (dashed amber), contains (dotted indigo), with an edge-type filter
+   - Nodes clustered into tinted package boxes; boxes are clickable to isolate a package
+   - 500-node cap sorted by degree to prevent browser overload
+   - Shaping controls: min-connections slider, labels (Auto/All/None), hide-variables toggle, Select mode (Nodes/Boxes)
+   - Layout sliders: link distance, repulsion, spacing, cluster strength, box separation
+   - Hover highlighting with connected node/link emphasis
+   - Detail panel showing file path, line range, calls, and imports
+   - Auto-refreshes on indexing events via PubSub
+
 ## Data Flow
 
 | Layer | Responsibility |
@@ -54,22 +65,13 @@ The ElixirNexus web dashboard is a Phoenix LiveView application at `http://local
 
 ## Multi-project Support
 
-- Dashboard dropdown lists all Qdrant collections (`nexus_<name>`)
+- Dashboard dropdown lists Qdrant collections (`nexus_<name>`), hiding test/temp collections (`QdrantClient.test_collection?/1`) unless one is currently active
 - Switching collections triggers `ProjectSwitcher.switch_project/1`:
   1. Switches active Qdrant collection
   2. Clears ETS caches
   3. Scrolls all points from new collection into ETS
   4. Rebuilds GraphCache from chunks
   5. Broadcasts `:collection_changed` via PubSub
-
-4. **GraphLive** — Interactive code relationship graph
-   - D3.js force-directed graph via `CodeGraph` LiveView hook
-   - Three edge types: calls (solid), imports (dashed amber), contains (dotted indigo)
-   - 500-node cap sorted by degree to prevent browser overload
-   - Hover highlighting with connected node/link emphasis
-   - Detail panel showing file path, line range, calls, and imports
-   - Zoom, pan, and drag controls
-   - Auto-refreshes on indexing events via PubSub
 
 ## Future Ideas
 
