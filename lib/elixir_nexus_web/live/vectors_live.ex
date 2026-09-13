@@ -244,16 +244,23 @@ defmodule ElixirNexus.VectorsLive.Index do
     end
   end
 
+  # Re-index the project that is currently indexed (its root is recorded by the
+  # MCP reindex tool). Not File.cwd!(): in Docker that is /app, CodeNexus itself.
   def handle_event("reindex", _params, socket) do
-    self_pid = self()
-    socket = assign(socket, reindexing: true)
+    case ElixirNexus.ProjectConfig.current() do
+      {root, _config} when is_binary(root) ->
+        self_pid = self()
 
-    Task.start(fn ->
-      result = ElixirNexus.Indexer.index_directory(File.cwd!() <> "/lib")
-      send(self_pid, {:reindex_done, result})
-    end)
+        Task.start(fn ->
+          send(self_pid, {:reindex_done, ElixirNexus.Indexer.index_directory(root)})
+        end)
 
-    {:noreply, set_flash(socket, "Re-indexing started...", :info)}
+        {:noreply, socket |> assign(reindexing: true) |> set_flash("Re-indexing #{Path.basename(root)}...", :info)}
+
+      _ ->
+        {:noreply,
+         set_flash(socket, "No project indexed yet. Run the reindex MCP tool with a project path first.", :error)}
+    end
   end
 
   def handle_info({:reindex_done, {:ok, status}}, socket) do
@@ -612,9 +619,11 @@ defmodule ElixirNexus.VectorsLive.Index do
         result = data["result"]
 
         assign(socket,
-          points_count: result["points_count"] || 0,
+          # Collection info's points_count is approximate while Qdrant indexes;
+          # use the exact count so it matches the table's "of N points".
+          points_count: get_filtered_count(nil),
           collection_status: result["status"] || "unknown",
-          segments_count: length(result["segments"] || [])
+          segments_count: result["segments_count"] || 0
         )
 
       {:error, _} ->

@@ -81,10 +81,60 @@ defmodule ElixirNexus.VectorsLiveTest do
       assert is_binary(html)
     end
 
-    test "reindex starts reindexing", %{conn: conn} do
+    test "reindex without an indexed project says so and indexes nothing", %{conn: conn} do
+      # It used to index File.cwd!() <> "/lib": CodeNexus's own source in Docker,
+      # and in tests an unawaited whole-repo index that raced other tests.
+      prev = Application.get_env(:elixir_nexus, :project_config)
+      Application.delete_env(:elixir_nexus, :project_config)
+      on_exit(fn -> if prev, do: Application.put_env(:elixir_nexus, :project_config, prev) end)
+
       {:ok, view, _html} = live(conn, "/vectors")
       html = render_click(view, "reindex")
-      assert is_binary(html)
+
+      assert html =~ "No project indexed yet"
+      assert ElixirNexus.Indexer.status().status != :indexing
+    end
+
+    test "reindex re-indexes the current project root", %{conn: conn} do
+      root = Path.join(System.tmp_dir!(), "vectors_reindex_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(root, "lib"))
+      File.write!(Path.join(root, "lib/current.ex"), "defmodule CurrentProject do\n  def here, do: :ok\nend\n")
+
+      prev = Application.get_env(:elixir_nexus, :project_config)
+      Application.put_env(:elixir_nexus, :project_config, {root, %ElixirNexus.ProjectConfig{}})
+
+      on_exit(fn ->
+        ElixirNexus.Indexer.await_idle()
+        File.rm_rf!(root)
+
+        if prev,
+          do: Application.put_env(:elixir_nexus, :project_config, prev),
+          else: Application.delete_env(:elixir_nexus, :project_config)
+      end)
+
+      {:ok, view, _html} = live(conn, "/vectors")
+      render_click(view, "reindex")
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      files = ElixirNexus.ChunkCache.all() |> Enum.map(& &1.file_path) |> Enum.uniq()
+      assert Path.join(root, "lib/current.ex") in files
+      refute Enum.any?(files, &String.ends_with?(&1, "lib/elixir_nexus_web/live/vectors_live.ex"))
+    end
+  end
+
+  describe "collection stats" do
+    test "Total Points matches the exact count shown above the table", %{conn: conn} do
+      # Collection info's points_count is approximate while Qdrant is indexing,
+      # so the header said 829 while the table said "of 2145 points".
+      {:ok, _view, html} = live(conn, "/vectors")
+
+      [_, total] = Regex.run(~r/id="stat-total-points"[^>]*data-value="(\d+)"/, html)
+      [_, table] = Regex.run(~r/Showing\s+\d+\s+of\s+(\d+)\s+points/, html)
+      assert total == table
+
+      {:ok, %{"result" => %{"segments_count" => segments}}} = ElixirNexus.QdrantClient.collection_info()
+      [_, shown] = Regex.run(~r/id="stat-segments"[^>]*data-value="(\d+)"/, html)
+      assert String.to_integer(shown) == segments
     end
   end
 
