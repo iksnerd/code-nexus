@@ -16,6 +16,8 @@ defmodule ElixirNexus.CacheOwner do
       write_concurrency: true
     ])
 
+    :ets.new(ElixirNexus.GraphCache.meta_table_name(), [:set, :public, :named_table])
+
     :ets.new(ElixirNexus.ChunkCache.table_name(), [
       :bag,
       :public,

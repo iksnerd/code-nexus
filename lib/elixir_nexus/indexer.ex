@@ -720,6 +720,8 @@ defmodule ElixirNexus.Indexer do
   # Rebuild the graph cache off-thread so the Indexer GenServer stays responsive.
   defp rebuild_graph_async do
     all_chunks = ChunkCache.all()
+    # Graph queries wait on this flag instead of answering from a half-built graph.
+    GraphCache.mark_rebuilding()
 
     Task.start(fn ->
       try do
@@ -727,6 +729,8 @@ defmodule ElixirNexus.Indexer do
         Logger.info("Graph cache rebuilt (#{length(all_chunks)} chunks)")
       rescue
         e -> Logger.error("Failed to rebuild graph cache: #{inspect(e)}")
+      after
+        GraphCache.mark_ready()
       end
     end)
   end

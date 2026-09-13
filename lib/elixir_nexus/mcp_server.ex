@@ -547,6 +547,7 @@ defmodule ElixirNexus.MCPServer do
       file_count: ElixirNexus.ChunkCache.file_count(),
       chunk_count: ElixirNexus.ChunkCache.count(),
       indexing: indexer.status == :indexing,
+      graph_status: if(ElixirNexus.GraphCache.rebuilding?(), do: "rebuilding", else: "ready"),
       indexing_progress: indexer.indexing_progress,
       last_index_result: indexer.last_index_result,
       qdrant: qdrant,

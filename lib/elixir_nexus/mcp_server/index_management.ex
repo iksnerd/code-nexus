@@ -3,6 +3,8 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
 
   require Logger
 
+  @graph_wait_ms 90_000
+
   @doc """
   Switch Qdrant collection to match the project being indexed.
 
@@ -88,6 +90,13 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
   Returns {reindexed_count, state} — state unchanged since dirs don't change.
   """
   def maybe_reindex_dirty(state) do
+    # Right after a reindex the graph rebuilds asynchronously (tens of seconds on
+    # a large project). Answering meanwhile returns empty results that look like
+    # "no callers", so wait for it, bounded.
+    if ElixirNexus.GraphCache.await_ready(@graph_wait_ms) == :timeout do
+      Logger.warning("Graph still rebuilding after #{@graph_wait_ms}ms; answering from the current graph")
+    end
+
     dirs = Map.get(state, :indexed_dirs, [])
 
     if dirs == [] do

@@ -281,4 +281,68 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
       end
     end
   end
+
+  describe "queries during a graph rebuild" do
+    test "wait for the rebuild instead of answering from an empty graph" do
+      # gpt-alpha: for ~47s after a reindex, find_all_callers returned [] (the
+      # graph was still rebuilding), indistinguishable from "no callers".
+      alias ElixirNexus.{ChunkCache, GraphCache}
+
+      base = %{
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: nil,
+        visibility: :public,
+        parameters: [],
+        is_a: [],
+        contains: [],
+        language: :elixir,
+        entity_type: :function
+      }
+
+      chunks = [
+        Map.merge(base, %{id: "callee", name: "RebuildProbe.target", file_path: "/app/lib/target.ex", calls: []}),
+        Map.merge(base, %{
+          id: "caller",
+          name: "RebuildProbe.caller",
+          file_path: "/app/lib/caller.ex",
+          calls: ["RebuildProbe.target"]
+        })
+      ]
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      GraphCache.mark_rebuilding()
+
+      on_exit(fn ->
+        GraphCache.mark_ready()
+        ChunkCache.clear()
+        GraphCache.clear()
+      end)
+
+      Task.start(fn ->
+        Process.sleep(400)
+        ChunkCache.insert_many(chunks)
+        GraphCache.rebuild_from_chunks(chunks)
+        GraphCache.mark_ready()
+      end)
+
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_all_callers", %{"entity_name" => "RebuildProbe.target"}, %{
+          project_root: "/app"
+        })
+
+      names = json |> Jason.decode!() |> Enum.map(& &1["entity"]["name"])
+      assert "RebuildProbe.caller" in names
+    end
+
+    test "get_status reports the graph as rebuilding" do
+      ElixirNexus.GraphCache.mark_rebuilding()
+      on_exit(fn -> ElixirNexus.GraphCache.mark_ready() end)
+
+      {:ok, %{content: [%{text: json}]}, _} = MCPServer.handle_tool_call("get_status", %{}, %{project_root: "/app"})
+      assert Jason.decode!(json)["graph_status"] == "rebuilding"
+    end
+  end
 end

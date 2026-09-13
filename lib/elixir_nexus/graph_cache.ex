@@ -14,6 +14,66 @@ defmodule ElixirNexus.GraphCache do
     :ok
   end
 
+  # Rebuild flag lives in its own table so all_nodes/0 never sees it.
+  @meta_table :nexus_graph_cache_meta
+
+  @doc false
+  def meta_table_name, do: @meta_table
+
+  defp ensure_meta_table do
+    if :ets.info(@meta_table) == :undefined do
+      :ets.new(@meta_table, [:set, :public, :named_table])
+    end
+
+    :ok
+  rescue
+    # Another process created it between the check and the new.
+    ArgumentError -> :ok
+  end
+
+  @doc "Mark the graph as being rebuilt. Queries wait on it via await_ready/1."
+  def mark_rebuilding do
+    ensure_meta_table()
+    :ets.insert(@meta_table, {:rebuilding, true})
+    :ok
+  end
+
+  @doc "Mark the graph rebuild finished (or abandoned)."
+  def mark_ready do
+    ensure_meta_table()
+    :ets.delete(@meta_table, :rebuilding)
+    :ok
+  end
+
+  def rebuilding? do
+    ensure_meta_table()
+    :ets.member(@meta_table, :rebuilding)
+  end
+
+  @doc """
+  Wait until no rebuild is in progress, up to `timeout_ms`. Returns `:ok`, or
+  `:timeout` if the rebuild is still running (the caller answers from the
+  current graph).
+  """
+  def await_ready(timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_await_ready(deadline)
+  end
+
+  defp do_await_ready(deadline) do
+    cond do
+      not rebuilding?() ->
+        :ok
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        :timeout
+
+      true ->
+        Process.sleep(50)
+        do_await_ready(deadline)
+    end
+  end
+
   def put_node(entity_id, node) do
     ensure_table()
     :ets.insert(@table, {entity_id, node})
