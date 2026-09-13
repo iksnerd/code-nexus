@@ -40,6 +40,10 @@ defmodule ElixirNexus.MCPServer.ResponseFormat do
       "parameters" => entity["parameters"] || [],
       "calls" => Enum.take(calls, 10)
     }
+    # Set by find_all_callers when several files define the queried name.
+    |> then(fn compact ->
+      if entity["resolves_to"], do: Map.put(compact, "resolves_to", entity["resolves_to"]), else: compact
+    end)
   end
 
   @doc "Coerce MCP JSON string args to integer. MCP args arrive as strings even for numeric params."

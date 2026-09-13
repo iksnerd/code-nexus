@@ -282,6 +282,50 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
     end
   end
 
+  describe "find_all_callers response" do
+    test "includes resolves_to when several files define the name" do
+      # The query layer set resolves_to, but compact_entity's key whitelist
+      # dropped it from the MCP response.
+      alias ElixirNexus.{ChunkCache, GraphCache}
+
+      base = %{
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: nil,
+        visibility: :public,
+        parameters: [],
+        contains: [],
+        language: :python,
+        entity_type: :function,
+        is_a: [],
+        calls: []
+      }
+
+      chunks = [
+        Map.merge(base, %{id: "d1", name: "save_ckpt", file_path: "/w/gpt_alpha/training.py"}),
+        Map.merge(base, %{id: "d2", name: "save_ckpt", file_path: "/w/jepa/text_jepa/training.py"}),
+        Map.merge(base, %{id: "c1", name: "main", file_path: "/w/jepa/train.py", calls: ["text_jepa.save_ckpt"]})
+      ]
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+
+      on_exit(fn ->
+        ChunkCache.clear()
+        GraphCache.clear()
+      end)
+
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_all_callers", %{"entity_name" => "save_ckpt"}, %{project_root: "/w"})
+
+      [caller] = Jason.decode!(json)
+      assert caller["entity"]["resolves_to"] == "/w/jepa/text_jepa/training.py"
+    end
+  end
+
   describe "queries during a graph rebuild" do
     test "wait for the rebuild instead of answering from an empty graph" do
       # gpt-alpha: for ~47s after a reindex, find_all_callers returned [] (the
