@@ -213,6 +213,9 @@ fn is_significant_node(node: &tree_sitter::Node, depth: usize) -> bool {
         || kind == "block"
         || kind == "var_declaration"
         || kind == "var_spec"
+        // Grouped `var ( ... )` blocks wrap their specs in var_spec_list; without it the
+        // specs (and calls in package-level initializers) are dropped.
+        || kind == "var_spec_list"
         || kind == "const_declaration"
         || kind == "const_spec"
         || kind == "assignment_statement"

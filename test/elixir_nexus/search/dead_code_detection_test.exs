@@ -816,4 +816,184 @@ defmodule ElixirNexus.Search.DeadCodeDetectionTest do
              "PascalCase default export from route.ts should not be dead code"
     end
   end
+
+  describe "find_dead_code/1 - references the call list misses" do
+    defp chunk(attrs) do
+      attrs = Map.new(attrs)
+
+      Map.merge(
+        %{
+          id: attrs[:name],
+          entity_type: :function,
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: nil,
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: [],
+          language: :go
+        },
+        attrs
+      )
+    end
+
+    defp dead_names(chunks) do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+      {:ok, result} = Queries.find_dead_code()
+      Enum.map(result.dead_functions, & &1.name)
+    end
+
+    test "a Go method called through a variable is not dead" do
+      # Entity is receiver-qualified (Storage.WritePiece); the call site is
+      # store.WritePiece. find_all_callers resolves it; dead code must too.
+      dead =
+        dead_names([
+          chunk(
+            name: "Storage.WritePiece",
+            entity_type: :method,
+            file_path: "/w/internal/client/storage.go",
+            content: "func (s *Storage) WritePiece(i int) error { return nil }"
+          ),
+          chunk(
+            name: "Swarm.Start",
+            entity_type: :method,
+            file_path: "/w/internal/client/swarm.go",
+            content: "func (s *Swarm) Start(store *Storage) { store.WritePiece(1) }",
+            calls: ["store.WritePiece"]
+          )
+        ])
+
+      refute "Storage.WritePiece" in dead
+    end
+
+    test "a function passed as a value is not dead" do
+      dead =
+        dead_names([
+          chunk(
+            name: "HandleAnnounce",
+            file_path: "/w/internal/tracker/announce.go",
+            content: "func HandleAnnounce(w http.ResponseWriter, r *http.Request) {}"
+          ),
+          chunk(
+            name: "main",
+            file_path: "/w/cmd/tracker/main.go",
+            visibility: :private,
+            content: ~s|func main() { http.HandleFunc("/announce", tracker.HandleAnnounce) }|,
+            calls: ["http.HandleFunc"]
+          )
+        ])
+
+      refute "HandleAnnounce" in dead
+    end
+
+    test "a call the extractor missed (inside a ternary) still counts as a reference" do
+      dead =
+        dead_names([
+          chunk(
+            name: "runPipeline",
+            language: :typescript,
+            file_path: "/app/services/sync/execute-sync.ts",
+            start_line: 196,
+            end_line: 240,
+            content: "async function runPipeline(adapter, ctx) {}"
+          ),
+          chunk(
+            name: "executeSync",
+            language: :typescript,
+            file_path: "/app/services/sync/execute-sync.ts",
+            start_line: 150,
+            end_line: 190,
+            content:
+              "export async function executeSync(adapter, ctx) { run = ok ? await runPipeline(adapter, ctx) : fail() }",
+            calls: ["fail"]
+          ),
+          chunk(
+            name: "route",
+            language: :typescript,
+            file_path: "/app/app/api/sync/route.ts",
+            content: "executeSync(a, c)",
+            calls: ["executeSync"]
+          )
+        ])
+
+      refute "runPipeline" in dead
+    end
+
+    test "the definition itself and chunks enclosing it do not count as references" do
+      dead =
+        dead_names([
+          chunk(
+            name: "Utils",
+            entity_type: :module,
+            language: :elixir,
+            file_path: "/app/lib/utils.ex",
+            start_line: 1,
+            end_line: 10,
+            content: "defmodule Utils do\n  def unused_helper(x), do: x\nend"
+          ),
+          chunk(
+            name: "Utils.unused_helper",
+            language: :elixir,
+            file_path: "/app/lib/utils.ex",
+            start_line: 2,
+            end_line: 2,
+            content: "def unused_helper(x), do: x"
+          )
+        ])
+
+      assert "Utils.unused_helper" in dead
+    end
+
+    test "Go methods that satisfy standard interfaces are not dead" do
+      # Called through flag.Value, fmt.Stringer, error, encoding marshalers,
+      # http.Handler, never by name.
+      dead =
+        dead_names([
+          chunk(
+            name: "stringSlice.Set",
+            entity_type: :method,
+            file_path: "/w/cmd/wl/main.go",
+            content: "func (s *stringSlice) Set(v string) error { return nil }"
+          ),
+          chunk(
+            name: "stringSlice.String",
+            entity_type: :method,
+            file_path: "/w/cmd/wl/main.go",
+            start_line: 5,
+            end_line: 5,
+            content: "func (s *stringSlice) String() string { return \"\" }"
+          ),
+          chunk(
+            name: "orderedDict.MarshalBencode",
+            entity_type: :method,
+            file_path: "/w/torrent.go",
+            content: "func (d orderedDict) MarshalBencode() ([]byte, error) { return nil, nil }"
+          ),
+          chunk(
+            name: "api.ServeHTTP",
+            entity_type: :method,
+            file_path: "/w/api.go",
+            content: "func (a *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {}"
+          ),
+          chunk(
+            name: "Orphan.Unused",
+            entity_type: :method,
+            file_path: "/w/orphan.go",
+            content: "func (o *Orphan) Unused() {}"
+          )
+        ])
+
+      refute "stringSlice.Set" in dead
+      refute "stringSlice.String" in dead
+      refute "orderedDict.MarshalBencode" in dead
+      refute "api.ServeHTTP" in dead
+      assert "Orphan.Unused" in dead
+    end
+  end
 end

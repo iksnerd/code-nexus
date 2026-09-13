@@ -15,6 +15,16 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
   # `go test`, not user code. Filtering prevents ~38/49 false positives on Go projects.
   @go_test_prefixes ~w(Test Benchmark Fuzz Example)
 
+  # Methods that satisfy standard-library interfaces (fmt.Stringer, error,
+  # flag.Value, http.Handler, sort.Interface, io.*, database/sql Scanner/Valuer).
+  # They're invoked through the interface, so they never have a named caller.
+  # Marshal*/Unmarshal* prefixes cover encoding/json, text, and codec libraries.
+  @go_interface_methods ~w(
+    String GoString Error Set Get Format ServeHTTP
+    Len Less Swap Read Write Close Seek ReadFrom WriteTo
+    Scan Value Unwrap Is As
+  )
+
   # OTP, Phoenix LiveView, and Broadway callback names — dispatched by the framework,
   # never by explicit user call sites. Filtering prevents ~100 false positives on
   # Elixir projects where every GenServer/LiveView/Broadway module looks "dead".
@@ -117,6 +127,7 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
               (lang == "elixir" and String.ends_with?(file_path, "_controller.ex")) or
               (lang == "elixir" and name in @elixir_framework_callbacks) or
               (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
+              go_interface_method?(lang, e.entity["entity_type"], name) or
               (js_or_ts?(lang) and
                  (name in @framework_convention_names or
                     (basename in @framework_convention_files and
@@ -128,10 +139,17 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
+            # Receiver-qualified methods (Go `Storage.WritePiece`, Rust `Greeter.hello`)
+            # are called through a variable (`store.WritePiece`), so match on the
+            # method segment too, as find_all_callers does.
+            member_lower = name_lower |> String.split(".") |> List.last()
+
             # No entity calls this function (exact match or qualified suffix match)
             not Map.has_key?(call_index, name_lower) and
-              not MapSet.member?(call_suffix_set, name_lower)
+              not MapSet.member?(call_suffix_set, name_lower) and
+              not (member_lower != name_lower and MapSet.member?(call_suffix_set, member_lower))
           end)
+          |> reject_referenced(all_entities)
           |> Enum.map(fn e ->
             %{
               name: e.entity["name"],
@@ -171,6 +189,51 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
       error ->
         error
     end
+  end
+
+  # The call lists miss real uses: a function passed as a value
+  # (`http.HandleFunc("/x", HandleX)`), calls nested where the extractor doesn't
+  # attribute them (ternaries, object-literal methods, `if` conditions), and
+  # package-level initializers. A candidate is kept only if its name appears in
+  # no chunk other than its own definition or a chunk enclosing it (its module).
+  # Mentions in comments also count, which errs toward not reporting dead code.
+  defp reject_referenced([], _all_entities), do: []
+
+  defp reject_referenced(candidates, all_entities) do
+    names = MapSet.new(candidates, &member_name/1)
+
+    mentions =
+      Enum.reduce(all_entities, %{}, fn e, acc ->
+        content = e.entity["content"] || ""
+
+        ~r/[A-Za-z_][A-Za-z0-9_]*[?!]?/
+        |> Regex.scan(content)
+        |> List.flatten()
+        |> Enum.uniq()
+        |> Enum.filter(&MapSet.member?(names, &1))
+        |> Enum.reduce(acc, fn token, acc -> Map.update(acc, token, [e.entity], &[e.entity | &1]) end)
+      end)
+
+    Enum.reject(candidates, fn candidate ->
+      mentions
+      |> Map.get(member_name(candidate), [])
+      |> Enum.any?(&(not encloses?(&1, candidate.entity)))
+    end)
+  end
+
+  defp go_interface_method?("go", "method", name) do
+    method = name |> String.split(".") |> List.last()
+    method in @go_interface_methods or String.starts_with?(method, ["Marshal", "Unmarshal"])
+  end
+
+  defp go_interface_method?(_lang, _type, _name), do: false
+
+  defp member_name(e), do: (e.entity["name"] || "") |> String.split(".") |> List.last()
+
+  defp encloses?(outer, inner) do
+    outer["file_path"] == inner["file_path"] and
+      (outer["start_line"] || 0) <= (inner["start_line"] || 0) and
+      (outer["end_line"] || 0) >= (inner["end_line"] || 0)
   end
 
   defp js_or_ts?(lang) do

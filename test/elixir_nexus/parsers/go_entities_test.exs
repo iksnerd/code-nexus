@@ -669,4 +669,108 @@ defmodule ElixirNexus.Parsers.GoEntitiesTest do
       assert main.visibility == :private
     end
   end
+
+  describe "package-level var and const" do
+    # Shape the NIF produces for:
+    #   var (
+    #     MaxPeers = 50
+    #     GlobalRateLimiter = NewRateLimiter(5.0)
+    #   )
+    #   const Version = "dev"
+    #   func f() { var local = helper() }
+    defp spec(kind, row, name, value_children) do
+      make_node(kind,
+        start_row: row,
+        end_row: row,
+        children: [
+          make_node("identifier", start_row: row, end_row: row, text: name),
+          make_node("expression_list", start_row: row, end_row: row, children: value_children)
+        ]
+      )
+    end
+
+    defp call(row, fun) do
+      make_node("call_expression",
+        start_row: row,
+        end_row: row,
+        children: [make_node("identifier", text: fun), make_node("argument_list")]
+      )
+    end
+
+    setup do
+      source = """
+      package tracker
+      var (
+      	MaxPeers = 50
+      	GlobalRateLimiter = NewRateLimiter(5.0)
+      )
+      const Version = "dev"
+      func f() {
+      	var local = helper()
+      }
+      """
+
+      ast =
+        wrap_program([
+          make_node("var_declaration",
+            start_row: 1,
+            end_row: 4,
+            children: [
+              make_node("var_spec_list",
+                start_row: 1,
+                end_row: 4,
+                children: [
+                  spec("var_spec", 2, "MaxPeers", [make_node("int_literal", text: "50")]),
+                  spec("var_spec", 3, "GlobalRateLimiter", [call(3, "NewRateLimiter")])
+                ]
+              )
+            ]
+          ),
+          make_node("const_declaration",
+            start_row: 5,
+            end_row: 5,
+            children: [spec("const_spec", 5, "Version", [make_node("interpreted_string_literal", text: ~s("dev"))])]
+          ),
+          make_node("function_declaration",
+            start_row: 6,
+            end_row: 8,
+            children: [
+              make_node("identifier", text: "f"),
+              make_node("parameter_list"),
+              make_node("block",
+                start_row: 6,
+                end_row: 8,
+                children: [
+                  make_node("var_declaration",
+                    start_row: 7,
+                    end_row: 7,
+                    children: [spec("var_spec", 7, "local", [call(7, "helper")])]
+                  )
+                ]
+              )
+            ]
+          )
+        ])
+
+      {:ok, entities: GoExtractor.extract_entities("/w/internal/tracker/tracker.go", ast, source)}
+    end
+
+    test "grouped and single package vars and consts become variable entities", %{entities: entities} do
+      vars = entities |> Enum.filter(&(&1.entity_type == :variable)) |> Map.new(&{&1.name, &1})
+
+      assert Map.keys(vars) |> Enum.sort() == ["GlobalRateLimiter", "MaxPeers", "Version"]
+      assert vars["GlobalRateLimiter"].visibility == :public
+      assert vars["GlobalRateLimiter"].start_line == 4
+      assert vars["GlobalRateLimiter"].content =~ "NewRateLimiter(5.0)"
+    end
+
+    test "a package-level initializer records its calls", %{entities: entities} do
+      limiter = Enum.find(entities, &(&1.name == "GlobalRateLimiter"))
+      assert "NewRateLimiter" in limiter.calls
+    end
+
+    test "locals inside functions are not package entities", %{entities: entities} do
+      refute Enum.any?(entities, &(&1.name == "local"))
+    end
+  end
 end

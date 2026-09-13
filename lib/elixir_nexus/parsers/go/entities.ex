@@ -32,6 +32,49 @@ defmodule ElixirNexus.Parsers.Go.Entities do
 
   def walk_ast(_, acc), do: acc
 
+  @doc """
+  Package-level `var` and `const` specs as variable entities, with the calls in
+  their initializers (`var GlobalRateLimiter = NewRateLimiter(...)`). Only direct
+  children of the file: locals declared inside functions are not entities.
+  """
+  def package_level_vars(file_path, %{"children" => children}, source) do
+    children
+    |> Enum.filter(&(&1["kind"] in ["var_declaration", "const_declaration"]))
+    |> Enum.flat_map(&(&1["children"] || []))
+    |> Enum.flat_map(fn
+      %{"kind" => "var_spec_list", "children" => specs} -> specs
+      spec -> [spec]
+    end)
+    |> Enum.filter(&(&1["kind"] in ["var_spec", "const_spec"]))
+    |> Enum.flat_map(&spec_to_variable(file_path, &1, source))
+  end
+
+  def package_level_vars(_file_path, _ast, _source), do: []
+
+  defp spec_to_variable(file_path, spec, source) do
+    start_line = (spec["start_row"] || 0) + 1
+    end_line = (spec["end_row"] || 0) + 1
+    calls = Calls.extract_calls(spec)
+
+    # `var a, b = f()` declares several names; each is its own entity.
+    for %{"kind" => "identifier", "text" => name} <- spec["children"] || [], name not in ["", "_"] do
+      %CodeSchema{
+        file_path: file_path,
+        entity_type: :variable,
+        name: name,
+        content: extract_content(source, start_line, end_line),
+        start_line: start_line,
+        end_line: end_line,
+        parameters: [],
+        visibility: go_visibility(name),
+        calls: calls,
+        is_a: [],
+        contains: [],
+        language: :go
+      }
+    end
+  end
+
   @doc "Convert a declaration AST node to a CodeSchema struct."
   def to_code_schema(file_path, node, source) do
     kind = node["kind"]

@@ -15,6 +15,7 @@ defmodule ElixirNexus.Parsers.GoExtractor do
       |> Entities.walk_ast([])
       |> Enum.map(&Entities.to_code_schema(file_path, &1, source))
       |> Enum.reject(&is_nil/1)
+      |> Kernel.++(Entities.package_level_vars(file_path, ast, source))
 
     imports = ImportsPackage.extract_imports(ast)
     package_name = ImportsPackage.extract_package_name(ast)
