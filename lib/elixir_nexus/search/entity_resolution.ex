@@ -1,14 +1,17 @@
 defmodule ElixirNexus.Search.EntityResolution do
   @moduledoc "Multi-strategy entity lookup, name normalisation, and path alias resolution."
 
+  @definition_types ~w(interface class struct module)
+
   @doc "Find an entity using exact, file-path, and substring strategies."
   def find_entity_multi_strategy(name, entities) do
-    # 1. Exact match (current behavior)
+    # 1. Exact/qualified match, preferring the real definition (see definition_rank/2)
     # 2. File-path-based: basename matches query
     # 3. Substring: entity name contains query or vice versa
-    Enum.find(entities, fn e ->
-      matches_entity_name?(e.entity["name"] || "", name)
-    end) ||
+    case Enum.filter(entities, &matches_entity_name?(&1.entity["name"] || "", name)) do
+      [] -> nil
+      matches -> Enum.min_by(matches, &definition_rank(&1, name))
+    end ||
       Enum.find(entities, fn e ->
         file_path_matches_name?(e.entity["file_path"] || "", name)
       end) ||
@@ -19,6 +22,128 @@ defmodule ElixirNexus.Search.EntityResolution do
         e_name != "" and q_name != "" and
           (String.contains?(e_name, q_name) or String.contains?(q_name, e_name))
       end)
+  end
+
+  # When several entities share the name: an exact name beats a qualified match
+  # (`GPTLanguageModel` over `GPTLanguageModel.hidden`), a non-test file beats a
+  # test file (a `type X = import(...)` alias in a test), and a type/module
+  # definition beats a variable or function.
+  defp definition_rank(e, query) do
+    {
+      if(String.downcase(e.entity["name"] || "") == String.downcase(query), do: 0, else: 1),
+      if(test_file?(e.entity["file_path"] || ""), do: 1, else: 0),
+      if(e.entity["entity_type"] in @definition_types, do: 0, else: 1)
+    }
+  end
+
+  @doc "True for test/spec files across the supported languages."
+  def test_file?(path) do
+    base = Path.basename(path)
+
+    Regex.match?(~r/[._-](test|spec)\.[a-z]+$/, base) or String.starts_with?(base, "test_") or
+      String.contains?(path, ["/test/", "/tests/", "/__tests__/"])
+  end
+
+  @doc """
+  Resolve names relative to the entity they belong to, instead of project-wide.
+
+  - `:parents` (imports, bases, implemented interfaces): same language family
+    only, nearest directory first. A Python class never gets a Go or TSX parent.
+  - `:members` (contained members): the entity's own file only, preferring names
+    qualified by the entity (`GPTLanguageModel.__init__`). An interface's `get`
+    member never resolves to a `GET` route handler elsewhere.
+
+  Anything without an in-scope match is returned unresolved.
+  """
+  def resolve_names(names, all_entities, context, scope) when scope in [:parents, :members] do
+    family = language_family(context.entity["language"])
+    context_file = context.entity["file_path"] || ""
+    context_name = context.entity["name"] || ""
+
+    in_family =
+      Enum.filter(all_entities, fn e ->
+        family == :any or language_family(e.entity["language"]) in [family, :any]
+      end)
+
+    Enum.map(names, fn name ->
+      if scope == :parents and family == "python" and String.starts_with?(name, ".") do
+        resolve_python_relative_import(name, context_file, in_family)
+      else
+        resolve_scoped(name, in_family, scope, context_file, context_name)
+      end
+    end)
+  end
+
+  # `from .attention import X` / `from ..progress import Y` name a module file
+  # relative to the importing file's package. Resolve by path; a same-named
+  # class somewhere else in the project is not the import.
+  defp resolve_python_relative_import(name, context_file, entities) do
+    dots = String.length(name) - String.length(String.trim_leading(name, "."))
+    module_path = name |> String.trim_leading(".") |> String.replace(".", "/")
+
+    base =
+      Enum.reduce(1..dots//1, Path.dirname(context_file), fn
+        1, dir -> dir
+        _, dir -> Path.dirname(dir)
+      end)
+
+    candidates = [Path.join(base, module_path <> ".py"), Path.join([base, module_path, "__init__.py"])]
+
+    case Enum.find(entities, &(&1.entity["file_path"] in candidates)) do
+      nil -> %{name: name, resolved: false}
+      found -> %{name: name, file_path: found.entity["file_path"], entity_type: "module", resolved: true}
+    end
+  end
+
+  defp resolve_scoped(name, in_family, scope, context_file, context_name) do
+    candidates =
+      in_family
+      |> Enum.filter(&matches_entity_name?(&1.entity["name"] || "", name))
+      |> Enum.reject(&(&1.entity["name"] == context_name and &1.entity["file_path"] == context_file))
+
+    case {best_in_scope(candidates, scope, context_file, context_name), scope} do
+      {nil, :parents} -> resolve_by_path_alias(name, in_family) || %{name: name, resolved: false}
+      {nil, :members} -> %{name: name, resolved: false}
+      {found, _} -> build_resolved_entry(found)
+    end
+  end
+
+  # Members: only the entity's own file, preferring `Entity.member` over a bare
+  # same-named entity in that file.
+  defp best_in_scope(candidates, :members, context_file, context_name) do
+    qualified = String.downcase("#{context_name}.")
+
+    candidates
+    |> Enum.filter(&(&1.entity["file_path"] == context_file))
+    |> Enum.min_by(&if(String.starts_with?(String.downcase(&1.entity["name"] || ""), qualified), do: 0, else: 1), fn ->
+      nil
+    end)
+  end
+
+  # Parents: nearest directory first, non-test files before test files.
+  defp best_in_scope(candidates, :parents, context_file, _context_name) do
+    Enum.min_by(
+      candidates,
+      &{-shared_dir_depth(&1.entity["file_path"] || "", context_file), test_file?(&1.entity["file_path"] || "")},
+      fn -> nil end
+    )
+  end
+
+  defp language_family(nil), do: :any
+
+  defp language_family(lang) do
+    case to_string(lang) do
+      "" -> :any
+      l when l in ["typescript", "tsx", "javascript", "jsx"] -> :js
+      l -> l
+    end
+  end
+
+  defp shared_dir_depth(a, b) do
+    Path.split(Path.dirname(a))
+    |> Enum.zip(Path.split(Path.dirname(b)))
+    |> Enum.take_while(fn {x, y} -> x == y end)
+    |> length()
   end
 
   @doc "Resolve a list of names to their entity metadata. Falls back to path alias resolution."

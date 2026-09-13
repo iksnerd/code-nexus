@@ -38,28 +38,7 @@ defmodule ElixirNexus.ProjectSwitcher do
     # Scroll all points from Qdrant and rebuild ETS caches
     case scroll_all(100, nil, []) do
       {:ok, points} when points != [] ->
-        chunks =
-          Enum.map(points, fn p ->
-            payload = p["payload"] || %{}
-
-            %{
-              id: to_string(p["id"]),
-              entity_type: safe_to_atom(payload["entity_type"], :function),
-              name: payload["name"] || "",
-              file_path: payload["file_path"] || "",
-              content: payload["content"] || "",
-              start_line: payload["start_line"] || 0,
-              end_line: payload["end_line"] || 0,
-              docstring: nil,
-              module_path: payload["module_path"],
-              visibility: payload["visibility"] && safe_to_atom(payload["visibility"], nil),
-              parameters: payload["parameters"] || [],
-              calls: payload["calls"] || [],
-              is_a: payload["is_a"] || [],
-              contains: payload["contains"] || [],
-              language: payload["language"] && safe_to_atom(payload["language"], nil)
-            }
-          end)
+        chunks = Enum.map(points, &chunk_from_payload(to_string(&1["id"]), &1["payload"] || %{}))
 
         ChunkCache.insert_many(chunks)
         GraphCache.rebuild_from_chunks(chunks)
@@ -87,12 +66,39 @@ defmodule ElixirNexus.ProjectSwitcher do
     end
   end
 
-  defp safe_to_atom(nil, default), do: default
+  # Explicit whitelists, not String.to_existing_atom: that falls back silently
+  # when the atom hasn't been created yet (modules load lazily under
+  # `mix phx.server`), so a hydrated Python class came back as a :function with
+  # no language. Bounded lists also keep Qdrant payloads from minting atoms.
+  @entity_types Map.new(
+                  ~w(function method module class struct interface variable constant enum macro test type),
+                  &{&1, String.to_atom(&1)}
+                )
+  @languages Map.new(
+               ~w(elixir go java javascript jsx kotlin python ruby rust swift tsx typescript),
+               &{&1, String.to_atom(&1)}
+             )
+  @visibilities %{"public" => :public, "private" => :private}
 
-  defp safe_to_atom(str, default) when is_binary(str) do
-    String.to_existing_atom(str)
-  rescue
-    ArgumentError -> default
+  @doc "Build a ChunkCache chunk from a Qdrant point payload."
+  def chunk_from_payload(id, payload) do
+    %{
+      id: id,
+      entity_type: Map.get(@entity_types, payload["entity_type"], :function),
+      name: payload["name"] || "",
+      file_path: payload["file_path"] || "",
+      content: payload["content"] || "",
+      start_line: payload["start_line"] || 0,
+      end_line: payload["end_line"] || 0,
+      docstring: nil,
+      module_path: payload["module_path"],
+      visibility: Map.get(@visibilities, payload["visibility"]),
+      parameters: payload["parameters"] || [],
+      calls: payload["calls"] || [],
+      is_a: payload["is_a"] || [],
+      contains: payload["contains"] || [],
+      language: Map.get(@languages, payload["language"])
+    }
   end
 
   # Use list prepend + reverse to avoid O(n^2) list append

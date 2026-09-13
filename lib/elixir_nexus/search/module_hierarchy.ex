@@ -23,8 +23,8 @@ defmodule ElixirNexus.Search.ModuleHierarchy do
             parent_names = target.entity["is_a"] || []
             child_names = target.entity["contains"] || []
 
-            parents = EntityResolution.resolve_names(parent_names, all_entities)
-            children = EntityResolution.resolve_names(child_names, all_entities)
+            parents = EntityResolution.resolve_names(parent_names, all_entities, target, :parents)
+            children = EntityResolution.resolve_names(child_names, all_entities, target, :members)
 
             # For function/method entities, supplement children with:
             # 1. PascalCase calls — JSX component renders (<Button />, <FileExplorer />)

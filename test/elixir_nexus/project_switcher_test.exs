@@ -140,4 +140,28 @@ defmodule ElixirNexus.ProjectSwitcherTest do
       assert is_map(nodes)
     end
   end
+
+  describe "payload conversion" do
+    test "maps every entity type, language, and visibility the extractors emit" do
+      # String.to_existing_atom silently fell back when an atom hadn't been
+      # created yet (lazy module loading under `mix phx.server`), so a hydrated
+      # Python class came back as a :function with no language.
+      for type <- ~w(function method module class struct interface variable enum macro test) do
+        assert ProjectSwitcher.chunk_from_payload("1", %{"entity_type" => type}).entity_type ==
+                 String.to_atom(type)
+      end
+
+      for lang <- ~w(elixir go java javascript kotlin python ruby rust swift tsx typescript) do
+        assert ProjectSwitcher.chunk_from_payload("1", %{"language" => lang}).language == String.to_atom(lang)
+      end
+
+      assert ProjectSwitcher.chunk_from_payload("1", %{"visibility" => "private"}).visibility == :private
+    end
+
+    test "unknown values fall back instead of creating atoms" do
+      chunk = ProjectSwitcher.chunk_from_payload("1", %{"entity_type" => "zz_unknown_kind", "language" => "zz_lang"})
+      assert chunk.entity_type == :function
+      assert chunk.language == nil
+    end
+  end
 end

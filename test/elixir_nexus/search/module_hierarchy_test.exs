@@ -499,4 +499,189 @@ defmodule ElixirNexus.Search.ModuleHierarchyTest do
       assert result.implementors == []
     end
   end
+
+  describe "find_module_hierarchy/1 - resolution stays in the right scope" do
+    defp entity(attrs) do
+      attrs = Map.new(attrs)
+
+      Map.merge(
+        %{
+          id: "#{attrs[:file_path]}:#{attrs[:name]}",
+          content: "",
+          start_line: 1,
+          end_line: 1,
+          module_path: nil,
+          visibility: :public,
+          parameters: [],
+          calls: [],
+          is_a: [],
+          contains: []
+        },
+        attrs
+      )
+    end
+
+    defp load(chunks) do
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+    end
+
+    test "parents resolve within the same language, nearest directory first" do
+      # gpt-alpha: GPTLanguageModel's `.block` import resolved to a Go struct.
+      load([
+        entity(
+          name: "GPTLanguageModel",
+          entity_type: :class,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/gpt.py",
+          start_line: 18,
+          end_line: 400,
+          is_a: ["block", "Progress"]
+        ),
+        entity(name: "block", entity_type: :struct, language: :go, file_path: "/w/serving/inference/model.go"),
+        entity(name: "Block", entity_type: :class, language: :python, file_path: "/w/experiments/old/block.py"),
+        entity(name: "Block", entity_type: :class, language: :python, file_path: "/w/gpt_alpha/model/block.py"),
+        entity(name: "Progress", entity_type: :function, language: :tsx, file_path: "/w/web/app/src/progress.tsx")
+      ])
+
+      {:ok, result} = Queries.find_module_hierarchy("GPTLanguageModel")
+      parents = Map.new(result.parents, &{String.downcase(&1.name), &1})
+
+      assert parents["block"].resolved
+      assert parents["block"].file_path == "/w/gpt_alpha/model/block.py"
+      refute parents["progress"].resolved, "a Python class must not get a TSX parent"
+    end
+
+    test "Python relative imports resolve to the imported file, not a same-named class elsewhere" do
+      load([
+        entity(
+          name: "GPTLanguageModel",
+          entity_type: :class,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/gpt.py",
+          start_line: 18,
+          end_line: 400,
+          is_a: [".attention", "..progress", ".missing"]
+        ),
+        entity(
+          name: "Attention",
+          entity_type: :class,
+          language: :python,
+          file_path: "/w/experiments/performance/mlx_bench.py"
+        ),
+        entity(
+          name: "MultiHeadAttention",
+          entity_type: :class,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/attention.py",
+          start_line: 46,
+          end_line: 120
+        ),
+        entity(
+          name: "update_progress_ema_",
+          entity_type: :function,
+          language: :python,
+          file_path: "/w/gpt_alpha/progress.py"
+        )
+      ])
+
+      {:ok, result} = Queries.find_module_hierarchy("GPTLanguageModel")
+      parents = Map.new(result.parents, &{&1.name, &1})
+
+      assert parents[".attention"].resolved
+      assert parents[".attention"].file_path == "/w/gpt_alpha/model/attention.py"
+      assert parents["..progress"].file_path == "/w/gpt_alpha/progress.py"
+      refute parents[".missing"].resolved
+    end
+
+    test "contained members resolve inside the entity's own file" do
+      # control-stack: DatabaseService members get/set resolved to a GET route
+      # handler and test variables elsewhere. gpt-alpha: GPTLanguageModel's
+      # __init__ resolved to FastWeightAttention.__init__ in another file.
+      load([
+        entity(
+          name: "DatabaseService",
+          entity_type: :interface,
+          language: :typescript,
+          file_path: "/app/core/ports/services/database-service.ts",
+          start_line: 52,
+          end_line: 80,
+          contains: ["get", "getAllByFields"]
+        ),
+        entity(
+          name: "GET",
+          entity_type: :function,
+          language: :typescript,
+          file_path: "/app/app/api/cron/sync/route.ts"
+        ),
+        entity(
+          name: "GPTLanguageModel",
+          entity_type: :class,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/gpt.py",
+          start_line: 18,
+          end_line: 400,
+          contains: ["__init__", "forward"]
+        ),
+        entity(
+          name: "FastWeightAttention.__init__",
+          entity_type: :method,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/attention.py"
+        ),
+        entity(
+          name: "GPTLanguageModel.__init__",
+          entity_type: :method,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/gpt.py",
+          start_line: 19,
+          end_line: 40
+        ),
+        entity(
+          name: "GPTLanguageModel.forward",
+          entity_type: :method,
+          language: :python,
+          file_path: "/w/gpt_alpha/model/gpt.py",
+          start_line: 60,
+          end_line: 90
+        )
+      ])
+
+      {:ok, db} = Queries.find_module_hierarchy("DatabaseService")
+      get = Enum.find(db.children, &(String.downcase(&1.name) == "get"))
+      refute get.resolved, "an interface member must not resolve to a route handler in another file"
+
+      {:ok, gpt} = Queries.find_module_hierarchy("GPTLanguageModel")
+      names = Enum.map(gpt.children, & &1.name)
+      assert "GPTLanguageModel.__init__" in names
+      assert "GPTLanguageModel.forward" in names
+      refute "FastWeightAttention.__init__" in names
+    end
+
+    test "the entity itself prefers a real definition over a test-file alias" do
+      # control-stack: SyncProviderAdapter resolved to a type alias in a test.
+      load([
+        entity(
+          name: "SyncProviderAdapter",
+          entity_type: :struct,
+          language: :typescript,
+          file_path: "/app/services/sync/execute-sync.test.ts"
+        ),
+        entity(
+          name: "SyncProviderAdapter",
+          entity_type: :interface,
+          language: :typescript,
+          file_path: "/app/services/sync/types.ts",
+          start_line: 48,
+          end_line: 70
+        )
+      ])
+
+      {:ok, result} = Queries.find_module_hierarchy("SyncProviderAdapter")
+      assert result.file_path == "/app/services/sync/types.ts"
+      assert result.entity_type == "interface"
+    end
+  end
 end
