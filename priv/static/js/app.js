@@ -156,6 +156,11 @@ Hooks.CodeGraph = {
     groups.forEach(gname => {
       baseGroupCenter[gname] = {x: groupCenter[gname].x, y: groupCenter[gname].y};
     });
+    const DEFAULT_CLUSTER = 0.9, DEFAULT_SEPARATION = 1.8;
+    groups.forEach(gname => {
+      groupCenter[gname].x = width / 2 + (baseGroupCenter[gname].x - width / 2) * DEFAULT_SEPARATION;
+      groupCenter[gname].y = height / 2 + (baseGroupCenter[gname].y - height / 2) * DEFAULT_SEPARATION;
+    });
 
     // Per-package color + a tinted container box drawn behind the graph, so each
     // cluster reads as a visible package region. Repositioned each tick to wrap
@@ -207,8 +212,11 @@ Hooks.CodeGraph = {
       .force("link", d3.forceLink(links).id(d => d.id).distance(d => linkDistance[d.type] || 175).strength(0.35))
       .force("charge", d3.forceManyBody().strength(-520).distanceMax(900))
       .force("collision", d3.forceCollide().radius(d => Math.sqrt(d.val) * 8 + 30).strength(0.9))
-      .force("x", d3.forceX(d => centerOf(d).x).strength(0.45))
-      .force("y", d3.forceY(d => centerOf(d).y).strength(0.45));
+      // Strong pull + spread-out centers by default: measured on gpt-alpha (500 nodes,
+      // 19 packages), 0.45 / 1.0 left boxes overlapping by 109% of their total area,
+      // 0.9 / 1.8 by 62%. The layout sliders start at these values.
+      .force("x", d3.forceX(d => centerOf(d).x).strength(DEFAULT_CLUSTER))
+      .force("y", d3.forceY(d => centerOf(d).y).strength(DEFAULT_CLUSTER));
 
     this.simulation = simulation;
 

@@ -149,12 +149,12 @@ defmodule ElixirNexus.GraphLive.Index do
              </label>
              <label class="flex flex-col gap-1">
                <span>Cluster tightness</span>
-               <input type="range" min="0.05" max="0.95" step="0.05" value="0.45"
+               <input type="range" min="0.05" max="0.95" step="0.05" value="0.9"
                       oninput="window.graphControls && window.graphControls.cluster(this.value)" class="w-full accent-blue-500" />
              </label>
              <label class="flex flex-col gap-1">
                <span>Boxes separation</span>
-               <input type="range" min="0.5" max="2.5" step="0.1" value="1"
+               <input type="range" min="0.5" max="2.5" step="0.1" value="1.8"
                       oninput="window.graphControls && window.graphControls.boxesSeparation(this.value)" class="w-full accent-blue-500" />
              </label>
 
