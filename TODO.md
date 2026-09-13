@@ -1,7 +1,7 @@
 # CodeNexus TODO
 
 **Current version:** v1.18.13
-**Status:** v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
+**Status:** v1.18.13 shipped (2026-09-13), image built and pushed by CI, smoke-tested in-image. Previous: v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
 Hub, CI green, smoke-tested in-image: `reindex("weightless")` resolves to `/workspace4/weightless`
 (24 Go files, 160 chunks, `error: null`) instead of the empty `/workspace/weightless`.
 
