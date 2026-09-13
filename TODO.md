@@ -1,6 +1,6 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.13
+**Current version:** v1.19.0
 **Status:** v1.18.13 shipped (2026-09-13), image built and pushed by CI, smoke-tested in-image. Previous: v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
 Hub, CI green, smoke-tested in-image: `reindex("weightless")` resolves to `/workspace4/weightless`
 (24 Go files, 160 chunks, `error: null`) instead of the empty `/workspace/weightless`.
@@ -12,7 +12,7 @@ directly: class/method extraction, `find_module_hierarchy` correctly resolves a 
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
-## 🚧 Unreleased (on main) — dogfood fixes: data integrity, analysis accuracy, UI (2026-09-13)
+## ✅ v1.19.0 — dogfood fixes: data integrity, analysis accuracy, UI (2026-09-14)
 
 From dogfooding v1.18.13 on elixir-nexus (Elixir), weightless (Go), control-stack (TS) and gpt-alpha
 (Python), every result checked against grep, plus the UI in Chrome DevTools. Report pinned in Council
