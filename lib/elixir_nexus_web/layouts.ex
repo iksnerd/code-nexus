@@ -12,7 +12,7 @@ defmodule ElixirNexus.Layouts do
         <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
         <title><%= assigns[:page_title] || "CodeNexus" %></title>
         <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
-        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="/css/app.css" />
         <script src="https://d3js.org/d3.v7.min.js"></script>
         <script src="/js/phoenix.min.js"></script>
         <script src="/js/phoenix_live_view.min.js"></script>

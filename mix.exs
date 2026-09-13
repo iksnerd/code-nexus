@@ -47,6 +47,8 @@ defmodule ElixirNexus.MixProject do
       # Web framework
       {:phoenix, "~> 1.7"},
       {:phoenix_live_view, "~> 0.20"},
+      # Compiles the dashboard stylesheet (replaces the Tailwind play CDN).
+      {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
       {:plug_cowboy, "~> 2.6"},
 
       # Vector DB client (using HTTP directly via HTTPoison)

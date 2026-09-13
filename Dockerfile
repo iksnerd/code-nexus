@@ -66,6 +66,10 @@ RUN sed -i 's/skip_compilation?: true/skip_compilation?: false/' lib/elixir_nexu
     mix compile --force && \
     sed -i 's/skip_compilation?: false/skip_compilation?: true/' lib/elixir_nexus/tree_sitter_parser.ex
 
+# Build the dashboard stylesheet (Tailwind CLI; scans lib/ and priv/static/js/app.js).
+COPY assets assets
+RUN mix tailwind.install && mix tailwind default --minify
+
 # Generate static asset digest manifest required by Phoenix in prod mode.
 RUN mix phx.digest
 

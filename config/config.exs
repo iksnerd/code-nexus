@@ -14,6 +14,15 @@ config :elixir_nexus, ElixirNexus.Endpoint,
   live_view: [signing_salt: "ElixirNexus/1.0"],
   secret_key_base: System.get_env("SECRET_KEY_BASE", "dev_only_placeholder_not_a_secret_do_not_use_in_production_x_x_x")
 
+# Dashboard stylesheet: assets/css/app.css -> priv/static/css/app.css.
+# Tailwind v3 (the play CDN it replaces was v3; classes are unchanged).
+config :tailwind,
+  version: "3.4.17",
+  default: [
+    args: ~w(--config=tailwind.config.js --input=css/app.css --output=../priv/static/css/app.css),
+    cd: Path.expand("../assets", __DIR__)
+  ]
+
 config :logger,
   level: :info
 

@@ -3,6 +3,12 @@ defmodule ElixirNexus.DashboardLiveTest do
   import Phoenix.LiveViewTest
 
   describe "mount" do
+    test "uses the compiled stylesheet, not the Tailwind play CDN", %{conn: conn} do
+      html = conn |> get("/") |> html_response(200)
+      assert html =~ ~s(href="/css/app.css")
+      refute html =~ "cdn.tailwindcss.com"
+    end
+
     test "renders dashboard page", %{conn: conn} do
       {:ok, view, html} = live(conn, "/")
       assert html =~ "CodeNexus" or html =~ "Dashboard" or html =~ "nexus"
