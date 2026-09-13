@@ -1,9 +1,9 @@
 # CodeNexus TODO
 
 **Current version:** v1.19.1
-**Status:** v1.18.13 shipped (2026-09-13), image built and pushed by CI, smoke-tested in-image. Previous: v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
-Hub, CI green, smoke-tested in-image: `reindex("weightless")` resolves to `/workspace4/weightless`
-(24 Go files, 160 chunks, `error: null`) instead of the empty `/workspace/weightless`.
+**Status:** v1.19.1 shipped (2026-09-14). CI built and pushed `iksnerd/code-nexus:v1.19.1` + `:latest`
+(`sha256:1a4e08a4…`). Smoke-tested on the published image: transport check script 6/6, weightless
+dead code = the 4 truly unused functions, `graph_status` ready, compiled CSS served.
 
 Previous: v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
 Hub. Verified against a real polyglot codebase (`gpt-alpha`: 283 Python files + TS/TSX frontend +
