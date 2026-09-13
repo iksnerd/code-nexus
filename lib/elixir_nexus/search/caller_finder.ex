@@ -45,6 +45,7 @@ defmodule ElixirNexus.Search.CallerFinder do
           |> refine_entities_to_functions(entity_name, all_entities)
           |> Enum.uniq_by(& &1.id)
           |> drop_module_callers_with_function_sibling()
+          |> disambiguate_definitions(entity_name, all_entities)
 
         _ ->
           results
@@ -52,6 +53,78 @@ defmodule ElixirNexus.Search.CallerFinder do
       end
 
     {:ok, refined}
+  end
+
+  # When several files define the queried name (gpt_alpha/training.py and
+  # jepa/text_jepa/training.py both define save_checkpoint), tag each caller with
+  # the definition it uses (`resolves_to`), and for a qualified query
+  # (`text_jepa.save_checkpoint`) keep only that definition's callers.
+  defp disambiguate_definitions(callers, entity_name, all_entities) do
+    short = entity_name |> String.split(".") |> List.last() |> String.downcase()
+
+    definitions =
+      all_entities
+      |> Enum.filter(fn e ->
+        e.entity["entity_type"] in ["function", "method", "class"] and
+          (e.entity["name"] || "") |> String.split(".") |> List.last() |> String.downcase() == short
+      end)
+      |> Enum.map(& &1.entity["file_path"])
+      |> Enum.uniq()
+
+    if length(definitions) < 2 do
+      callers
+    else
+      tagged =
+        Enum.map(callers, fn caller ->
+          put_in(caller, [:entity, "resolves_to"], resolve_definition(caller.entity, short, definitions))
+        end)
+
+      case String.split(entity_name, ".") do
+        [_bare] ->
+          tagged
+
+        parts ->
+          qualifier = parts |> Enum.drop(-1) |> Enum.join("/") |> String.downcase()
+          Enum.filter(tagged, &String.contains?(String.downcase(&1.entity["resolves_to"] || ""), qualifier))
+      end
+    end
+  end
+
+  defp resolve_definition(caller, short, definitions) do
+    call =
+      Enum.find(caller["calls"] || [], fn c ->
+        c |> String.split(".") |> List.last() |> String.downcase() == short
+      end)
+
+    qualifier =
+      case call && String.split(call, ".") do
+        parts when is_list(parts) and length(parts) > 1 ->
+          parts |> Enum.drop(-1) |> Enum.join("/") |> String.downcase()
+
+        _ ->
+          nil
+      end
+
+    module_of = fn path -> path |> Path.rootname() |> String.downcase() end
+
+    by_qualifier = qualifier && Enum.find(definitions, &String.contains?(module_of.(&1), qualifier))
+
+    by_import =
+      Enum.find(definitions, fn def_path ->
+        Enum.any?(caller["is_a"] || [], fn import ->
+          String.ends_with?(module_of.(def_path), import |> String.replace(".", "/") |> String.downcase())
+        end)
+      end)
+
+    by_qualifier || by_import ||
+      Enum.max_by(definitions, &shared_dir_depth(&1, caller["file_path"] || ""))
+  end
+
+  defp shared_dir_depth(a, b) do
+    Path.split(Path.dirname(a))
+    |> Enum.zip(Path.split(Path.dirname(b)))
+    |> Enum.take_while(fn {x, y} -> x == y end)
+    |> length()
   end
 
   @doc """

@@ -252,4 +252,61 @@ defmodule ElixirNexus.Search.CallerFinderTest do
       end
     end
   end
+
+  describe "find_callers/2 - several definitions share the name" do
+    # gpt-alpha: gpt_alpha/training.py and jepa/text_jepa/training.py both define
+    # save_checkpoint, and their callers came back as one merged list.
+    setup do
+      base = %{
+        content: "",
+        start_line: 1,
+        end_line: 1,
+        module_path: nil,
+        visibility: :public,
+        parameters: [],
+        contains: [],
+        language: :python,
+        entity_type: :function,
+        is_a: [],
+        calls: []
+      }
+
+      chunks = [
+        Map.merge(base, %{id: "d1", name: "save_checkpoint", file_path: "/w/gpt_alpha/training.py"}),
+        Map.merge(base, %{id: "d2", name: "save_checkpoint", file_path: "/w/jepa/text_jepa/training.py"}),
+        Map.merge(base, %{id: "c1", name: "main", file_path: "/w/train.py", calls: ["gpt_alpha.save_checkpoint"]}),
+        Map.merge(base, %{id: "c2", name: "main", file_path: "/w/jepa/train.py", calls: ["text_jepa.save_checkpoint"]}),
+        Map.merge(base, %{
+          id: "c3",
+          name: "test_save",
+          file_path: "/w/tests/test_ckpt.py",
+          calls: ["save_checkpoint"],
+          is_a: ["gpt_alpha.training"]
+        }),
+        Map.merge(base, %{id: "c4", name: "save_now", file_path: "/w/jepa/text_jepa/run.py", calls: ["save_checkpoint"]})
+      ]
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+      :ok
+    end
+
+    test "each caller says which definition it resolves to" do
+      {:ok, callers} = Queries.find_callers("save_checkpoint")
+      resolved = Map.new(callers, &{&1.entity["file_path"], &1.entity["resolves_to"]})
+
+      assert resolved["/w/train.py"] == "/w/gpt_alpha/training.py"
+      assert resolved["/w/jepa/train.py"] == "/w/jepa/text_jepa/training.py"
+      assert resolved["/w/tests/test_ckpt.py"] == "/w/gpt_alpha/training.py", "via its import"
+      assert resolved["/w/jepa/text_jepa/run.py"] == "/w/jepa/text_jepa/training.py", "nearest directory"
+    end
+
+    test "a qualified name returns only that definition's callers" do
+      {:ok, callers} = Queries.find_callers("text_jepa.save_checkpoint")
+      files = callers |> Enum.map(& &1.entity["file_path"]) |> Enum.sort()
+      assert files == ["/w/jepa/text_jepa/run.py", "/w/jepa/train.py"]
+    end
+  end
 end
