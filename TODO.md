@@ -29,8 +29,11 @@ tests green, CI green.
   Added the extend block. The allowlisted commit SHA was also stale after the history rewrite
   (`0e5a796` → `e8a5712`, the dev+test `secret_key_base` placeholder). Full history scan with real rules:
   227 commits, no leaks.
-- [ ] First real run of the `docker` job happens on the next tag; a manual build-only run
-  (`gh workflow run ci.yml --ref main -f publish=false`) validates it before then.
+- [x] **Validated with a manual build-only run** (`gh workflow run ci.yml --ref main -f publish=false`,
+  run 34763696317): test 87s, secret-scan 10s, docker 186s on the ARM runner (Rust NIF compiled
+  natively, image not pushed). The first run of the real-rules secret scan failed on the dev
+  placeholder under its pre-rewrite SHA `0e5a796`, still reachable via GitHub's `refs/pull/1/head` and
+  `refs/pull/2/head`; both SHAs are now allowlisted. First push from CI happens on the next tag.
 
 ## ✅ Shipped in v1.18.12 — test isolation + bare-name resolution (2026-09-13)
 
