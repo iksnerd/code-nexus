@@ -687,11 +687,18 @@ defmodule ElixirNexus.Indexer do
   defp purge_out_of_scope(in_scope_files) do
     scope_set = MapSet.new(in_scope_files)
 
-    # DirtyTracker only knows files indexed in this server session. The cache can
-    # also hold chunks it never saw: hydrated from Qdrant after a restart, or
-    # written by a stray watcher event from another project.
+    # DirtyTracker only knows files indexed in this server session, and the cache
+    # can hold another project's chunks after a switch. The collection itself can
+    # also hold points neither ever saw (written by a stray watcher event before a
+    # restart), so ask Qdrant for its stored file paths too.
+    stored =
+      case ElixirNexus.QdrantClient.stored_file_paths() do
+        {:ok, paths} -> paths
+        _ -> []
+      end
+
     stale =
-      (ElixirNexus.DirtyTracker.known_files() ++ ChunkCache.file_paths())
+      (ElixirNexus.DirtyTracker.known_files() ++ ChunkCache.file_paths() ++ stored)
       |> Enum.uniq()
       |> Enum.reject(&MapSet.member?(scope_set, &1))
 

@@ -224,6 +224,40 @@ defmodule ElixirNexus.IndexerDirectoryTest do
       assert Enum.any?(ElixirNexus.ChunkCache.all(), &(&1.file_path == Path.join(test_dir, "own.ex")))
     end
 
+    test "purges collection points from outside the project root that no cache knows about", %{test_dir: test_dir} do
+      # control-stack's collection kept 48 gpt-alpha/elixir-nexus points through a
+      # reindex after a restart: they were only in Qdrant, never in ChunkCache or
+      # DirtyTracker, so reconcile didn't see them.
+      File.write!(Path.join(test_dir, "own.ex"), "defmodule OwnQ do\n  def own, do: :ok\nend\n")
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      other = Path.join(System.tmp_dir!(), "other_project_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(other)
+      foreign = Path.join(other, "foreign.ex")
+      File.write!(foreign, "defmodule ForeignQ do\n  def foreign_thing, do: :ok\nend\n")
+      on_exit(fn -> File.rm_rf!(other) end)
+
+      {:ok, _} = ElixirNexus.Indexer.index_file(foreign)
+      # Now it exists only in Qdrant, as after a restart.
+      ElixirNexus.ChunkCache.delete_by_file(foreign)
+      ElixirNexus.DirtyTracker.forget(foreign)
+
+      points_for = fn path ->
+        filter = %{"must" => [%{"key" => "file_path", "match" => %{"value" => path}}]}
+        {:ok, %{"result" => %{"points" => points}}} = ElixirNexus.QdrantClient.scroll_points(10, nil, filter)
+        points
+      end
+
+      assert points_for.(foreign) != []
+
+      {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
+      :ok = ElixirNexus.Indexer.await_idle()
+
+      assert points_for.(foreign) == []
+      assert points_for.(Path.join(test_dir, "own.ex")) != []
+    end
+
     test "purge/0 clears the index", %{test_dir: test_dir} do
       File.write!(Path.join(test_dir, "x.ex"), "defmodule X do\n  def x, do: :ok\nend\n")
 

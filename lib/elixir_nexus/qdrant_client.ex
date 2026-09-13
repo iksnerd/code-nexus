@@ -280,6 +280,37 @@ defmodule ElixirNexus.QdrantClient do
     GenServer.call(__MODULE__, {:delete_points, ids}, @http_timeout)
   end
 
+  @doc """
+  Distinct `file_path`s stored in the active collection (payload-only scroll).
+  Used by reindex reconcile to find points no cache knows about.
+  """
+  def stored_file_paths do
+    %{url: url, collection: coll} = qdrant_state()
+    collect_file_paths(url, coll, nil, MapSet.new())
+  end
+
+  defp collect_file_paths(url, coll, offset, acc) do
+    body =
+      %{"limit" => 1000, "with_payload" => ["file_path"], "with_vector" => false}
+      |> then(fn b -> if offset, do: Map.put(b, "offset", offset), else: b end)
+
+    case http_post("#{url}/collections/#{coll}/points/scroll", body) do
+      {:ok, %{"result" => %{"points" => points} = result}} ->
+        acc = Enum.reduce(points, acc, &MapSet.put(&2, get_in(&1, ["payload", "file_path"])))
+
+        case result["next_page_offset"] do
+          nil -> {:ok, acc |> MapSet.delete(nil) |> MapSet.to_list()}
+          next -> collect_file_paths(url, coll, next, acc)
+        end
+
+      {:ok, _} ->
+        {:ok, acc |> MapSet.delete(nil) |> MapSet.to_list()}
+
+      error ->
+        error
+    end
+  end
+
   @doc "Delete all points matching a file_path filter."
   def delete_points_by_file(file_path) when is_binary(file_path) do
     filter = %{
