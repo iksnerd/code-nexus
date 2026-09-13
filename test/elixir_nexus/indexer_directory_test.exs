@@ -155,12 +155,14 @@ defmodule ElixirNexus.IndexerDirectoryTest do
       write.("lib/app.ex", "defmodule App do\n  def run, do: :ok\nend\n")
       write.("lib/vendored/copy.ex", "defmodule Vendored do\n  def v, do: :ok\nend\n")
       write.("generated/out.ex", "defmodule Generated do\n  def g, do: :ok\nend\n")
-      write.("speech/.gitignore", "public/built/\n*.gen.js\n")
-      write.("speech/public/built/worker.js", "function bundled() { return 1 }\n")
-      write.("speech/src/app.gen.js", "function generatedHelper() { return 2 }\n")
-      write.("speech/src/real.js", "function realSpeech() { return 3 }\n")
+      # Elixir fixtures: CI runs without the tree-sitter NIF, so .js files
+      # wouldn't parse there and the "included" assertions would fail.
+      write.("speech/.gitignore", "public/built/\n*.gen.ex\n")
+      write.("speech/public/built/worker.ex", "defmodule Bundled do\n  def b, do: 1\nend\n")
+      write.("speech/src/app.gen.ex", "defmodule GeneratedHelper do\n  def g, do: 2\nend\n")
+      write.("speech/src/real.ex", "defmodule RealSpeech do\n  def r, do: 3\nend\n")
       # A sibling of speech/ must not inherit speech/.gitignore.
-      write.("other/public/built/kept.js", "function keptBuilt() { return 4 }\n")
+      write.("other/public/built/kept.ex", "defmodule KeptBuilt do\n  def k, do: 4\nend\n")
 
       {:ok, _} = ElixirNexus.Indexer.index_directory(test_dir)
       :ok = ElixirNexus.Indexer.await_idle()
@@ -171,12 +173,12 @@ defmodule ElixirNexus.IndexerDirectoryTest do
         |> Enum.uniq()
 
       assert "lib/app.ex" in indexed
-      assert "speech/src/real.js" in indexed
-      assert "other/public/built/kept.js" in indexed
+      assert "speech/src/real.ex" in indexed
+      assert "other/public/built/kept.ex" in indexed
       refute "lib/vendored/copy.ex" in indexed
       refute "generated/out.ex" in indexed
-      refute "speech/public/built/worker.js" in indexed
-      refute "speech/src/app.gen.js" in indexed
+      refute "speech/public/built/worker.ex" in indexed
+      refute "speech/src/app.gen.ex" in indexed
     end
   end
 
@@ -333,7 +335,10 @@ defmodule ElixirNexus.IndexerDirectoryTest do
           end)
         end
 
-      results = Task.await_many(tasks)
+      # This checks concurrent calls are handled safely (one runs, the rest are
+      # rejected), not speed: the default 5s await timed out once on a loaded
+      # machine while the running index took longer.
+      results = Task.await_many(tasks, 30_000)
 
       assert Enum.all?(results, &is_tuple/1)
     end

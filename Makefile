@@ -1,6 +1,6 @@
 .PHONY: deps compile test test.all format format.check \
 	build run stop logs \
-	docker.buildx docker.build docker.push docker.publish docker.publish.fresh docker.publish.local \
+	test.ci docker.buildx docker.build docker.push docker.publish docker.publish.fresh docker.publish.local \
 	tag release clean hooks
 
 IMAGE := iksnerd/code-nexus
@@ -22,6 +22,15 @@ test: compile
 
 test.all: compile
 	mix test
+
+# Run the suite the way CI does: same exclusions and no tree-sitter NIF (CI never
+# builds it). A test that parses JS/Python/Go without @tag :nif passes locally but
+# fails in CI; this catches it. The NIF is restored even if the tests fail.
+test.ci: compile
+	@so=priv/native/tree_sitter_nif.so; \
+	if [ -f $$so ]; then mv $$so $$so.ci-off; fi; \
+	trap 'if [ -f '$$so'.ci-off ]; then mv '$$so'.ci-off '$$so'; fi' EXIT; \
+	mix test --exclude performance --exclude multi_project --exclude nif --exclude file_watcher
 
 format:
 	mix format

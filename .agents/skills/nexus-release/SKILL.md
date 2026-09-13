@@ -17,6 +17,8 @@ mix format --check-formatted       # Auto-fix with: mix format
 mix test --exclude performance --exclude multi_project
 ```
 
+Then run `make test.ci`: CI's exact test command with the tree-sitter NIF moved aside, since CI never builds it. A test that parses non-Elixir source without `@tag :nif` passes locally and fails in CI. v1.19.0's tag pipeline failed on exactly that, after the tag and CLI release had already gone out, so the fix shipped as v1.19.1.
+
 If any check fails, fix it before proceeding. Never tag a broken commit.
 
 **Paper cut — local Elixir newer than CI.** CI pins a specific Elixir/OTP

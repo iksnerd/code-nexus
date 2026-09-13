@@ -10,7 +10,10 @@ CI runs only on version tags (`v*`), so nothing checks a push to `main` except y
 mix compile --warnings-as-errors   # Must compile with zero warnings
 mix format --check-formatted       # Must pass formatter check
 mix test --exclude performance --exclude multi_project  # Must pass tests
+make test.ci                       # Must pass: CI's exact run, without the tree-sitter NIF
 ```
+
+CI never builds the NIF, so any test that parses JS/TS/Python/Go/Rust source must be tagged `@tag :nif` or use Elixir fixtures. Locally the NIF is present and such a test passes; `make test.ci` moves it aside to catch that (v1.19.0's CI failed on exactly this).
 
 If formatting fails, run `mix format` to auto-fix, then re-commit.
 
