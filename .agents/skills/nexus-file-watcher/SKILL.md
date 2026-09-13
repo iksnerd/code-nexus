@@ -26,11 +26,22 @@ metadata:
 # Watch a directory
 FileWatcher.watch("/workspace/my-project/lib")
 
-# Stop watching a directory
-FileWatcher.unwatch("/workspace/my-project/lib")
-
-# FileWatcher re-wires watchers when ProjectSwitcher changes collections
+# Stop every watcher (reindex does this before watching the new project)
+FileWatcher.unwatch_all()
 ```
+
+**Stopping a watcher needs `GenServer.stop/1`.** `Process.exit(pid, :normal)` is
+ignored by a process that isn't trapping exits (the FileSystem worker isn't), so
+before 2026-09-13 `unwatch_all` left every old watcher running. Each reindex added
+one, and edits in previously indexed projects were indexed into whichever
+collection was active.
+
+Two more guards back that up:
+- Events and debounced flushes are dropped unless the path is under a currently
+  watched root, matched both as given and symlink-resolved. FSEvents reports
+  `/private/var/...` for a watched `/var/...` directory on macOS.
+- Reindex reconcile purges cached files outside the project scope, including
+  ones DirtyTracker never saw (hydrated from Qdrant or written by a stray event).
 
 Internally:
 ```elixir
@@ -104,9 +115,9 @@ On file deletion:
 To watch additional directories after initial setup (e.g. after `reindex` switches project):
 
 ```elixir
-# Called by ProjectSwitcher after switching collection
+# What mcp_server.ex does on reindex
 FileWatcher.unwatch_all()
-Enum.each(new_dirs, &FileWatcher.watch/1)
+Enum.each(new_dirs, &FileWatcher.watch_directory/1)
 ```
 
 ## Debugging File Events

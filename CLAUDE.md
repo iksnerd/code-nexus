@@ -21,6 +21,10 @@ mix deps.get
 mix compile
 ```
 
+### Dashboard CSS (Tailwind CLI)
+
+The dashboard stylesheet is built from `assets/css/app.css` with the Tailwind v3 CLI (`config :tailwind` in `config/config.exs`, content globs in `assets/tailwind.config.js`) into `priv/static/css/app.css`, which is gitignored. `mix phx.server` in dev runs it as a watcher; the Docker build runs `mix tailwind default --minify`. For a one-off build: `mix tailwind default`. Class names must appear as complete strings in `lib/` or `priv/static/js/app.js` (no `bg-#{color}-500` fragments), or the build won't include them.
+
 ### Static JS vendor files
 
 `priv/static/js/phoenix.min.js` and `priv/static/js/phoenix_live_view.min.js` are vendor files required by the Phoenix LiveView dashboard. They are force-tracked in git (`git add -f`) despite `/priv/static/` being in `.gitignore`. Without them, LiveView fails to connect and all UI interactivity (buttons, graph, search) breaks.
@@ -107,7 +111,7 @@ For building/testing CodeNexus itself:
 ```bash
 ollama pull embeddinggemma:300m                       # Ensure embedding model
 docker-compose up -d qdrant                           # Qdrant only
-nohup mix phx.server > /tmp/nexus_server.log 2>&1 &  # Phoenix dashboard
+nohup mix phx.server > /tmp/nexus_server.log 2>&1 &  # Phoenix dashboard (dev also runs the Tailwind watcher)
 mix mcp                                               # MCP stdio transport
 mix mcp_http --port 3002                              # MCP Streamable HTTP transport
 ```

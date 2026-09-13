@@ -12,6 +12,34 @@ directly: class/method extraction, `find_module_hierarchy` correctly resolves a 
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
+## 🚧 Unreleased (on main) — dogfood fixes: data integrity, analysis accuracy, UI (2026-09-13)
+
+From dogfooding v1.18.13 on elixir-nexus (Elixir), weightless (Go), control-stack (TS) and gpt-alpha
+(Python), every result checked against grep, plus the UI in Chrome DevTools. Report pinned in Council
+Hub room `code-nexus-dogfood-v1-18-12`.
+
+- [x] **File watchers never stopped** (`Process.exit(pid, :normal)` is ignored): every reindex added a
+  watcher, and edits in old projects were indexed into the active collection. Stopped with
+  `GenServer.stop`, events guarded to watched roots (symlink-resolved for macOS FSEvents), and reconcile
+  purges out-of-scope cached files. **After release: purge + reindex control-stack and gpt-alpha**, both
+  contaminated in production.
+- [x] **find_dead_code false positives**: Go 12/15 and TS 9/9 sampled hits were wrong. Real data now:
+  weightless 42 → 5 (4 confirmed unused), control-stack services 16 → 0. Go package-level `var` blocks are
+  now extracted (NIF keeps `var_spec_list`).
+- [x] **.gitignore path patterns and nested .gitignore files** were ignored (a 40k-line bundle was indexed).
+- [x] **find_module_hierarchy** resolved names project-wide and across languages; Python relative imports
+  now resolve by path. Also: cache hydration turned `class`/`python` into `:function`/`nil`
+  (`to_existing_atom`).
+- [x] **Comments and strings counted as calls** (JS and Python content enrichment).
+- [x] **Rankings**: builtins/stdlib calls (`len`, `Map.get`), test code, and generated files dominated
+  `top_connected`/`critical_files`; the dashboard and graph now share the same fan-in.
+- [x] **Graph queries answered empty during the async graph rebuild**; they now wait (bounded).
+- [x] **find_all_callers merged same-named definitions**; callers carry `resolves_to`.
+- [x] UI: Vectors "Re-index" indexed CodeNexus itself (and caused two flaky tests), wrong point/segment
+  counts; dashboard tools card stale (8/12), no indexing progress; graph merged same-named folders, sized
+  builtins as hubs, opened zoomed in, overlapping boxes; Tailwind play CDN replaced by a CLI build.
+- [ ] Container build + Chrome verification before tagging.
+
 ## ✅ v1.18.13 — MCP HTTP transport fixes (2026-09-13)
 
 Found while chasing "Claude Code shows authenticate for code-nexus". Claude Code's MCP log had 95
