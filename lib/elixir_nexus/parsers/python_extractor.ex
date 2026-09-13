@@ -5,6 +5,7 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
   """
 
   alias ElixirNexus.CodeSchema
+  alias ElixirNexus.Parsers.SourceText
 
   @doc "Extract code entities from a tree-sitter AST."
   def extract_entities(file_path, ast, source) do
@@ -358,13 +359,15 @@ defmodule ElixirNexus.Parsers.PythonExtractor do
       if entity.entity_type in [:function, :method] and is_binary(entity.content) and
            entity.content != "" do
         existing = MapSet.new(entity.calls)
+        # Comments, docstrings, and strings mention names without calling them.
+        code = SourceText.code_only(entity.content, :python)
 
         extra =
           Enum.flat_map(qual_table, fn {sym, mod} ->
             qualified = "#{mod}.#{sym}"
 
             if not MapSet.member?(existing, qualified) and
-                 Regex.match?(~r/\b#{Regex.escape(sym)}\b/, entity.content) do
+                 Regex.match?(~r/\b#{Regex.escape(sym)}\b/, code) do
               [qualified]
             else
               []

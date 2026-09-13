@@ -742,6 +742,56 @@ defmodule ElixirNexus.Parsers.JavaScriptEntitiesTest do
   end
 
   describe "import-based call enrichment" do
+    test "an imported name mentioned only in comments or strings is not a call" do
+      # control-stack: sync-scheduler.ts only mentions executeSync in comments,
+      # yet getIntegrationsToSync and runScheduledSync were listed as callers.
+      source = """
+      import { executeSync, recordFailure } from './execute-sync';
+
+      function getIntegrationsToSync() {
+        // `executeSync` keeps a transient failure for retry
+        /* executeSync stamps lastSyncAttemptAt */
+        const label = "executeSync";
+        return recordFailure(label);
+      }
+      """
+
+      import_node =
+        make_node("import_statement",
+          children: [
+            make_node("import_clause",
+              children: [
+                make_node("named_imports",
+                  children: [
+                    make_node("import_specifier", children: [make_node("identifier", text: "executeSync")]),
+                    make_node("import_specifier", children: [make_node("identifier", text: "recordFailure")])
+                  ]
+                )
+              ]
+            ),
+            make_node("string", children: [make_node("string_fragment", text: "./execute-sync")])
+          ]
+        )
+
+      func_node =
+        make_node("function_declaration",
+          name: "getIntegrationsToSync",
+          start_row: 2,
+          end_row: 7,
+          children: [make_node("formal_parameters", children: []), make_node("statement_block", children: [])]
+        )
+
+      ast = make_node("program", children: [import_node, func_node])
+
+      func =
+        "sync-scheduler.ts"
+        |> JavaScriptExtractor.extract_entities(ast, source)
+        |> Enum.find(&(&1.name == "getIntegrationsToSync"))
+
+      assert "recordFailure" in func.calls
+      refute "executeSync" in func.calls
+    end
+
     test "function entity gains calls for imported names used in its content" do
       source = """
       import FileExplorer from './FileExplorer';

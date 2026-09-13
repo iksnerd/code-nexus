@@ -437,6 +437,38 @@ defmodule ElixirNexus.Parsers.PythonCallsTest do
              "content enrichment should add qualified call, got: #{inspect(func.calls)}"
     end
 
+    test "content enrichment ignores symbols mentioned only in comments, docstrings, or strings" do
+      ast =
+        make_node("module",
+          children: [
+            make_node("import_from_statement",
+              start_row: 0,
+              children: [make_node("identifier", text: "render_variant"), make_node("identifier", text: "assemble")]
+            ),
+            make_node("function_definition",
+              name: "_run_pipeline",
+              start_row: 2,
+              end_row: 8,
+              children: [make_node("parameters", children: []), make_node("block", children: [])]
+            )
+          ]
+        )
+
+      source = ~s|from meta_ads.postprocess import render_variant, assemble
+
+def _run_pipeline():
+    """Unlike render_variant, this only assembles."""
+    # render_variant used to run here
+    label = "render_variant"
+    return assemble(label)
+|
+
+      func = "ad_render.py" |> PythonExtractor.extract_entities(ast, source) |> Enum.find(&(&1.name == "_run_pipeline"))
+
+      assert "meta_ads.postprocess.assemble" in func.calls
+      refute "meta_ads.postprocess.render_variant" in func.calls
+    end
+
     test "parenthesized multi-line import qualifies calls correctly" do
       # Simulates: from meta_ads.postprocess import (
       #   render_variant,

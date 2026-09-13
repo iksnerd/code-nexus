@@ -5,6 +5,7 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
   """
 
   alias ElixirNexus.CodeSchema
+  alias ElixirNexus.Parsers.SourceText
   alias ElixirNexus.Parsers.JavaScript.{Entities, ImportsExports}
 
   @doc "Extract code entities from a tree-sitter AST."
@@ -88,12 +89,14 @@ defmodule ElixirNexus.Parsers.JavaScriptExtractor do
       if entity.entity_type in [:function, :method] and is_binary(entity.content) and
            entity.content != "" do
         existing = MapSet.new(entity.calls)
+        # Comments and string literals mention names without calling them.
+        code = SourceText.code_only(entity.content, :js)
 
         extra =
           Enum.filter(imported_names, fn name ->
             is_binary(name) and name != "" and
               not MapSet.member?(existing, name) and
-              content_references_name?(entity.content, name)
+              content_references_name?(code, name)
           end)
 
         if extra == [], do: entity, else: %{entity | calls: entity.calls ++ extra}
