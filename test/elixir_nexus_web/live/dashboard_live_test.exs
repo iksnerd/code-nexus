@@ -152,6 +152,11 @@ defmodule ElixirNexus.DashboardLiveTest do
       end
 
       refute card =~ ">find_callees<"
+
+      # Long first clauses are cut at a word, not mid-word ("connectivity, f").
+      [_, status_blurb] = Regex.run(~r{>get_status</h4>\s*<p[^>]*>([^<]*)</p>}, card)
+      assert String.ends_with?(status_blurb, "…")
+      refute status_blurb =~ ~r/\s\S{1,2}…$/
     end
   end
 

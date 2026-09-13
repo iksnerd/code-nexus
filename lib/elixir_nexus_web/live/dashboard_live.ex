@@ -335,11 +335,18 @@ defmodule ElixirNexus.DashboardLive.Index do
 
   # First clause of the tool description, e.g. "Transitive blast radius".
   defp tool_blurb(description) do
-    description
-    |> String.split(~r/(?<=[.!?])\s|\s—\s|;\s/, parts: 2)
-    |> hd()
-    |> String.trim_trailing(".")
-    |> String.slice(0, 90)
+    clause =
+      description
+      |> String.split(~r/(?<=[.!?])\s|\s—\s|;\s/, parts: 2)
+      |> hd()
+      |> String.trim_trailing(".")
+
+    if String.length(clause) <= 90 do
+      clause
+    else
+      # Cut at the last whole word that fits.
+      clause |> String.slice(0, 90) |> String.replace(~r/[\s,;:]+\S*$/, "") |> Kernel.<>("…")
+    end
   end
 
   defp page_footer(assigns) do
