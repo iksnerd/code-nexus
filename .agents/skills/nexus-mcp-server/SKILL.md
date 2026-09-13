@@ -125,6 +125,10 @@ curl -sN --max-time 130 localhost:3002/mcp -H 'Accept: text/event-stream'
 Claude Code's own MCP log is the ground truth for what the client rejected:
 `~/Library/Caches/claude-cli-nodejs/<project-path-slug>/mcp-logs-code-nexus/*.jsonl`. Grep it for `dropped after`, `Invalid result`, and `Terminal connection error`.
 
+## Response Compaction Drops Unknown Keys
+
+`ResponseFormat.compact_entity/1` keeps a fixed set of entity keys (name, file_path, entity_type, lines, visibility, parameters, calls). A field a query adds (e.g. `resolves_to` from `find_all_callers`) never reaches the client unless it's added there. Test new response fields through `MCPServer.handle_tool_call/3` and decode the JSON; a test against `Search.Queries` alone passed while the MCP response dropped the field.
+
 ## Timeout Patch
 
 ExMCP's default tool call timeout is 10s — too short for `reindex`. The Dockerfile patches `message_processor.ex` via `sed` to raise it to 120s. If you hit timeout errors on `reindex`, check that Docker was rebuilt after code changes.
