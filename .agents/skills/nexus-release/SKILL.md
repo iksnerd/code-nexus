@@ -74,48 +74,63 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 6 — Wait for CI green
+Pushing `main` runs nothing: CI is tag-only (`.github/workflows/ci.yml`). Every commit is gated
+locally by the pre-commit hook (`make hooks` once per clone): gitleaks on staged changes, format
+check, compile with warnings as errors. The test suite is not in the hook, so step 1 still matters.
+
+## 6 — Wait for the tag pipeline
 
 ```bash
 gh run list --limit 3 --repo iksnerd/code-nexus
+gh run watch <ci-run-id> --exit-status
 ```
 
-Two workflows run on tag push:
-- **CI** — Elixir tests (must pass before Docker build)
-- **Release CLI** — GoReleaser builds `nexus` binaries and publishes a GitHub Release automatically
+Two workflows run on the tag push:
+- **CI**: `test` + `secret-scan`, then `docker`, which builds `linux/arm64` on a native ARM
+  runner and pushes `iksnerd/code-nexus:vX.Y.Z` + `:latest`. The `docker` job needs both
+  gates green, so a failing commit never publishes. It also fails if the tag doesn't match
+  `VERSION`; bump `VERSION` before tagging.
+- **Release CLI**: GoReleaser builds the `nexus` binaries and publishes a GitHub Release.
 
-CI must show `completed / success` before building the Docker image. If it fails, fix the issue, push a new commit, and wait again. Never publish a Docker image from a failing commit.
+If CI fails, fix it, bump to a new patch version, and tag again. Don't move an existing tag.
 
-The CLI GitHub Release is created automatically by GoReleaser — no manual step needed.
+**Dry run before a risky release** (Dockerfile or workflow changes): trigger CI manually from
+`main` with `publish` unticked. It runs the full pipeline and builds the image without pushing:
+
+```bash
+gh workflow run ci.yml --ref main -f publish=false
+```
 
 ### CI unavailable (quota exhausted / Actions disabled) — local-only release
 
 GitHub Actions minutes can run out. When CI can't run, do **not** wait on it (the runs may sit
 `in_progress` forever or fail to start). Substitute a local gate instead:
 
-1. The **step 1 pre-push checks already passed locally** (tests + format) — that is the substantive
+1. The **step 1 pre-push checks already passed locally** (tests + format), which is the substantive
    gate CI would have run. Confirm `mix test --exclude performance --exclude multi_project` is green
-   on the exact committed tree.
-2. Skip straight to step 7 (build) and step 8 (smoke test). **The published-image smoke test is the
-   real backstop** — it builds the Linux NIF from scratch and boots the actual artifact, catching
-   anything a green test suite wouldn't (NIF link errors, missing vendor JS, startup crashes).
-3. Note in the release post that CI was skipped and why, and that the local gate + image smoke test
-   stood in. Re-enable CI for the next release when quota resets.
+   on the exact committed tree, and run `gitleaks git --no-banner` for the secret scan.
+2. Build and push the image yourself (step 7), then smoke-test it (step 8). **The published-image
+   smoke test is the real backstop**: it boots the Linux NIF built from scratch, catching anything a
+   green test suite wouldn't (NIF link errors, missing vendor JS, startup crashes).
+3. Note in the release post that CI was skipped and why.
 
-## 7 — Build and push Docker image (multi-arch)
+## 7 — Docker image
+
+Normally nothing to do: the tag pipeline's `docker` job publishes it. Confirm it landed:
 
 ```bash
-docker buildx build --platform linux/arm64 \
-  -t iksnerd/code-nexus:vX.Y.Z \
-  -t iksnerd/code-nexus:latest \
-  --push .
+docker pull iksnerd/code-nexus:vX.Y.Z
 ```
 
-**Note:** We build `linux/arm64` only — the primary deployment target is Apple Silicon Macs. Add `linux/amd64` back if Linux server deployment is needed (it's slow — cross-compilation via QEMU).
+**Local fallback** (CI unavailable, or the `docker` job failed for an infra reason):
 
-The multi-stage Dockerfile handles NIF compilation automatically for each platform.
+```bash
+make docker.publish   # buildx, linux/arm64, pushes :vX.Y.Z and :latest
+```
 
-After push, verify the manifest landed: `docker pull iksnerd/code-nexus:vX.Y.Z`
+We build `linux/arm64` only; the primary deployment target is Apple Silicon Macs. Add
+`linux/amd64` back if Linux server deployment is needed (slow locally under QEMU; in CI it
+would need an `ubuntu-latest` job per platform plus a manifest merge).
 
 ## 8 — Smoke-test the container locally
 
@@ -217,7 +232,8 @@ your working project afterwards (`reindex(path: "<project>")`).
 | `lib/elixir_nexus/mcp_server.ex` | No debug logging left in, tool list accurate |
 | `lib/elixir_nexus/qdrant_client.ex` | No hardcoded collection names or URLs |
 | `docker-compose.yml` | Port, env vars, and image reference current |
-| `.github/workflows/ci.yml` | Excluded tags (`@tag :nif`, `@tag :file_watcher`) still valid |
+| `.github/workflows/ci.yml` | Excluded tags (`@tag :nif`, `@tag :file_watcher`) still valid; triggers stay tag-only + manual |
+| `.gitleaks.toml` | Keeps `[extend] useDefault = true`. Without it gitleaks runs with zero rules and every scan passes |
 | `priv/static/js/` | Vendor JS (`phoenix.min.js`, `phoenix_live_view.min.js`) must be git-tracked (`git ls-files priv/static/`) — they're in `.gitignore` so won't auto-stage |
 | `docs/DOCKERHUB.md` | Tags section updated with new version |
 | `cli/README.md` | Install URLs use correct tag format |

@@ -36,9 +36,10 @@ Unsure where to begin contributing to CodeNexus? You can start by looking throug
 1.  **Fork the repository.**
 2.  **Clone your fork.**
 3.  **Install dependencies**: `mix deps.get`
-4.  **Run Qdrant**: `docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:latest`
-5.  **Run tests**: `mix test`
-6.  **Run the MCP server locally**: `mix mcp` (stdio) or `mix mcp_http` (HTTP/SSE).
+4.  **Install the git hooks**: `make hooks`. The pre-commit hook checks formatting, compiles with warnings as errors, and runs [gitleaks](https://github.com/gitleaks/gitleaks) on staged changes if it's installed.
+5.  **Run Qdrant**: `docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:latest`
+6.  **Run tests**: `mix test`. CI only runs when a version is tagged, so run the suite before opening a pull request.
+7.  **Run the MCP server locally**: `mix mcp` (stdio) or `mix mcp_http` (HTTP/SSE).
 
 ### Pull Requests
 

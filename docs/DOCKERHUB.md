@@ -152,7 +152,7 @@ Add to your project's `.mcp.json`:
 
 ## Image Size
 
-The runtime image is about 596MB. It's a multi-stage build, so the Rust toolchain stays in the build stage.
+The runtime image is about 597MB. It's a multi-stage build, so the Rust toolchain stays in the build stage.
 
 ## Tags
 

@@ -278,7 +278,7 @@ mix mcp                       # MCP stdio transport
 mix mcp_http --port 3002      # MCP HTTP transport
 ```
 
-Run the tests with `mix test` (add `--include performance` for the benchmarks). The tests expect Qdrant on `localhost:6333`. `CLAUDE.md` covers the NIF build, the fast local iteration loop, and the pre-push checks.
+Run `make hooks` once to install the pre-commit hook (format, compile, secret scan). Run the tests with `mix test` (add `--include performance` for the benchmarks); they expect Qdrant on `localhost:6333`. CI only runs on version tags. `CLAUDE.md` covers the NIF build, the fast local iteration loop, and the pre-push checks.
 
 ## Documentation
 

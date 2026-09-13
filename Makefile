@@ -1,7 +1,7 @@
 .PHONY: deps compile test test.all format format.check \
 	build run stop logs \
 	docker.buildx docker.build docker.push docker.publish docker.publish.fresh docker.publish.local \
-	tag release clean
+	tag release clean hooks
 
 IMAGE := iksnerd/code-nexus
 VERSION := $(shell cat VERSION)
@@ -115,3 +115,10 @@ clean.images:
 		grep '^$(IMAGE):v' | \
 		grep -v '^$(IMAGE):$(TAG)$$' | \
 		xargs -r docker rmi || true
+
+## Git hooks
+
+# Point git at the tracked hooks in .githooks/ (pre-commit: gitleaks, format, compile).
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed from .githooks/"

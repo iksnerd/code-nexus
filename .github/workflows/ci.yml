@@ -1,35 +1,27 @@
 name: CI
 
+# Runs only on version tags (and on demand). Everyday commits are gated locally
+# by the pre-commit hook in .githooks/ (install with `make hooks`) and the
+# pre-push checklist in CLAUDE.md.
+#
+# v* tag push: test + secret-scan, then build the arm64 image and push
+#              iksnerd/code-nexus:vX.Y.Z + :latest to Docker Hub.
+# manual run:  same jobs; the image is only pushed when `publish` is ticked.
 on:
   push:
-    branches: [main]
-    # Docs-only commits don't affect the test suite — skip the run.
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".agents/**"
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".agents/**"
-  schedule:
-    - cron: "0 6 * * 1"  # Weekly Monday 06:00 UTC — runs secret-scan job
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Push the Docker image to Docker Hub (unticked = build only)"
+        type: boolean
+        default: false
 
-# Cancel an in-flight run when a newer commit lands on the same ref, so rapid
-# pushes don't pile up redundant runs.
+# Never cancel an in-flight release: a cancelled run can leave :latest and the
+# version tag pointing at different images.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
-# Docker images are built and published locally via the Makefile (`make publish`).
-# CI only runs tests and secret-scan.
-#
-# main pushes run: test + secret-scan (skipped for docs-only changes)
-# PRs run: test only
-# Tag pushes run nothing — releases are local-only.
-# Add [skip ci] to a commit message to skip a run entirely.
+  cancel-in-progress: false
 
 env:
   MIX_ENV: test
@@ -80,7 +72,6 @@ jobs:
   secret-scan:
     name: Secret Scan
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v4
@@ -90,3 +81,46 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Docker Image
+    needs: [test, secret-scan]
+    # Native arm64 runner: no QEMU emulation, so the Rust NIF compiles at full speed.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: meta
+        env:
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          version="$(cat VERSION)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match VERSION ($version). Bump VERSION before tagging."
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ] || [ "$PUBLISH_INPUT" = "true" ]; then push=true; else push=false; fi
+          echo "tags=iksnerd/code-nexus:v$version,iksnerd/code-nexus:latest" >> "$GITHUB_OUTPUT"
+          echo "push=$push" >> "$GITHUB_OUTPUT"
+          echo "Image v$version, push=$push"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        if: steps.meta.outputs.push == 'true'
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          push: ${{ steps.meta.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

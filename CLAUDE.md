@@ -4,7 +4,7 @@ Code intelligence MCP server — provides graph-powered semantic search, call gr
 
 ## Before Pushing
 
-Always run these checks before pushing to avoid CI failures:
+CI runs only on version tags (`v*`), so nothing checks a push to `main` except you. Install the pre-commit hook once per clone with `make hooks`. It runs gitleaks on staged changes, `mix format --check-formatted` on staged Elixir files, and `mix compile --warnings-as-errors` when `lib/`, `config/` or mix files change. It doesn't run the tests, so before pushing run:
 
 ```bash
 mix compile --warnings-as-errors   # Must compile with zero warnings

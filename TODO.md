@@ -1,14 +1,38 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.11
-**Status:** v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
+**Current version:** v1.18.12
+**Status:** v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
+Hub, CI green, smoke-tested in-image: `reindex("weightless")` resolves to `/workspace4/weightless`
+(24 Go files, 160 chunks, `error: null`) instead of the empty `/workspace/weightless`.
+
+Previous: v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
 Hub. Verified against a real polyglot codebase (`gpt-alpha`: 283 Python files + TS/TSX frontend +
 Go, 520 files total) — indexes cleanly, 3808 chunks, `error: null`. Python handling checked
 directly: class/method extraction, `find_module_hierarchy` correctly resolves a class's own
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
-## 🚧 Unreleased (on main, next patch) — test isolation + bare-name resolution (2026-09-13)
+## 🚧 Unreleased (on main) — tag-only CI with Docker publish, pre-commit hook, gitleaks fix (2026-09-13)
+
+- [x] **CI runs only on `v*` tags** (plus manual `workflow_dispatch`). Removed the push/PR/weekly
+  schedule triggers. `cancel-in-progress: false` so a release run is never cut off mid-push.
+- [x] **Docker image published from CI.** New `docker` job (needs `test` + `secret-scan`) builds
+  `linux/arm64` natively on `ubuntu-24.04-arm` with the `DOCKER_USERNAME`/`DOCKER_PASSWORD` secrets and
+  pushes `:vX.Y.Z` + `:latest`. Fails if the tag doesn't match `VERSION`. Manual runs build only unless
+  `publish` is ticked. `make docker.publish` stays as the local fallback. actionlint clean.
+- [x] **Pre-commit hook** (`.githooks/pre-commit`, install with `make hooks`): gitleaks on staged
+  changes, `mix format --check-formatted` on staged Elixir files, `mix compile --warnings-as-errors` when
+  `lib/`/`config/`/mix files change. Tested: blocks an unformatted file and a planted fake token, passes a
+  clean change.
+- [x] **Secret scanning was a no-op since April.** `.gitleaks.toml` had only an `[allowlist]` and no
+  `[extend] useDefault = true`, so gitleaks (CI's `gitleaks-action` included) ran with zero rules.
+  Added the extend block. The allowlisted commit SHA was also stale after the history rewrite
+  (`0e5a796` → `e8a5712`, the dev+test `secret_key_base` placeholder). Full history scan with real rules:
+  227 commits, no leaks.
+- [ ] First real run of the `docker` job happens on the next tag; a manual build-only run
+  (`gh workflow run ci.yml --ref main -f publish=false`) validates it before then.
+
+## ✅ Shipped in v1.18.12 — test isolation + bare-name resolution (2026-09-13)
 
 - [x] **Weekly scheduled CI flake root-caused and fixed.** The scheduled run failed Aug 17 and Sep 7
   (passed Aug 24/31 on the same commit) on `delete_file/1 removes file from ChunkCache and GraphCache`
