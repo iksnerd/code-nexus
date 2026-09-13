@@ -1,6 +1,6 @@
 # CodeNexus TODO
 
-**Current version:** v1.18.12
+**Current version:** v1.18.13
 **Status:** v1.18.12 shipped (2026-09-13) — `iksnerd/code-nexus:v1.18.12` + `:latest` (arm64) live on Docker
 Hub, CI green, smoke-tested in-image: `reindex("weightless")` resolves to `/workspace4/weightless`
 (24 Go files, 160 chunks, `error: null`) instead of the empty `/workspace/weightless`.
@@ -12,7 +12,29 @@ directly: class/method extraction, `find_module_hierarchy` correctly resolves a 
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
-## 🚧 Unreleased (on main) — tag-only CI with Docker publish, pre-commit hook, gitleaks fix (2026-09-13)
+## ✅ v1.18.13 — MCP HTTP transport fixes (2026-09-13)
+
+Found while chasing "Claude Code shows authenticate for code-nexus". Claude Code's MCP log had 95
+disconnect/reconnect cycles in a day plus "Failed to start server instance" at connect across every
+session.
+
+- [x] **Requests were serialized.** ExMCP's HTTP transport starts a temporary server per request with
+  `start_link([])`, which registered the global module name. Any concurrent request (a client's parallel
+  `tools/list` + `resources/list`, a second session, anything during a long reindex) failed. 19 of 20 in
+  the new concurrency test. `start_link([])` now starts unnamed.
+- [x] **SSE stream closed every 60s.** Cowboy's `idle_timeout` counts only incoming data, so heartbeats
+  didn't help. `MCPServer.CowboyOptions.apply/0` sets `idle_timeout: :infinity` and the 32KB header limit
+  at runtime (the Dockerfile header `sed` patch is gone).
+- [x] **Unknown methods → HTTP 500.** Claude Code probes `server/discover`; now JSON-RPC `-32601`.
+- [x] **`resources/list` rejected** (`size: null`, `mime_type`); normalized in `get_resources/0`.
+- [x] **`get_status` `file_count`** was the chunk count; now files, plus `chunk_count`.
+- Verified: 836 tests; live check script 6/6 on the local mix server and on a container built from the
+  commit (discover, resources, 8KB header, 20 concurrent requests, 130s SSE hold); Claude Code reconnects
+  clean. The "Authenticate" item in `/mcp` is Claude Code's generic option for HTTP servers, not a server
+  signal.
+- First release published by the CI `docker` job.
+
+## ✅ Tag-only CI with Docker publish, pre-commit hook, gitleaks fix (2026-09-13, shipped with v1.18.13)
 
 - [x] **CI runs only on `v*` tags** (plus manual `workflow_dispatch`). Removed the push/PR/weekly
   schedule triggers. `cancel-in-progress: false` so a release run is never cut off mid-push.
