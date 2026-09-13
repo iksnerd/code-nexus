@@ -129,22 +129,23 @@ Hooks.CodeGraph = {
     // Cluster by package: lay out each group's center on a grid, then pull its
     // nodes toward it. This mirrors the codebase's package structure instead of
     // hairballing 150+ flat nodes into the middle.
-    const groups = Array.from(new Set(nodes.map(n => n.group || "?")));
-    const cols = Math.max(1, Math.ceil(Math.sqrt(groups.length)));
-    // Lay clusters out over a virtual area larger than the viewport so packages
-    // sit well apart; a one-time zoom-to-fit (below) frames the whole spread.
-    const spread = 1.6;
-    const vw = width * spread, vh = height * spread;
-    const ox = (width - vw) / 2, oy = (height - vh) / 2;
-    const cellW = vw / cols;
-    const cellH = vh / Math.max(1, Math.ceil(groups.length / cols));
+    // Pack package cells by size: a package's cell grows with the square root of
+    // its node count, and cells fill rows largest-first. Equal grid cells let big
+    // packages spill into their neighbours' boxes.
+    const groupCounts = {};
+    nodes.forEach(n => { const k = n.group || "?"; groupCounts[k] = (groupCounts[k] || 0) + 1; });
+    const groups = Object.keys(groupCounts).sort((a, b) => groupCounts[b] - groupCounts[a]);
+    const cellSize = gname => 140 + 55 * Math.sqrt(groupCounts[gname]);
+    const totalArea = groups.reduce((sum, gname) => sum + cellSize(gname) ** 2, 0);
+    const rowWidth = Math.max(cellSize(groups[0]), Math.sqrt(totalArea) * Math.max(1, width / Math.max(height, 1)));
     const groupCenter = {};
-    groups.forEach((gname, i) => {
-      groupCenter[gname] = {
-        x: ox + (i % cols + 0.5) * cellW,
-        y: oy + (Math.floor(i / cols) + 0.5) * cellH,
-        name: gname
-      };
+    let cursorX = 0, cursorY = 0, rowHeight = 0;
+    groups.forEach(gname => {
+      const size = cellSize(gname);
+      if (cursorX > 0 && cursorX + size > rowWidth) { cursorX = 0; cursorY += rowHeight; rowHeight = 0; }
+      groupCenter[gname] = {x: cursorX + size / 2, y: cursorY + size / 2, name: gname};
+      cursorX += size;
+      rowHeight = Math.max(rowHeight, size);
     });
     this.groupCenter = groupCenter;
     const centerOf = d => groupCenter[d.group || "?"] || {x: width / 2, y: height / 2};
@@ -250,18 +251,26 @@ Hooks.CodeGraph = {
       btn.classList.remove("text-slate-400");
     };
 
-    // Frame the whole (wider-than-viewport) layout once it settles.
-    simulation.on("end", () => {
+    // Frame the whole layout, leaving the controls panel's column clear. Done early
+    // (the simulation of a few hundred nodes takes many seconds to fully settle, and
+    // until then the view sat zoomed in) and again once it settles.
+    const fitToView = (duration) => {
       const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
       const minX = Math.min(...xs), maxX = Math.max(...xs);
       const minY = Math.min(...ys), maxY = Math.max(...ys);
       const bw = maxX - minX, bh = maxY - minY;
       if (!isFinite(bw) || !isFinite(bh) || bw === 0 || bh === 0) return;
-      const scale = Math.min(width / (bw + 160), height / (bh + 160), 1.1);
-      const tx = width / 2 - scale * (minX + maxX) / 2;
+      const panel = document.getElementById("graph-controls");
+      const reserved = panel ? panel.offsetWidth + 32 : 0;
+      const usableW = Math.max(width - reserved, width * 0.5);
+      const scale = Math.min(usableW / (bw + 160), height / (bh + 160), 1.1);
+      const tx = usableW / 2 - scale * (minX + maxX) / 2;
       const ty = height / 2 - scale * (minY + maxY) / 2;
-      svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-    });
+      svg.transition().duration(duration).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    };
+    let ticks = 0;
+    simulation.on("tick.fit", () => { if (++ticks === 60) fitToView(400); });
+    simulation.on("end", () => fitToView(600));
 
     // Arrowhead markers for each link type
     const defs = svg.append("defs");
@@ -590,12 +599,14 @@ Hooks.CodeGraph = {
 
       el.classList.remove("opacity-0");
       el.classList.add("opacity-100");
+      el.setAttribute("aria-hidden", "false");
     }
 
     function hideDetails() {
       const el = document.getElementById("node-details");
       el.classList.remove("opacity-100");
       el.classList.add("opacity-0");
+      el.setAttribute("aria-hidden", "true");
     }
   }
 };

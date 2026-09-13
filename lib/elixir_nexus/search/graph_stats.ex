@@ -116,22 +116,7 @@ defmodule ElixirNexus.Search.GraphStats do
     # files would top the list, and test call sites inflate what they exercise.
     nodes = graph_nodes |> Map.values() |> Enum.reject(&EntityResolution.test_file?(&1["file_path"] || ""))
     project_keys = MapSet.new(nodes, &call_key(&1["name"] || ""))
-    by_key = Enum.group_by(nodes, &call_key(&1["name"] || ""))
-
-    fan_in =
-      Enum.reduce(nodes, %{}, fn caller, acc ->
-        lang = caller["language"]
-
-        caller["calls"]
-        |> List.wrap()
-        |> Enum.reject(&Builtins.builtin_call?(&1, lang))
-        |> Enum.reduce(acc, fn call, acc ->
-          by_key
-          |> Map.get(call_key(call), [])
-          |> Enum.filter(&credits?(call, &1))
-          |> Enum.reduce(acc, fn target, acc -> Map.update(acc, node_id(target), 1, &(&1 + 1)) end)
-        end)
-      end)
+    fan_in = fan_in_of(nodes)
 
     nodes
     |> Enum.reject(fn node ->
@@ -152,6 +137,35 @@ defmodule ElixirNexus.Search.GraphStats do
     # Collapse same-named entities (overloads / re-declared helpers across files). Keep the highest.
     |> Enum.uniq_by(& &1.name)
     |> Enum.take(limit)
+  end
+
+  @doc """
+  Call fan-in per graph node, keyed by `{file_path, name}`, with the same rules as
+  top_connected/2 (no builtin or stdlib calls, qualifier-aware, no test callers).
+  """
+  def fan_in(graph_nodes) do
+    graph_nodes
+    |> Map.values()
+    |> Enum.reject(&EntityResolution.test_file?(&1["file_path"] || ""))
+    |> fan_in_of()
+  end
+
+  defp fan_in_of(nodes) do
+    by_key = Enum.group_by(nodes, &call_key(&1["name"] || ""))
+
+    Enum.reduce(nodes, %{}, fn caller, acc ->
+      lang = caller["language"]
+
+      caller["calls"]
+      |> List.wrap()
+      |> Enum.reject(&Builtins.builtin_call?(&1, lang))
+      |> Enum.reduce(acc, fn call, acc ->
+        by_key
+        |> Map.get(call_key(call), [])
+        |> Enum.filter(&credits?(call, &1))
+        |> Enum.reduce(acc, fn target, acc -> Map.update(acc, node_id(target), 1, &(&1 + 1)) end)
+      end)
+    end)
   end
 
   defp credits?(call, target) do

@@ -64,7 +64,7 @@ defmodule ElixirNexus.GraphLive.Index do
       </div>
 
       <!-- Graph Overlay UI -->
-      <div class="absolute bottom-4 left-4 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-lg shadow-xl pointer-events-none transition-opacity duration-300 opacity-0 z-10" style="max-width: 340px;" id="node-details">
+      <div class="absolute bottom-4 left-4 p-4 bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-lg shadow-xl pointer-events-none transition-opacity duration-300 opacity-0 z-10" style="max-width: 340px;" id="node-details" aria-hidden="true">
         <div class="flex items-center gap-2 mb-1">
           <span id="node-type-badge" class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400">module</span>
           <h3 id="node-name" class="text-white font-bold truncate text-sm">Node Name</h3>
@@ -86,7 +86,7 @@ defmodule ElixirNexus.GraphLive.Index do
         </div>
       </div>
 
-      <div class="absolute top-4 right-4 flex flex-col gap-2 z-10">
+      <div id="graph-controls" class="absolute top-4 right-4 flex flex-col gap-2 z-10">
          <div class="bg-slate-900/80 backdrop-blur-md border border-slate-700 rounded-lg p-2 flex flex-col gap-1">
             <button onclick="window.zoomIn()" class="p-1.5 hover:bg-slate-800 rounded text-slate-400" title="Zoom In">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
@@ -264,26 +264,56 @@ defmodule ElixirNexus.GraphLive.Index do
       String.contains?(name, ",")
   end
 
-  defp group_for(nil), do: "?"
+  @max_groups 24
 
-  defp group_for(path) do
-    path = to_string(path)
+  # Package boxes: each node's directory relative to the project root, cut to the
+  # deepest level that keeps at most @max_groups boxes. Keying on the last two
+  # folder names merged unrelated same-named folders (two apps' src/components).
+  defp assign_groups(nodes, root) do
+    root = root || common_dir(Enum.map(nodes, & &1.file_path))
 
-    case Path.extname(path) do
-      # Go: one package per directory — the directory IS the package.
-      ".go" -> dir_group(path)
-      # Default: cluster by source folder (works for JS/TS/Python/Rust/etc.).
-      _ -> dir_group(path)
-    end
+    rel_dirs =
+      Map.new(nodes, fn n ->
+        dir = n.file_path |> Path.dirname() |> Path.relative_to(root)
+        {n.id, if(dir in [".", ""], do: [], else: Path.split(dir))}
+      end)
+
+    max_depth = rel_dirs |> Map.values() |> Enum.map(&length/1) |> Enum.max(fn -> 0 end)
+
+    depth =
+      Enum.find(max_depth..1//-1, 1, fn d ->
+        rel_dirs |> Map.values() |> Enum.map(&Enum.take(&1, d)) |> Enum.uniq() |> length() <= @max_groups
+      end)
+
+    Enum.map(nodes, fn n ->
+      group =
+        case Enum.take(Map.fetch!(rel_dirs, n.id), depth) do
+          [] -> Path.basename(root)
+          segments -> Enum.join(segments, "/")
+        end
+
+      n |> Map.put(:group, group) |> Map.delete(:file_path)
+    end)
   end
 
-  # Last two path segments of the file's directory, e.g. "internal/tracker", "cmd/wl".
-  defp dir_group(path) do
-    path |> Path.dirname() |> Path.split() |> Enum.take(-2) |> Enum.join("/")
+  defp common_dir([]), do: "/"
+
+  defp common_dir(paths) do
+    paths
+    |> Enum.map(&(&1 |> Path.dirname() |> Path.split()))
+    |> Enum.reduce(fn parts, acc ->
+      acc |> Enum.zip(parts) |> Enum.take_while(fn {a, b} -> a == b end) |> Enum.map(&elem(&1, 0))
+    end)
+    |> case do
+      [] -> "/"
+      parts -> Path.join(parts)
+    end
   end
 
   defp build_d3_graph do
     nodes_map = ElixirNexus.GraphCache.all_nodes()
+    # Same fan-in as get_graph_stats: builtin calls (Python len, Go append) don't count.
+    fan_in = ElixirNexus.Search.GraphStats.fan_in(nodes_map)
 
     # Create list of nodes, capped to top N by degree to avoid overwhelming the browser
     nodes =
@@ -298,10 +328,10 @@ defmodule ElixirNexus.GraphLive.Index do
           name: node["name"],
           type: node["entity_type"] || node["type"] || "unknown",
           file: node["file_path"] |> to_string() |> String.replace_leading("/app/", ""),
-          group: group_for(node["file_path"]),
-          val: (node["incoming_count"] || 0) + 1,
+          file_path: to_string(node["file_path"]),
+          val: Map.get(fan_in, {node["file_path"], node["name"]}, 0) + 1,
           calls_count: length(node["calls"] || []),
-          callers_count: node["incoming_count"] || 0,
+          callers_count: Map.get(fan_in, {node["file_path"], node["name"]}, 0),
           imports_count: length(node["is_a"] || []),
           contains_count: length(node["contains"] || []),
           lines: "#{node["start_line"] || "?"}–#{node["end_line"] || "?"}",
@@ -311,6 +341,7 @@ defmodule ElixirNexus.GraphLive.Index do
       end)
       |> Enum.sort_by(& &1.val, :desc)
       |> Enum.take(@max_graph_nodes)
+      |> assign_groups(elem(ElixirNexus.ProjectConfig.current(), 0))
 
     # Build name → [id, ...] index (one name can map to many nodes)
     name_to_ids =
@@ -327,7 +358,7 @@ defmodule ElixirNexus.GraphLive.Index do
     pkg_of =
       nodes_map
       |> Enum.reduce(%{}, fn {id, node}, acc ->
-        Map.put(acc, id, group_for(node["file_path"]) |> String.split("/") |> List.last())
+        Map.put(acc, id, node["file_path"] |> to_string() |> Path.dirname() |> Path.basename())
       end)
 
     # Resolve a callee name to target node ids: exact match first; for qualified
