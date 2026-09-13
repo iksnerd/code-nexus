@@ -54,6 +54,23 @@ defmodule ElixirNexus.ChunkCacheTest do
     end
   end
 
+  describe "file_count/0" do
+    test "returns 0 for empty table" do
+      assert ChunkCache.file_count() == 0
+    end
+
+    test "counts distinct files, not chunks" do
+      ChunkCache.insert_many([
+        make_chunk(id: "f1", file_path: "lib/a.ex"),
+        make_chunk(id: "f2", file_path: "lib/a.ex"),
+        make_chunk(id: "f3", file_path: "lib/b.ex")
+      ])
+
+      assert ChunkCache.count() == 3
+      assert ChunkCache.file_count() == 2
+    end
+  end
+
   describe "search/2" do
     test "finds chunks by name" do
       ChunkCache.insert_many([

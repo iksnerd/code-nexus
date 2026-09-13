@@ -15,22 +15,7 @@ metadata:
 
 The `ex_mcp` DSL stores tool metadata with **atom keys** (`:input_schema`, `:display_name`), but the MCP spec requires **camelCase string keys** (`"inputSchema"`, `"displayName"`). Without normalization, clients can't discover tools.
 
-`mcp_server.ex` overrides `get_tools/0` to fix this:
-
-```elixir
-@impl true
-def get_tools() do
-  super()
-  |> Enum.map(fn tool ->
-    tool
-    |> Map.new(fn
-      {:input_schema, v} -> {"inputSchema", v}
-      {:display_name, v} -> {"displayName", v}
-      {k, v} -> {Atom.to_string(k), v}
-    end)
-  end)
-end
-```
+`mcp_server.ex` overrides `get_tools/0` to fix this: it drops `:meta`/`:display_name` and renames `:input_schema` to `:inputSchema`. Read the override there rather than a copy here.
 
 If you add a new tool and clients can't see it, check this normalization first.
 
@@ -105,6 +90,40 @@ Process.sleep(:infinity)
 # Both Phoenix :4100 and MCP :3002 run in a single BEAM instance
 # They share ETS caches and PubSub — no sync delay
 ```
+
+## Per-Request Server Instance (`start_link/1`)
+
+ExMCP's HTTP transport handles **every request** by starting a temporary server with `start_link([])`, and ExMCP's default registers the global name `ElixirNexus.MCPServer`. That serialized the whole server: any concurrent request failed with `-32603 "Failed to start server instance"` / `{:already_started, pid}`. It happened on a client's parallel `tools/list` + `resources/list` at connect, with a second Claude Code session, and for everything during a long `reindex`. `start_link([])` is overridden to start unnamed; transport starts (`transport: :http`/`:stdio`) still go through `super`. The concurrency test in `protocol_compliance_test.exs` guards it.
+
+## Resources Normalization
+
+The DSL has the same problem for resources: every resource carries `size: nil`, `mime_type`, `list_pattern` and `meta`. A spec-validating client rejects the **whole** `resources/list` ("resources.N.size: Invalid input" in Claude Code's MCP log), so no resources load. `get_resources/0` is overridden to drop nil values and internal keys and rename `mime_type` to `mimeType`. Keep `subscribable`: ExMCP reads it to build the resources capability and crashes without it.
+
+## Unknown Methods (`handle_request/3`)
+
+ExMCP's default `handle_request/3` returns `{:noreply, state}` for any method it doesn't implement, and its HTTP plug turns that into **HTTP 500** "no response from handler". Claude Code sends a `server/discover` probe on connect (protocol 2026-07-28), so this fired on every connection. The override returns `:method_not_found` (becomes JSON-RPC `-32601`) but keeps `{:noreply, state}` for `notifications/*`, because ExMCP's notification cast path only matches that shape.
+
+## Cowboy Options (`MCPServer.CowboyOptions`)
+
+ExMCP starts Cowboy without protocol options, so `CowboyOptions.apply/0` sets them on the running listener through ranch, right after `start_link` in `application.ex` and `mix mcp_http`:
+
+- `idle_timeout: :infinity`: Cowboy's 60s default counts only *incoming* data, so the SSE stream (`GET /mcp`), which only sends, was closed every 60s despite heartbeats. Claude Code logged "HTTP connection dropped after 60s uptime" and reconnected in a loop, and the tools kept disappearing.
+- `max_header_value_length: 32_768`: Claude Code's headers exceed the 4096 default (HTTP 431). This used to be a `sed` patch in the Dockerfile.
+
+## Verifying the Transport Against a Real Client
+
+Tests run requests through `ExMCP.MessageProcessor` (`test/elixir_nexus/mcp_server/protocol_compliance_test.exs`), but connection-level bugs only show up on a live listener. After touching the transport, check the running server:
+
+```bash
+H=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream')
+# unknown method: expect HTTP 200 with "code":-32601, not 500
+curl -s -w ' %{http_code}\n' -X POST localhost:3002/mcp "${H[@]}" -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}'
+# SSE stream: must stay open past 60s (heartbeat every 30s)
+curl -sN --max-time 130 localhost:3002/mcp -H 'Accept: text/event-stream'
+```
+
+Claude Code's own MCP log is the ground truth for what the client rejected:
+`~/Library/Caches/claude-cli-nodejs/<project-path-slug>/mcp-logs-code-nexus/*.jsonl`. Grep it for `dropped after`, `Invalid result`, and `Terminal connection error`.
 
 ## Timeout Patch
 

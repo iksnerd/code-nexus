@@ -158,6 +158,10 @@ Only build/push a Docker image once the change is verified locally and you're cu
 ### MCP spec compliance (ex_mcp 0.9.0)
 
 - **`get_tools/0` override**: ExMCP DSL stores atom keys (`:input_schema`, `:display_name`, `:meta`), but MCP spec requires camelCase strings (`inputSchema`). `mcp_server.ex` overrides `get_tools/0` to normalize keys so clients discover tools correctly.
+- **`start_link/1` override**: ExMCP's HTTP transport starts a temporary server per request via `start_link([])`, which by default registers the global module name, so concurrent requests failed with "Failed to start server instance". `start_link([])` starts unnamed; transport starts go through `super`.
+- **`get_resources/0` override**: the DSL emits `size: null`, `mime_type`, `list_pattern`, `meta`; spec-validating clients (Claude Code) reject the whole `resources/list`. The override drops nils and internal keys and renames to `mimeType` (keeps `subscribable`, which ExMCP reads).
+- **`handle_request/3` override**: ExMCP's default makes unknown methods an HTTP 500; the override returns JSON-RPC `-32601` (Claude Code probes `server/discover` on connect). `notifications/*` must still return `{:noreply, state}`.
+- **Cowboy options at runtime**: `MCPServer.CowboyOptions.apply/0` (called after the MCP HTTP server starts) sets `idle_timeout: :infinity` (the 60s default closed the SSE stream every minute) and `max_header_value_length: 32_768` (HTTP 431 on Claude Code's headers).
 - **Dockerfile timeout patch**: ExMCP's default tool call timeout is 10s, too short for `reindex`. The Dockerfile patches `message_processor.ex` via `sed` to increase it to 120s, then recompiles `ex_mcp`.
 - **MCP string arg coercion**: MCP tool arguments arrive as JSON strings even for numeric params. The `to_int/2` helper in `mcp_server/response_format.ex` coerces string args to integers with a default fallback. Must be used for all numeric `deftool` params.
 

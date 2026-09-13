@@ -11,6 +11,18 @@ defmodule ElixirNexus.MCPServer do
 
   use ExMCP.Server
 
+  # ExMCP's HTTP transport handles every request by starting a temporary server
+  # with start_link([]), and the default registers the global name
+  # ElixirNexus.MCPServer. Only one request could run at a time: concurrent ones
+  # (a client's parallel tools/list + resources/list, a second Claude Code
+  # session, anything during a long reindex) failed with "Failed to start server
+  # instance". The per-request instance needs no name. Transport starts
+  # (transport: :http / :stdio) keep ExMCP's behaviour.
+  defoverridable start_link: 1
+
+  def start_link([]), do: GenServer.start_link(__MODULE__, [])
+  def start_link(opts), do: super(opts)
+
   # Override get_tools/0 to normalize DSL atom keys to MCP spec camelCase.
   # The ExMCP DSL stores :input_schema, :display_name, :meta — but MCP spec
   # requires "inputSchema" and doesn't use "display_name" or "meta".
@@ -30,6 +42,38 @@ defmodule ElixirNexus.MCPServer do
       {name, normalized}
     end)
   end
+
+  # Same problem for resources: the DSL emits "size": null plus snake_case and
+  # internal keys, and spec-validating clients reject the whole resources/list
+  # ("resources.N.size: Invalid input" in Claude Code). `subscribable` stays
+  # because ExMCP reads it when building the resources capability.
+  defoverridable get_resources: 0
+
+  def get_resources do
+    super()
+    |> Map.new(fn {uri, resource} ->
+      normalized =
+        resource
+        |> Map.drop([:meta, :list_pattern])
+        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        |> Enum.into(%{}, fn
+          {:mime_type, v} -> {:mimeType, v}
+          {k, v} -> {k, v}
+        end)
+
+      {uri, normalized}
+    end)
+  end
+
+  # ExMCP's default returns {:noreply, state} for methods it doesn't implement,
+  # which its HTTP plug turns into HTTP 500 "no response from handler". Any
+  # other value becomes a JSON-RPC -32601 Method not found, the answer clients
+  # probing newer protocol methods (Claude Code's server/discover) expect.
+  # Notifications must keep {:noreply, state}: ExMCP's notification path only
+  # matches that shape.
+  @impl true
+  def handle_request("notifications/" <> _, _params, state), do: {:noreply, state}
+  def handle_request(_method, _params, _state), do: :method_not_found
 
   require Logger
 
@@ -500,7 +544,8 @@ defmodule ElixirNexus.MCPServer do
     status = %{
       indexed: Map.has_key?(state, :indexed_dirs) or ElixirNexus.ChunkCache.count() > 0,
       current_project: current_project,
-      file_count: ElixirNexus.ChunkCache.count(),
+      file_count: ElixirNexus.ChunkCache.file_count(),
+      chunk_count: ElixirNexus.ChunkCache.count(),
       indexing: indexer.status == :indexing,
       indexing_progress: indexer.indexing_progress,
       last_index_result: indexer.last_index_result,

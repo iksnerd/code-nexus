@@ -67,6 +67,7 @@ defmodule ElixirNexus.Application do
 
       Task.Supervisor.start_child(ElixirNexus.TaskSupervisor, fn ->
         {:ok, _} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0", use_sse: true)
+        :ok = ElixirNexus.MCPServer.CowboyOptions.apply()
         IO.puts("MCP HTTP server listening on port #{port} (with SSE)")
       end)
     end

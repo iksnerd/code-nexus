@@ -25,6 +25,7 @@ defmodule Mix.Tasks.McpHttp do
     Application.ensure_all_started(:elixir_nexus)
 
     {:ok, _pid} = ElixirNexus.MCPServer.start_link(transport: :http, port: port, host: "0.0.0.0")
+    :ok = ElixirNexus.MCPServer.CowboyOptions.apply()
 
     IO.puts("MCP HTTP server listening on port #{port}")
 
