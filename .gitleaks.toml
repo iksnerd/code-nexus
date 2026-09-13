@@ -9,6 +9,11 @@ description = "Allowlisted false positives"
 # Phoenix dev/test secret_key_base placeholder — not a real secret.
 # Value is a clearly fake low-entropy string labeled "dev+test" with a repeating pattern.
 # Production secret is loaded from the SECRET_KEY_BASE environment variable.
-# e8a5712 is the initial commit (the history rewrite replaced 0e5a796, the SHA
-# originally listed here). The placeholder was replaced by an env lookup in 47d8f1f.
-commits = ["e8a5712472ca8d7ddd21a5e31ebe45720d947d3e"]
+# The same initial commit exists under two SHAs: e8a5712 on main after the
+# history rewrite, and 0e5a796 before it, still reachable through GitHub's
+# refs/pull/1/head and refs/pull/2/head (which CI scans). The placeholder was
+# replaced by an env lookup in 47d8f1f.
+commits = [
+  "e8a5712472ca8d7ddd21a5e31ebe45720d947d3e",
+  "0e5a796b7688f8bd16b4eab47bf97029bb09c5b8",
+]
