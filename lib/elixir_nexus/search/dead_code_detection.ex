@@ -158,7 +158,7 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             {[], [], nil}
           else
             index = ElixirCallIndex.build(all_entities)
-            {dead, unsure} = ElixirDeadCode.judge(elixir_candidates, all_entities, index, count_test_callers?)
+            {dead, unsure} = ElixirDeadCode.judge(elixir_candidates, all_entities, index, count_test_callers?, config)
             {dead, unsure, Map.put(index.stats, "count_test_callers", count_test_callers?)}
           end
 

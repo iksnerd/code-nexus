@@ -21,6 +21,7 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       def only_tested(x), do: x
       def short, do: helper()
       def helper, do: :ok
+      def uses_bars(x), do: B.bars(x)
     end
     """,
     "/proj/lib/my/b.ex" => """
@@ -28,6 +29,16 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       def parse(x), do: x
       def two(x, y), do: {x, y}
       def two(x), do: x
+      def bars(h, n \\\\ 2)
+      def bars(nil, _n), do: []
+      def bars(h, n), do: {h, n}
+    end
+    """,
+    "/proj/lib/my/variants.ex" => """
+    defmodule My.Variants do
+      def values(v, _opts), do: v
+      def default(v, axis), do: {v, axis}
+      def use_values, do: My.Variants.values(1, default: Other.Mod)
     end
     """,
     "/proj/lib/my_web.ex" => """
@@ -87,6 +98,39 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       def go_short, do: My.A.short()
     end
     ''',
+    "/proj/lib/my/telemetry.ex" => """
+    defmodule My.Telemetry do
+      def metrics, do: []
+    end
+    """,
+    "/proj/lib/my/router.ex" => """
+    defmodule My.Router do
+      def dashboard, do: live_dashboard("/d", metrics: My.Telemetry)
+    end
+    """,
+    "/proj/lib/my/worker.ex" => """
+    defmodule My.Worker do
+      def child_spec(opts), do: %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}}
+      def start_link(opts), do: {:ok, opts}
+    end
+    """,
+    "/proj/lib/my/app.ex" => """
+    defmodule My.App do
+      use Application
+      @impl true
+      def start(_type, _args), do: Supervisor.start_link([My.Worker], strategy: :one_for_one)
+    end
+    """,
+    "/proj/lib/my_web/error_json.ex" => """
+    defmodule MyWeb.ErrorJSON do
+      def render(template, _assigns), do: %{errors: template}
+    end
+    """,
+    "/proj/lib/my/cli.ex" => """
+    defmodule My.CLI do
+      def main(argv), do: argv
+    end
+    """,
     "/proj/lib/my/handler.ex" => """
     defmodule My.Handler do
       def handle(x), do: x
@@ -179,6 +223,48 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       # apply(__MODULE__, which, []) could reach any MyWeb function of arity 0.
       assert "MyWeb.html/0" in unsure_qnames(result)
       assert result.unsure_count == length(result.unsure)
+    end
+
+    test "a name used as a keyword next to its module is unsure, not dead" do
+      {:ok, result} = Queries.find_dead_code()
+      entry = Enum.find(result.unsure, &(&1.qualified_name == "My.Telemetry.metrics/0"))
+      assert entry.reason =~ "lib/my/router.ex:2"
+    end
+
+    test "a supervisor child's child_spec/1 and the start function it names are alive" do
+      {:ok, result} = Queries.find_dead_code()
+      dead = dead_qnames(result) ++ unsure_qnames(result)
+      refute "My.Worker.child_spec/1" in dead
+      refute "My.Worker.start_link/1" in dead
+    end
+
+    test "a head with defaults and its clauses are one function, called at either arity" do
+      {:ok, result} = Queries.find_dead_code()
+      dead = dead_qnames(result)
+      refute Enum.any?(dead, &String.starts_with?(&1, "My.B.bars/"))
+    end
+
+    test "a keyword with the function's name is evidence only when its value is the module" do
+      # `My.Variants.values(1, default: Other.Mod)` names another module, not My.Variants.default.
+      {:ok, result} = Queries.find_dead_code()
+      assert "My.Variants.default/2" in dead_qnames(result)
+    end
+
+    test "render/2 of an HTML or JSON view module is the framework's (render_errors)" do
+      {:ok, result} = Queries.find_dead_code()
+      refute "MyWeb.ErrorJSON.render/2" in dead_qnames(result)
+    end
+
+    test ".nexus.toml [dead_code] entry_functions marks functions called from outside Elixir" do
+      {:ok, result} = Queries.find_dead_code()
+      assert "My.CLI.main/1" in dead_qnames(result)
+
+      cfg = ElixirNexus.ProjectConfig.parse(~s([dead_code]\nentry_functions = ["*.main/1", "My.A.dead_*"]\n))
+      Application.put_env(:elixir_nexus, :project_config, {"/proj", cfg})
+      {:ok, result} = Queries.find_dead_code()
+      refute "My.CLI.main/1" in dead_qnames(result)
+      refute "My.A.dead_one/1" in dead_qnames(result)
+      assert "My.A.parse/1" in dead_qnames(result)
     end
 
     test "@impl callbacks are not reported" do

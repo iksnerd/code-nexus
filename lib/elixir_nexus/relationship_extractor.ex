@@ -101,7 +101,7 @@ defmodule ElixirNexus.RelationshipExtractor do
   defp walk_calls({{:., _, [{:__aliases__, _, parts}, func_name]}, _meta, args}, acc) do
     qualified_name =
       parts
-      |> Enum.map(&to_string/1)
+      |> Enum.map(&alias_part/1)
       |> Enum.join(".")
       |> then(&"#{&1}.#{func_name}")
 
@@ -123,13 +123,18 @@ defmodule ElixirNexus.RelationshipExtractor do
 
   defp walk_calls(_other, acc), do: acc
 
+  # `__MODULE__.Sub.f()` has a `{:__MODULE__, meta, nil}` part, not an atom.
+  defp alias_part({:__MODULE__, _, _}), do: "__MODULE__"
+  defp alias_part(part) when is_atom(part), do: Atom.to_string(part)
+  defp alias_part(part), do: Macro.to_string(part)
+
   # === IS_A extraction ===
   defp walk_is_a({:use, _meta, [module_ast | _rest]}, acc) do
     case module_ast do
       {:__aliases__, _, parts} ->
         module_name =
           parts
-          |> Enum.map(&to_string/1)
+          |> Enum.map(&alias_part/1)
           |> Enum.join(".")
 
         [module_name | acc]
@@ -147,7 +152,7 @@ defmodule ElixirNexus.RelationshipExtractor do
       {:__aliases__, _, parts} ->
         module_name =
           parts
-          |> Enum.map(&to_string/1)
+          |> Enum.map(&alias_part/1)
           |> Enum.join(".")
 
         [module_name | acc]
@@ -165,7 +170,7 @@ defmodule ElixirNexus.RelationshipExtractor do
       {:__aliases__, _, parts} ->
         module_name =
           parts
-          |> Enum.map(&to_string/1)
+          |> Enum.map(&alias_part/1)
           |> Enum.join(".")
 
         [module_name | acc]

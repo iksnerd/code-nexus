@@ -19,13 +19,19 @@ defmodule ElixirNexus.ProjectConfig do
   adapters = "infrastructure/**"
 
   [dead_code]
-  count_test_callers = false   # Elixir: report functions only tests call
+  count_test_callers = false            # Elixir: report functions only tests call
+  entry_functions = ["*.main/1"]        # Elixir: called from outside Elixir (release scripts)
   ```
   """
 
-  defstruct entry_points: [], layers: %{}, count_test_callers: true
+  defstruct entry_points: [], layers: %{}, count_test_callers: true, entry_functions: []
 
-  @type t :: %__MODULE__{entry_points: [String.t()], layers: map(), count_test_callers: boolean()}
+  @type t :: %__MODULE__{
+          entry_points: [String.t()],
+          layers: map(),
+          count_test_callers: boolean(),
+          entry_functions: [String.t()]
+        }
 
   @app :elixir_nexus
   @env_key :project_config
@@ -71,9 +77,30 @@ defmodule ElixirNexus.ProjectConfig do
         |> List.wrap()
         |> Enum.filter(&is_binary/1),
       layers: Map.get(map, "layers", %{}),
-      count_test_callers: get_in(map, ["dead_code", "count_test_callers"]) != false
+      count_test_callers: get_in(map, ["dead_code", "count_test_callers"]) != false,
+      entry_functions:
+        map
+        |> get_in(["dead_code", "entry_functions"])
+        |> List.wrap()
+        |> Enum.filter(&is_binary/1)
     }
   end
+
+  @doc """
+  Is the Elixir function `qualified_name` (`Mod.fun/arity`) an entry point the call
+  graph cannot see (`[dead_code] entry_functions`, globs where `*` matches anything:
+  `"*.main/1"` for escript and release-script entry points, `"MyApp.ReleaseTasks.*"`)?
+  """
+  def entry_function?(%__MODULE__{entry_functions: []}, _qualified_name), do: false
+
+  def entry_function?(%__MODULE__{entry_functions: globs}, qualified_name) when is_binary(qualified_name) do
+    Enum.any?(globs, fn glob ->
+      pattern = glob |> Regex.escape() |> String.replace("\\*", ".*")
+      Regex.match?(~r/^#{pattern}$/, qualified_name)
+    end)
+  end
+
+  def entry_function?(_, _), do: false
 
   @doc """
   Whether `find_dead_code` counts calls from test files as callers of Elixir

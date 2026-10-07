@@ -50,7 +50,10 @@ defmodule ElixirNexus.CodeSchema do
         module_str =
           case module_name do
             {:__aliases__, _, parts} ->
-              parts |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
+              Enum.map_join(parts, ".", fn
+                part when is_atom(part) -> Atom.to_string(part)
+                part -> Macro.to_string(part)
+              end)
 
             other ->
               inspect(other)

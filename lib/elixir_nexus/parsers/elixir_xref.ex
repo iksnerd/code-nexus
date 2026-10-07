@@ -223,9 +223,11 @@ defmodule ElixirNexus.Parsers.ElixirXref do
   end
 
   defp walk({:@, _, [{attr, _, args}]}, ctx, acc) when is_atom(attr) do
-    if attr in @non_code_attrs or not is_list(args), do: acc, else: walk(args, ctx, acc)
+    if attr in @non_code_attrs or not is_list(args), do: acc, else: walk_args(args, ctx, acc)
   end
 
+  # `use Mod, opts`: the options are code (`annotations: Tool.annotations(...)`).
+  defp walk({:use, _, [_target | opts]}, ctx, acc), do: walk_args(opts, ctx, acc)
   defp walk({form, _, _}, _ctx, acc) when form in [:alias, :import, :require, :use, :defmodule], do: acc
 
   # Kernel.apply/3 and apply/3
@@ -234,24 +236,26 @@ defmodule ElixirNexus.Parsers.ElixirXref do
   defp walk({{:., _, [{:__aliases__, _, [:Kernel]}, :apply]}, _, [m, f, a]}, ctx, acc),
     do: walk_apply(m, f, a, ctx, acc)
 
-  # {Mod, :fun, [args]}
-  defp walk({:{}, _, [m, f, a]} = node, ctx, acc) do
+  # {Mod, :fun, args}: a function named by reference. Whoever calls it may add
+  # arguments (Plug's body_reader prepends conn and opts), so any arity.
+  defp walk({:{}, _, [m, f, _a]} = node, ctx, acc) do
     acc = walk_children(node, ctx, acc)
 
-    with {:__aliases__, _, _} = alias_ast <- unwrap(m),
-         name when is_atom(name) and not is_nil(name) and not is_boolean(name) <- literal(f),
-         args when is_list(args) <- literal(a) do
-      add(acc, "#{alias_to_string(alias_ast, ctx)}.#{name}/#{length(args)}")
+    with mod when is_binary(mod) <- module_of(m, ctx),
+         name when is_binary(name) <- function_atom(f) do
+      add(acc, "#{mod}.#{name}/*")
     else
       _ -> acc
     end
   end
 
+  # plug :name is a function plug: name/2 of this module or an imported one.
+  # plug Mod is a module plug: Mod.init/1 and Mod.call/2.
   defp walk({:plug, _, [target | rest]}, ctx, acc) do
     acc =
       case unwrap(target) do
-        name when is_atom(name) and not is_nil(name) and ctx.module != nil ->
-          add(acc, "#{ctx.module}.#{name}/2")
+        name when is_atom(name) and not is_nil(name) and not is_boolean(name) ->
+          add(acc, local_ref(Atom.to_string(name), 2, ctx))
 
         {:__aliases__, _, _} = a ->
           mod = alias_to_string(a, ctx)
@@ -261,21 +265,7 @@ defmodule ElixirNexus.Parsers.ElixirXref do
           acc
       end
 
-    walk(rest, ctx, acc)
-  end
-
-  # render(conn, :template, ...) in a Phoenix controller renders FooHTML.template/1
-  defp walk({:render, _, [_conn, template | _rest]} = node, ctx, acc) do
-    acc =
-      with name when is_atom(name) and not is_nil(name) and not is_boolean(name) <- literal(template),
-           mod when is_binary(mod) <- ctx.module,
-           true <- String.ends_with?(mod, "Controller") do
-        add(acc, "#{String.replace_suffix(mod, "Controller", "HTML")}.#{name}/1")
-      else
-        _ -> acc
-      end
-
-    walk_call(node, ctx, acc, 0)
+    walk_args(rest, ctx, acc)
   end
 
   defp walk({:sigil_H, _, [{:<<>>, _, parts} | _]}, ctx, acc) do
@@ -287,12 +277,105 @@ defmodule ElixirNexus.Parsers.ElixirXref do
 
   defp walk({left, right}, ctx, acc) do
     acc = walk_mfa_pair(left, right, ctx, acc)
+
+    # on_mount: [Mod, {Mod, :name}] in live_session options
+    acc = if unwrap(left) == :on_mount, do: Enum.reduce(on_mount_refs(right, ctx), acc, &add(&2, &1)), else: acc
     acc = walk(left, ctx, acc)
     walk(right, ctx, acc)
   end
 
-  defp walk(list, ctx, acc) when is_list(list), do: Enum.reduce(list, acc, &walk(&1, ctx, &2))
+  # A literal list. A bare module in it, or `{Mod, arg}`, is a supervisor child
+  # spec: the supervisor calls Mod.child_spec/1.
+  defp walk(list, ctx, acc) when is_list(list) do
+    Enum.reduce(list, acc, fn element, acc ->
+      acc = add(acc, child_spec_ref(element, ctx))
+      walk(element, ctx, acc)
+    end)
+  end
+
   defp walk(_other, _ctx, acc), do: acc
+
+  # A call's argument list (not a literal list).
+  defp walk_args(args, ctx, acc) when is_list(args), do: Enum.reduce(args, acc, &walk(&1, ctx, &2))
+  defp walk_args(other, ctx, acc), do: walk(other, ctx, acc)
+
+  defp child_spec_ref(element, ctx) do
+    case unwrap(element) do
+      {:__aliases__, _, _} = a ->
+        "#{alias_to_string(a, ctx)}.child_spec/1"
+
+      {left, right} ->
+        with mod when is_binary(mod) <- module_of(left, ctx),
+             nil <- function_atom(right) do
+          "#{mod}.child_spec/1"
+        else
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp on_mount_refs(target, ctx) do
+    case unwrap(target) do
+      list when is_list(list) ->
+        Enum.flat_map(list, &on_mount_refs(&1, ctx))
+
+      {left, _arg} ->
+        case module_of(left, ctx) do
+          nil -> []
+          mod -> ["#{mod}.on_mount/4"]
+        end
+
+      other ->
+        case module_of(other, ctx) do
+          nil -> []
+          mod -> ["#{mod}.on_mount/4"]
+        end
+    end
+  end
+
+  # The module an expression names: an alias or __MODULE__; nil otherwise.
+  defp module_of(ast, ctx) do
+    case unwrap(ast) do
+      {:__aliases__, _, _} = a -> alias_to_string(a, ctx)
+      {:__MODULE__, _, _} -> ctx.module
+      _ -> nil
+    end
+  end
+
+  # The function name a literal atom could be; nil for nil, booleans and non-identifiers.
+  defp function_atom(ast) do
+    with name when is_atom(name) and not is_nil(name) and not is_boolean(name) <- literal(ast),
+         string = Atom.to_string(name),
+         true <- Regex.match?(@identifier, string) do
+      string
+    else
+      _ -> nil
+    end
+  end
+
+  # Erlang-style MFA arguments, `(..., Mod, :fun, [args], ...)`, as in :erpc.call,
+  # spawn/3, :timer.apply_after/4: a call to Mod.fun with that many arguments.
+  defp mfa_args(args, ctx, acc) do
+    args
+    |> Enum.chunk_every(3, 1, :discard)
+    |> Enum.reduce(acc, fn [m, f, a], acc ->
+      with mod when is_binary(mod) <- module_of(m, ctx),
+           name when is_binary(name) <- function_atom(f) do
+        arity =
+          case literal(a) do
+            list when is_list(list) -> Integer.to_string(length(list))
+            _ -> "*"
+          end
+
+        add(acc, "#{mod}.#{name}/#{arity}")
+      else
+        _ -> acc
+      end
+    end)
+  end
 
   # Sourceror wraps literals ({:__block__, _, [:atom]}, 2-tuples, lists).
   defp walk_literal({left, right}, ctx, acc), do: walk({left, right}, ctx, acc)
@@ -300,10 +383,9 @@ defmodule ElixirNexus.Parsers.ElixirXref do
 
   # {Mod, :fun}: arity unknown.
   defp walk_mfa_pair(left, right, ctx, acc) do
-    with {:__aliases__, _, _} = alias_ast <- unwrap(left),
-         name when is_atom(name) and not is_nil(name) and not is_boolean(name) <- literal(right),
-         true <- Regex.match?(@identifier, Atom.to_string(name)) do
-      add(acc, "#{alias_to_string(alias_ast, ctx)}.#{name}/*")
+    with mod when is_binary(mod) <- module_of(left, ctx),
+         name when is_binary(name) <- function_atom(right) do
+      add(acc, "#{mod}.#{name}/*")
     else
       _ -> acc
     end
@@ -338,7 +420,7 @@ defmodule ElixirNexus.Parsers.ElixirXref do
       end
 
     acc = add(acc, ref)
-    walk([m, f, a], ctx, acc)
+    walk_args([m, f, a], ctx, acc)
   end
 
   defp walk_call({:__block__, _, [single]}, ctx, acc, extra) when not is_list(single),
@@ -372,24 +454,48 @@ defmodule ElixirNexus.Parsers.ElixirXref do
 
     acc = add(acc, ref)
     acc = walk(recv, ctx, acc)
-    walk(args, ctx, acc)
+    acc = mfa_args(args, ctx, acc)
+    walk_args(args, ctx, acc)
   end
 
   defp walk_call({name, _, args}, ctx, acc, extra) when is_atom(name) and is_list(args) do
     sname = Atom.to_string(name)
 
     if Regex.match?(@identifier, sname) and not String.starts_with?(sname, "__") do
-      acc = add(acc, local_ref(sname, length(args) + extra, ctx))
-      walk(args, ctx, acc)
+      acc =
+        acc
+        |> add(local_ref(sname, length(args) + extra, ctx))
+        |> add(render_ref(name, args, extra, ctx))
+        |> then(
+          &if(name == :on_mount, do: Enum.reduce(on_mount_refs(args, ctx), &1, fn r, a -> add(a, r) end), else: &1)
+        )
+
+      acc = mfa_args(args, ctx, acc)
+      walk_args(args, ctx, acc)
     else
-      walk(args, ctx, acc)
+      walk_args(args, ctx, acc)
     end
   end
 
   # Anonymous function call f.(x), or anything else: just walk it.
   defp walk_call(node, ctx, acc, _extra), do: walk_children(node, ctx, acc)
 
-  defp walk_children({_, _, args}, ctx, acc) when is_list(args), do: walk(args, ctx, acc)
+  # render(conn, :template, ...) or conn |> render(:template, ...) in a Phoenix
+  # controller renders the template function FooHTML.template/1.
+  defp render_ref(:render, args, extra, ctx) do
+    with template when not is_nil(template) <- Enum.at(args, 1 - extra),
+         name when is_binary(name) <- function_atom(template),
+         mod when is_binary(mod) <- ctx.module,
+         true <- String.ends_with?(mod, "Controller") do
+      "#{String.replace_suffix(mod, "Controller", "HTML")}.#{name}/1"
+    else
+      _ -> nil
+    end
+  end
+
+  defp render_ref(_name, _args, _extra, _ctx), do: nil
+
+  defp walk_children({_, _, args}, ctx, acc) when is_list(args), do: walk_args(args, ctx, acc)
   defp walk_children(_, _ctx, acc), do: acc
 
   defp add(acc, nil), do: acc

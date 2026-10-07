@@ -187,8 +187,68 @@ defmodule ElixirNexus.Parsers.ElixirXrefTest do
       calls = calls(parse(src), "a")
       assert "X.Y.one/2" in calls
       assert "X.Y.two/*" in calls
-      assert "X.Y.four/1" in calls
+      # Erlang-style MFA arguments: the list gives the arity.
+      assert "X.Y.three/0" in calls
+      # A tuple names a function; its caller may add arguments.
+      assert "X.Y.four/*" in calls
       assert "X.Y.five/*" in calls
+    end
+
+    test "MFA arguments and tuples with __MODULE__" do
+      src = """
+      defmodule M do
+        def a(nodes), do: :erpc.multicall(nodes, __MODULE__, :count, [1, 2], 250)
+        def child_spec(o), do: %{id: __MODULE__, start: {__MODULE__, :start_link, [o]}}
+        def count(a, b), do: {a, b}
+        def start_link(o), do: o
+      end
+      """
+
+      entities = parse(src)
+      assert "M.count/2" in calls(entities, "a")
+      assert "M.start_link/*" in calls(entities, "child_spec")
+    end
+
+    test "a module in a literal list or {Mod, arg} is a supervisor child: Mod.child_spec/1" do
+      src = """
+      defmodule App do
+        def start(_t, _a) do
+          children = [Contra.Repo, {Phoenix.PubSub, name: X}, {Task.Supervisor, :named}]
+          Supervisor.start_link(children, strategy: :one_for_one)
+        end
+        def other, do: Contra.Thing.go(Contra.Arg)
+      end
+      """
+
+      entities = parse(src)
+      calls = calls(entities, "start")
+      assert "Contra.Repo.child_spec/1" in calls
+      assert "Phoenix.PubSub.child_spec/1" in calls
+      refute "Task.Supervisor.child_spec/1" in calls
+      # A module passed as an argument is not a child spec.
+      refute "Contra.Arg.child_spec/1" in calls(entities, "other")
+    end
+
+    test "on_mount hooks call Mod.on_mount/4" do
+      src = """
+      defmodule MyRouter do
+        def routes do
+          live_session :app, on_mount: [{My.Scope, :default}, My.Auth] do
+            :ok
+          end
+        end
+      end
+      defmodule MyLive do
+        on_mount My.Hook
+        def x, do: :ok
+      end
+      """
+
+      entities = parse(src)
+      calls = calls(entities, "routes")
+      assert "My.Scope.on_mount/4" in calls
+      assert "My.Auth.on_mount/4" in calls
+      assert "My.Hook.on_mount/4" in mod(entities, "MyLive").xref["calls"]
     end
 
     test "a call on a variable is dynamic, a field access is not a call" do
@@ -228,15 +288,19 @@ defmodule ElixirNexus.Parsers.ElixirXrefTest do
       assert calls(entities, "other") == ["X.Y.renamed/1"]
     end
 
-    test "plug :name calls the module's own name/2" do
+    test "plug :name calls name/2 of the module, or a bare name/2 to resolve through imports" do
       src = """
       defmodule MyController do
+        import MyAuth
         plug :require_user
+        plug :fetch_user
         def require_user(conn, _opts), do: conn
       end
       """
 
-      assert "MyController.require_user/2" in mod(parse(src), "MyController").xref["calls"]
+      calls = mod(parse(src), "MyController").xref["calls"]
+      assert "MyController.require_user/2" in calls
+      assert "fetch_user/2" in calls
     end
 
     test "render(conn, :name) in a controller calls the HTML module's template function" do
@@ -247,6 +311,16 @@ defmodule ElixirNexus.Parsers.ElixirXrefTest do
       """
 
       assert "MyAppWeb.PageHTML.home/1" in calls(parse(src), "home")
+    end
+
+    test "conn |> render(:name) in a controller renders the template too" do
+      src = """
+      defmodule MyAppWeb.AuthController do
+        def deny(conn, _params), do: conn |> put_status(403) |> render(:denied, reason: :x)
+      end
+      """
+
+      assert "MyAppWeb.AuthHTML.denied/1" in calls(parse(src), "deny")
     end
   end
 
@@ -321,6 +395,16 @@ defmodule ElixirNexus.Parsers.ElixirXrefTest do
       entities = parse(src)
       assert mod(entities, "M").xref["calls"] == ["X.load/0"]
       assert calls(entities, "a") == []
+    end
+
+    test "calls in use options are calls" do
+      src = """
+      defmodule M do
+        use Lib.Component, type: :tool, annotations: My.Tool.annotations(:x, [])
+      end
+      """
+
+      assert "My.Tool.annotations/2" in mod(parse(src), "M").xref["calls"]
     end
 
     test "typespecs are not calls" do

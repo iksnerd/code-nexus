@@ -49,6 +49,17 @@ defmodule ElixirNexus.RelationshipExtractorTest do
       assert length(calls) > 0
     end
 
+    test "a call through __MODULE__.Sub does not crash the file" do
+      # It raised Protocol.UndefinedError, and the pipeline dropped the whole file.
+      {:ok, ast} = Sourceror.parse_string("def f, do: __MODULE__.Sub.go()")
+      assert "__MODULE__.Sub.go" in RelationshipExtractor.extract_calls(ast)
+    end
+
+    test "import __MODULE__.Sub does not crash the file" do
+      {:ok, ast} = Sourceror.parse_string("defmodule A do\n  import __MODULE__.Sub\nend")
+      assert "__MODULE__.Sub" in RelationshipExtractor.extract_is_a(ast)
+    end
+
     test "ignores control flow keywords" do
       code = """
       def test do
