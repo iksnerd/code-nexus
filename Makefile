@@ -40,8 +40,9 @@ format.check:
 
 ## Docker (local single-arch via docker-compose)
 
+# docker-compose.yml has no build: section, so `docker-compose build` would do nothing.
 build:
-	docker-compose build code_nexus
+	docker build -t $(IMAGE):latest .
 
 run:
 	WORKSPACE=~/www docker-compose up -d

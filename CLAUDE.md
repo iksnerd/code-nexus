@@ -62,7 +62,7 @@ The NIF binary lives at `priv/native/tree_sitter_nif.so`. It's loaded at runtime
 2. Run `PATH="$HOME/.cargo/bin:$PATH" mix compile --force`
 3. Restore `skip_compilation?: true, load_from: {:elixir_nexus, "priv/native/tree_sitter_nif"}`
 4. Restart the server
-5. Rebuild Docker image if using Docker: `docker-compose build elixir_nexus`
+5. Rebuild Docker image if using Docker: `make build`
 
 ## Testing
 
@@ -93,7 +93,9 @@ WORKSPACE=~/www docker-compose up -d
 
 When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `application.ex` auto-starts the MCP HTTP server alongside Phoenix in a single BEAM instance. Both share ETS caches and PubSub — no sync delay. Requires Qdrant at `http://localhost:6333` (configurable via `QDRANT_URL`) and Ollama at `http://host.docker.internal:11434` (configurable via `OLLAMA_URL`).
 
-**Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `docker-compose build elixir_nexus`.
+**Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `make build` (`docker build -t iksnerd/code-nexus:latest .`; the compose file has no `build:` section, so `docker-compose build` does nothing), then `docker compose up -d --no-deps code_nexus`.
+
+**Index version:** every stored chunk carries `index_version` (`IndexingHelpers.@index_version`). Bump it when parsing changes what a chunk carries (v2 added the Elixir `xref`): a reindex then parses files indexed by the older version again even though their content is unchanged. Without the bump, unchanged files keep their old chunks.
 
 ### Workspace mount (Docker)
 
@@ -274,6 +276,9 @@ When adding a new skill, decide visibility by prefix. Don't expose internal-dev 
 | `lib/elixir_nexus/parsers/go_extractor.ex` | Go facade — delegates to `parsers/go/{entities,calls,imports_package}.ex` |
 | `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Rust/Java |
 | `lib/elixir_nexus/search/queries.ex` | Thin facade delegating to domain sub-modules (entity_resolution, caller_finder, callee_finder, impact_analysis, community_context, dead_code_detection, graph_stats, module_hierarchy) |
+| `lib/elixir_nexus/parsers/elixir_xref.ex` | Elixir call resolution at parse time: module context (aliases, imports, `use` injects), calls as `Mod.fun/arity`, HEEx components and expressions |
+| `lib/elixir_nexus/search/elixir_call_index.ex` | The exact Elixir call graph over `xref`: resolves bare calls through imports and use-injected imports, fallbacks for dynamic calls |
+| `lib/elixir_nexus/search/elixir_dead_code.ex` | Elixir dead-code verdicts: dead, `unsure` (with the reason), `called_from_tests` |
 | `lib/elixir_nexus/search/entity_resolution.ex` | Entity name matching — highest-centrality file; `matches_entity_name?/2`, `find_entity_multi_strategy/2` |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
 | `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |

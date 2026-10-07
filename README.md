@@ -89,7 +89,7 @@ To exclude paths, add a `.nexusignore` file (gitignore-style globs) to the proje
 
 CodeNexus infers each file's architectural layer from directory names (`ports`, `adapters`/`infrastructure`, `services`, `repositories`, `core`/`entities`, presentation) and reports the breakdown in `get_graph_stats`. No config is required.
 
-An optional `.nexus.toml` at the project root covers what the conventions can't guess. Both sections are optional:
+An optional `.nexus.toml` at the project root covers what the conventions can't guess. Every section is optional:
 
 ```toml
 # Files reachable only through the framework or dependency injection: route
@@ -101,9 +101,23 @@ include = ["app/**/route.ts", "app/sitemap.ts", "app/manifest.ts"]
 [layers]
 ports = "core/ports/**"
 adapters = "infrastructure/**"
+
+# Elixir dead code. count_test_callers = false reports functions only tests call
+# (marked called_from_tests); the default counts test files as callers.
+# entry_functions are called from outside Elixir (release scripts, escripts):
+# qualified-name globs where * matches anything.
+[dead_code]
+count_test_callers = false
+entry_functions = ["*.main/1", "MyApp.ReleaseTasks.*"]
 ```
 
-Globs are gitignore-style: `**` spans directories, `*` matches within one path segment.
+Path globs are gitignore-style: `**` spans directories, `*` matches within one path segment.
+
+### Elixir call graph
+
+For Elixir, calls resolve to `Module.fun/arity` when the file is parsed, and `find_dead_code`, `find_all_callers`, `analyze_impact` and `find_all_callees` match on that, so a call to `Parser.parse/1` does not keep every other `parse` alive. Resolved: aliases (`alias A.{B, C}`, `as:`, `__MODULE__`, nested modules), local calls, imports and the imports and aliases a `use`d module's `quote` injects (`use MyAppWeb, :live_view` reaching `CoreComponents`), pipes (`|>` adds one to the arity), default arguments, captures (`&Mod.fun/2`), `apply/3`, MFA tuples and arguments (`{Mod, :fun, args}`, `:erpc.call(node, Mod, :fun, [a])`), `defdelegate`, `plug :name`, supervisor children (`Mod.child_spec/1`), `on_mount`, `render(conn, :template)` in controllers, and HEEx: `<.component>`, `<Mod.component>` and the expressions in `~H` and `.heex` files (a `.heex` file is the `embed_templates` function of its module). `@impl` functions are callbacks, and recursion does not count as a caller.
+
+What a static reading cannot place is reported, not guessed: a call on a variable module (`mod.fun(x)`), `apply` with a variable function, or a function named as an atom next to its module goes under `unsure` with the reason, never under `dead_functions`. `elixir_resolution` gives the number of exact, fallback and external (dependency or Kernel) calls. Other languages keep the short-name matching.
 
 ### CLI
 
@@ -143,7 +157,7 @@ Twelve tools, usable from Claude Code, Claude Desktop, Cursor, or any MCP client
 | **get_graph_stats**() | Node and edge counts, entity types, languages, top connected entities, architectural layers, and critical files (deterministic betweenness centrality) |
 | **get_status**() | Indexed project, Qdrant and Ollama health, file count, collections, workspace projects |
 | **find_module_hierarchy**(entity_name) | Parents (uses/implements), children (contained members), and implementors. Works for Elixir modules, Go/Rust/Java types, and TS classes, interfaces, and type aliases |
-| **find_dead_code**(path_prefix) | Exported functions and methods with zero callers. Honors `.nexus.toml` entry points and framework conventions |
+| **find_dead_code**(path_prefix, count_test_callers) | Exported functions and methods with zero callers. Honors `.nexus.toml` entry points and framework conventions. Elixir is exact by `Module.fun/arity`, with `unsure` for what only a short-name match could reach |
 | **reindex**(path) | Parse and index a project to build the search index and call graph |
 | **purge**() | Wipe the current collection and caches for a clean re-index |
 | **load_resources**(uri) | List or read MCP resources, for clients without native resource support |

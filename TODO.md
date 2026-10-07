@@ -12,6 +12,20 @@ directly: class/method extraction, `find_module_hierarchy` correctly resolves a 
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
+## 🚧 Unreleased — exact Elixir call graph (branch `feat/elixir-call-resolution`, 2026-10-07)
+
+Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-call-resolution`.
+
+- [x] Elixir calls resolve to `Module.fun/arity` at parse time (`parsers/elixir_xref.ex`), stored as `xref`
+  on each chunk; nested modules' functions are entities; `.heex` templates are their module's function.
+- [x] `find_dead_code`, `find_all_callers`, `analyze_impact`, `find_all_callees` match Elixir exactly; what
+  only a short-name match could reach is `unsure` with the reason. `count_test_callers` (param and
+  `[dead_code]`), `[dead_code] entry_functions`.
+- [x] `index_version` on chunks: an upgrade reparses unchanged files.
+- [x] Contra (iksnerd/contra, 438 files): dead 2 -> 89 (86 with lib/contra/config indexed), 17 unsure.
+- [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
+- [ ] Transitive dead code (a function whose only callers are dead) is not reported.
+
 ## ✅ v1.19.1 — dogfood fixes: data integrity, analysis accuracy, UI (2026-09-14)
 
 v1.19.0 was tagged (CLI binaries published) but its CI failed on a test whose .js fixtures need the
