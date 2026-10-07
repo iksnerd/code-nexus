@@ -128,7 +128,7 @@ defmodule ElixirNexus.Parser do
     module_entity =
       case CodeSchema.from_ast(file_path, node, source_code) do
         nil -> nil
-        entity -> %{entity | name: fqn, module_path: fqn, xref: ElixirXref.module_xref(ctx, forms)}
+        entity -> %{entity | name: fqn, module_path: fqn, xref: ElixirXref.module_xref(ctx, forms, parent_ctx)}
       end
 
     [module_entity | extract_module_members(forms, file_path, source_code, ctx)]

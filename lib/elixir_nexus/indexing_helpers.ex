@@ -23,10 +23,11 @@ defmodule ElixirNexus.IndexingHelpers do
     ".swift" => :swift
   }
 
-  # Bump when parsing changes what a chunk carries (v2: Elixir `xref`). A file whose
+  # Bump when parsing changes what a chunk carries (v2: Elixir `xref`; v3: a nested
+  # module's `enclosing`). A file whose
   # stored chunks have another version is parsed again on the next reindex even
   # when its content is unchanged.
-  @index_version 2
+  @index_version 3
 
   @doc "The version stamped on every stored chunk (`index_version` in the payload)."
   def index_version, do: @index_version

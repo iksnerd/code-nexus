@@ -248,7 +248,9 @@ defmodule ElixirNexus.Search.ElixirCallIndex do
   end
 
   # What `use Mod` brings into a module: the imports and aliases in Mod's quotes,
-  # and in the quotes of the modules Mod's quotes `use`, transitively.
+  # and in the quotes of the modules Mod's quotes `use`, transitively. A nested
+  # module also sees what its enclosing modules' `use`s injected (lexical scope);
+  # its own `use`s win on an alias both define.
   defp injected(module, index, seen) do
     info = Map.get(index.module_info, module, %{})
 
@@ -260,7 +262,13 @@ defmodule ElixirNexus.Search.ElixirCallIndex do
         {imports ++ i, Map.merge(aliases, a)}
       end)
 
-    %{imports: Enum.uniq(imports), aliases: aliases}
+    outer =
+      case info["enclosing"] do
+        enclosing when is_binary(enclosing) and enclosing != module -> injected(enclosing, index, seen)
+        _ -> %{imports: [], aliases: %{}}
+      end
+
+    %{imports: Enum.uniq(imports ++ outer.imports), aliases: Map.merge(outer.aliases, aliases)}
   end
 
   defp injects_of(module, index, seen) do

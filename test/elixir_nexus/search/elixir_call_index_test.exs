@@ -73,12 +73,30 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       use Phoenix.Component
       def card(assigns), do: ~H"<div>{@x}</div>"
       def unused_comp(assigns), do: ~H"<div>{@x}</div>"
+      def nested_only_comp(assigns), do: ~H"<div>{@x}</div>"
     end
     """,
     "/proj/lib/my/layouts.ex" => """
     defmodule My.Layouts do
       use Phoenix.Component
       def app(assigns), do: ~H"<main>{@inner}</main>"
+      def nested_layout(assigns), do: ~H"<main>{@inner}</main>"
+    end
+    """,
+    # A second Layouts module: `Layouts.` can only be placed through the alias.
+    "/proj/lib/other/layouts.ex" => """
+    defmodule Other.Layouts do
+      def nested_layout(assigns), do: assigns
+    end
+    """,
+    "/proj/lib/my/nested_page.ex" => """
+    defmodule My.NestedPage do
+      use MyWeb, :live_view
+
+      defmodule Inner do
+        def go(assigns), do: nested_only_comp(assigns)
+        def lay(assigns), do: Layouts.nested_layout(assigns)
+      end
     end
     """,
     "/proj/lib/my/page_live.ex" => ~S'''
@@ -299,6 +317,20 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
     test "each function is reported once, however many clauses it has" do
       {:ok, result} = Queries.find_dead_code()
       assert Enum.count(dead_qnames(result), &(&1 == "My.A.recursive/1")) == 1
+    end
+  end
+
+  describe "nested modules" do
+    test "a nested module sees the imports and aliases its parent's use injects" do
+      {:ok, callers} = Queries.find_callers("My.Components.nested_only_comp", 10)
+      assert [%{entity: %{"qualified_name" => "My.NestedPage.Inner.go/1", "match" => "exact"}}] = callers
+
+      {:ok, callers} = Queries.find_callers("My.Layouts.nested_layout", 10)
+      assert [%{entity: %{"qualified_name" => "My.NestedPage.Inner.lay/1", "match" => "exact"}}] = callers
+
+      {:ok, result} = Queries.find_dead_code()
+      refute "My.Components.nested_only_comp/1" in dead_qnames(result)
+      refute "My.Layouts.nested_layout/1" in dead_qnames(result)
     end
   end
 

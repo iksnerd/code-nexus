@@ -95,7 +95,7 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 
 **Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `make build` (`docker build -t iksnerd/code-nexus:latest .`; the compose file has no `build:` section, so `docker-compose build` does nothing), then `docker compose up -d --no-deps code_nexus`.
 
-**Index version:** every stored chunk carries `index_version` (`IndexingHelpers.@index_version`). Bump it when parsing changes what a chunk carries (v2 added the Elixir `xref`): a reindex then parses files indexed by the older version again even though their content is unchanged. Without the bump, unchanged files keep their old chunks.
+**Index version:** every stored chunk carries `index_version` (`IndexingHelpers.@index_version`). Bump it when parsing changes what a chunk carries (v2 added the Elixir `xref`, v3 a nested module's `enclosing`): a reindex then parses files indexed by the older version again even though their content is unchanged. Without the bump, unchanged files keep their old chunks.
 
 ### Workspace mount (Docker)
 
@@ -280,8 +280,8 @@ When adding a new skill, decide visibility by prefix. Don't expose internal-dev 
 | `lib/elixir_nexus/parsers/go_extractor.ex` | Go facade — delegates to `parsers/go/{entities,calls,imports_package}.ex` |
 | `lib/elixir_nexus/parsers/generic_extractor.ex` | Fallback extractor with import support for Rust/Java |
 | `lib/elixir_nexus/search/queries.ex` | Thin facade delegating to domain sub-modules (entity_resolution, caller_finder, callee_finder, impact_analysis, community_context, dead_code_detection, graph_stats, module_hierarchy) |
-| `lib/elixir_nexus/parsers/elixir_xref.ex` | Elixir call resolution at parse time: module context (aliases, imports, `use` injects), calls as `Mod.fun/arity`, HEEx components and expressions |
-| `lib/elixir_nexus/search/elixir_call_index.ex` | The exact Elixir call graph over `xref`: resolves bare calls through imports and use-injected imports, fallbacks for dynamic calls |
+| `lib/elixir_nexus/parsers/elixir_xref.ex` | Elixir call resolution at parse time: module context (aliases, imports, `use` injects, `enclosing` of a nested module), calls as `Mod.fun/arity`, HEEx components and expressions |
+| `lib/elixir_nexus/search/elixir_call_index.ex` | The exact Elixir call graph over `xref`: resolves bare calls through imports and use-injected imports (a nested module also sees what its enclosing modules' `use`s inject), fallbacks for dynamic calls |
 | `lib/elixir_nexus/search/elixir_dead_code.ex` | Elixir dead-code verdicts by reachability from live roots (private functions are links, never reported): dead, `dead_via_dead_callers` (with `dead_callers` and `chain`), `unsure` (with the reason, propagated to what only unsure code calls), `called_from_tests` |
 | `lib/elixir_nexus/search/entity_resolution.ex` | Entity name matching — highest-centrality file; `matches_entity_name?/2`, `find_entity_multi_strategy/2` |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |

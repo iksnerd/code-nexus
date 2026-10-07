@@ -102,9 +102,11 @@ defmodule ElixirNexus.Parsers.ElixirXref do
 
   @doc """
   The module entity's resolution data: module-level calls (outside any def),
-  explicit imports and `use`s, behaviours, and what `quote` blocks inject.
+  explicit imports and `use`s, behaviours, what `quote` blocks inject, and the
+  enclosing module of a nested one (`enclosing`), whose `use`-injected imports
+  and aliases the nested module sees too, as Elixir's lexical scope gives them.
   """
-  def module_xref(ctx, forms) do
+  def module_xref(ctx, forms, parent \\ nil) do
     {uses, use_calls} = uses(forms, ctx)
 
     top_calls =
@@ -119,7 +121,8 @@ defmodule ElixirNexus.Parsers.ElixirXref do
       "dynamic_imports" => Enum.any?(ctx.imports, &String.starts_with?(&1, "?")),
       "uses" => uses,
       "behaviours" => behaviours(forms, ctx),
-      "injects" => injects(forms, ctx)
+      "injects" => injects(forms, ctx),
+      "enclosing" => parent && parent.module
     }
   end
 
