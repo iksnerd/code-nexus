@@ -55,6 +55,8 @@ defmodule ElixirNexus.Search.CallerFinder do
         "qualified_name" => ElixirCallIndex.identity(caller),
         "file_path" => entity["file_path"],
         "entity_type" => entity["entity_type"],
+        "visibility" => entity["visibility"],
+        "parameters" => entity["parameters"] || [],
         "start_line" => entity["start_line"] || 0,
         "end_line" => entity["end_line"] || 0,
         "calls" => [call],
@@ -105,6 +107,7 @@ defmodule ElixirNexus.Search.CallerFinder do
           |> Enum.uniq_by(& &1.id)
           |> drop_module_callers_with_function_sibling()
           |> disambiguate_definitions(entity_name, all_entities)
+          |> with_signature(all_entities)
 
         _ ->
           results
@@ -113,6 +116,31 @@ defmodule ElixirNexus.Search.CallerFinder do
 
     {:ok, refined}
   end
+
+  # Graph nodes carry no parameters; take visibility and parameters from the
+  # caller's own entity.
+  defp with_signature(results, all_entities) do
+    by_id = Map.new(all_entities, &{&1.id, &1.entity})
+
+    Enum.map(results, fn %{id: id, entity: entity} = result ->
+      case Map.get(by_id, id) do
+        nil ->
+          result
+
+        source ->
+          %{
+            result
+            | entity:
+                entity
+                |> Map.put("visibility", entity["visibility"] || source["visibility"])
+                |> Map.put("parameters", nonempty(entity["parameters"]) || source["parameters"] || [])
+          }
+      end
+    end)
+  end
+
+  defp nonempty([_ | _] = list), do: list
+  defp nonempty(_), do: nil
 
   # When several files define the queried name (gpt_alpha/training.py and
   # jepa/text_jepa/training.py both define save_checkpoint), tag each caller with

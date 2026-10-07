@@ -363,6 +363,37 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
                Jason.decode!(json)
     end
 
+    test "a caller carries its visibility and parameters" do
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_all_callers", %{"entity_name" => "B.run"}, %{project_root: "/w"})
+
+      assert [%{"entity" => %{"visibility" => "public", "parameters" => ["x"]}}] = Jason.decode!(json)
+    end
+
+    test "a caller found by name (no call-graph data) carries its visibility and parameters" do
+      alias ElixirNexus.{Chunker, ChunkCache, GraphCache, Parser}
+
+      {:ok, entities} =
+        Parser.parse_source(
+          "/w/lib/legacy.ex",
+          "defmodule Legacy do\n  def caller_of(a, b), do: Legacy.Target.legacy_target(a, b)\nend\n"
+        )
+
+      chunks =
+        entities
+        |> Chunker.chunk_entities()
+        |> Enum.map(&(&1 |> Map.put(:language, :elixir) |> Map.put(:xref, nil)))
+
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(ChunkCache.all())
+
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_all_callers", %{"entity_name" => "legacy_target"}, %{project_root: "/w"})
+
+      assert [%{"entity" => %{"name" => "caller_of", "visibility" => "public", "parameters" => ["a", "b"]}}] =
+               Jason.decode!(json)
+    end
+
     test "find_dead_code returns unsure entries and honours count_test_callers" do
       {:ok, %{content: [%{text: json}]}, _} =
         MCPServer.handle_tool_call("find_dead_code", %{"count_test_callers" => "false"}, %{project_root: "/w"})
