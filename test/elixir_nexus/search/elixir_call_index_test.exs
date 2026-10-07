@@ -144,6 +144,15 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       def render(template, _assigns), do: %{errors: template}
     end
     """,
+    "/proj/mix.exs" => """
+    defmodule My.MixProject do
+      use Mix.Project
+      def project, do: [app: :my, deps: deps()]
+      def application, do: [extra_applications: [:logger]]
+      def cli, do: [preferred_envs: [precommit: :test]]
+      defp deps, do: []
+    end
+    """,
     "/proj/lib/my/cli.ex" => """
     defmodule My.CLI do
       def main(argv), do: argv
@@ -283,6 +292,14 @@ defmodule ElixirNexus.Search.ElixirCallIndexTest do
       refute "My.CLI.main/1" in dead_qnames(result)
       refute "My.A.dead_one/1" in dead_qnames(result)
       assert "My.A.parse/1" in dead_qnames(result)
+    end
+
+    test "a Mix project's project/0, application/0 and cli/0 are Mix's callbacks" do
+      {:ok, result} = Queries.find_dead_code()
+      all = dead_qnames(result) ++ Enum.map(result.dead_via_dead_callers, & &1.qualified_name)
+      refute "My.MixProject.project/0" in all
+      refute "My.MixProject.application/0" in all
+      refute "My.MixProject.cli/0" in all
     end
 
     test "@impl callbacks are not reported" do

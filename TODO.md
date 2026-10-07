@@ -27,6 +27,7 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
 - [x] **Dead code by chains**: liveness is reachability from live roots (callbacks, entry points, module bodies, non-candidates, tests when counted), through private functions too. What only dead code calls is `dead_via_dead_callers` with its `dead_callers` and a `chain`; what only unsure code reaches stays `unsure`. The path prefix filters the report, not the graph. **Files:** `search/elixir_dead_code.ex`, `search/dead_code_detection.ex`.
 - [x] **Nested modules** see the imports and aliases their enclosing module's `use` injects (module xref
   `enclosing`; `index_version` 3). **Files:** `parsers/elixir_xref.ex`, `search/elixir_call_index.ex`, `parser.ex`.
+- [x] A Mix project's `project/0`, `application/0`, `cli/0` are Mix.Project callbacks, not dead (Contra's `mix.exs`).
 - [x] **Deleted files stayed in the index** (Contra's deleted `Repo.Paging` was still reported dead hours later).
   Over Streamable HTTP each request gets an empty MCP state, so `indexed_dirs` was never there and the
   query-time dirty pass never ran in Docker; it also cleaned deleted files only when some other file was
