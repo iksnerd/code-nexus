@@ -2,6 +2,8 @@ module github.com/iksnerd/elixir-nexus/cli
 
 go 1.26.2
 
+toolchain go1.26.6
+
 require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
