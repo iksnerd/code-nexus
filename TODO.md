@@ -23,6 +23,11 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
   `[dead_code]`), `[dead_code] entry_functions`.
 - [x] `index_version` on chunks: an upgrade reparses unchanged files.
 - [x] Contra (iksnerd/contra, 438 files): dead 2 -> 89 (86 with lib/contra/config indexed), 17 unsure.
+- [x] Contra again (2026-10-07, after it removed the functions reported earlier): 457 files indexed = the 453
+  tracked under lib/ plus 4 root .exs files; 22 dead (every one called only from test/, which its
+  .nexusignore excludes on purpose), 5 dead via dead callers, 14 unsure (all dynamic dispatch), sampled by grep.
+- [ ] DirtyTracker is not per collection: after indexing another project, the next reindex of the first
+  re-embeds every file (Contra: 457/457, about 2 min) because the tracker is not empty and is never seeded.
 - [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
 - [x] **Dead code by chains**: liveness is reachability from live roots (callbacks, entry points, module bodies, non-candidates, tests when counted), through private functions too. What only dead code calls is `dead_via_dead_callers` with its `dead_callers` and a `chain`; what only unsure code reaches stays `unsure`. The path prefix filters the report, not the graph. **Files:** `search/elixir_dead_code.ex`, `search/dead_code_detection.ex`.
 - [x] **Nested modules** see the imports and aliases their enclosing module's `use` injects (module xref
