@@ -97,6 +97,45 @@ defmodule ElixirNexus.FileWatcherTest do
     end
   end
 
+  describe "live scope" do
+    @tag :file_watcher
+    test "a watched write obeys .nexusignore, and a directory moved away leaves the index" do
+      FileWatcher.unwatch_all()
+      dir = System.tmp_dir!() |> Path.join("fw_scope_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(dir, "lib/repo"))
+      File.mkdir_p!(Path.join(dir, "test"))
+      File.write!(Path.join(dir, ".nexusignore"), "/test/\n")
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      {:ok, _pid} = FileWatcher.watch_directory(dir)
+      Process.sleep(500)
+
+      File.write!(Path.join(dir, "test/ignored_probe_test.exs"), "defmodule IgnoredProbe do\n  def i, do: 1\nend\n")
+      File.write!(Path.join(dir, "lib/repo/paging_probe.ex"), "defmodule PagingProbe do\n  def p, do: 1\nend\n")
+
+      indexed? = fn suffix -> Enum.any?(ElixirNexus.ChunkCache.file_paths(), &String.ends_with?(&1, suffix)) end
+
+      eventually = fn check ->
+        Enum.any?(1..40, fn _ ->
+          Process.sleep(250)
+          check.()
+        end)
+      end
+
+      assert eventually.(fn -> indexed?.("/lib/repo/paging_probe.ex") end)
+      refute indexed?.("/test/ignored_probe_test.exs")
+
+      # Moving the directory out of the tree reports only the directory, not
+      # each file in it.
+      outside = dir <> "_moved"
+      on_exit(fn -> File.rm_rf!(outside) end)
+      File.rename!(Path.join(dir, "lib/repo"), outside)
+      assert eventually.(fn -> not indexed?.("/lib/repo/paging_probe.ex") end)
+
+      FileWatcher.unwatch_all()
+    end
+  end
+
   describe "watch_directory/1" do
     @tag :file_watcher
     test "watches a valid directory" do

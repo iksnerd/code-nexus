@@ -83,7 +83,7 @@ Nothing is searchable until a project is indexed. Call the `reindex` MCP tool wi
 
 If a bare name exists in more than one mount, the directory that is a real project (has a manifest, a `.git`, or source dirs) wins over an empty one. If it's a real project in several mounts, `reindex` asks for the full path.
 
-To exclude paths, add a `.nexusignore` file (gitignore-style globs) to the project root. `.gitignore` is respected too, and a built-in deny list already skips `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar.
+To exclude paths, add a `.nexusignore` file (gitignore-style globs) to the project root. `.gitignore` is respected too (nested ones apply to their own subtree), and a built-in deny list already skips `node_modules`, `dist`, `target`, `.venv`, `__pycache__`, `*.min.js`, `*.map`, and similar. As in git, a pattern with a slash at its start or middle (`/test/`, `docs/internal`, `lib/**/*.gen.ex`) is anchored to the project root, and one without (`generated/`) matches at any depth. The same rules apply to a reindex, to the file watcher and to the check every query makes for changed files, and a file that is deleted, moved away or newly ignored leaves the index by the next query.
 
 ### Project configuration (`.nexus.toml`)
 

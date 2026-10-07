@@ -85,9 +85,13 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
   end
 
   @doc """
-  Auto-reindex dirty files before queries to avoid stale results.
-  Only runs if directories have been indexed (state has :indexed_dirs).
-  Returns {reindexed_count, state} — state unchanged since dirs don't change.
+  Bring the index up to date with the disk before a query: reindex files that
+  changed and purge files that are gone or no longer in scope.
+
+  Runs once a reindex has recorded its roots for the active collection
+  (`ElixirNexus.IndexScope`); the MCP state is not used, because over HTTP every
+  request starts with an empty one. Skipped while an index run is in progress.
+  Returns `{files_reindexed_or_purged, state}`; the state is passed through.
   """
   def maybe_reindex_dirty(state) do
     # Right after a reindex the graph rebuilds asynchronously (tens of seconds on
@@ -97,61 +101,56 @@ defmodule ElixirNexus.MCPServer.IndexManagement do
       Logger.warning("Graph still rebuilding after #{@graph_wait_ms}ms; answering from the current graph")
     end
 
-    dirs = Map.get(state, :indexed_dirs, [])
+    roots = ElixirNexus.IndexScope.roots()
 
-    if dirs == [] do
+    if roots == [] or ElixirNexus.Indexer.busy?() do
       {0, state}
     else
-      case ElixirNexus.DirtyTracker.get_dirty_files_recursive(dirs) do
-        {:ok, []} ->
-          {0, state}
-
-        {:ok, dirty_files} ->
-          count = length(dirty_files)
-          if count > 0, do: Logger.info("Auto-reindexing #{count} dirty file(s) before query")
-
-          Enum.each(dirty_files, fn path ->
-            case ElixirNexus.Indexer.index_file(path) do
-              {:ok, _chunks} ->
-                ElixirNexus.DirtyTracker.mark_clean(path)
-
-              {:error, reason} ->
-                Logger.warning("Auto-reindex failed for #{path}: #{inspect(reason)}")
-            end
-          end)
-
-          # Clean up files that exist in cache but have been deleted from disk
-          deleted_count = cleanup_deleted_files()
-
-          {count + deleted_count, state}
-
-        {:error, _} ->
-          {0, state}
-      end
+      in_scope = ElixirNexus.FileScope.files(roots)
+      {reindexed, purged} = sync_with_disk(roots, in_scope)
+      {reindexed + purged, state}
     end
   end
 
-  @doc """
-  Remove cached chunks for files that no longer exist on disk.
-  Catches deletions that happened while the server was down.
-  """
-  def cleanup_deleted_files do
-    deleted_paths =
-      try do
-        ElixirNexus.ChunkCache.all()
-        |> Enum.map(& &1.file_path)
-        |> Enum.uniq()
-        |> Enum.reject(&File.exists?/1)
-      rescue
-        _ -> []
-      end
+  defp sync_with_disk(roots, in_scope) do
+    dirty = ElixirNexus.DirtyTracker.dirty_among(in_scope)
+    if dirty != [], do: Logger.info("Auto-reindexing #{length(dirty)} dirty file(s) before query")
 
-    Enum.each(deleted_paths, fn path ->
-      Logger.info("Cleaning up deleted file from index: #{path}")
+    Enum.each(dirty, fn path ->
+      case ElixirNexus.Indexer.index_file(path) do
+        {:ok, _chunks} ->
+          ElixirNexus.DirtyTracker.mark_clean(path)
+
+        {:error, reason} ->
+          Logger.warning("Auto-reindex failed for #{path}: #{inspect(reason)}")
+      end
+    end)
+
+    {length(dirty), purge_out_of_scope(roots, in_scope)}
+  end
+
+  @doc """
+  Purge every indexed file under `roots` that is not in `in_scope`: deleted on
+  disk, renamed away, or now excluded by an ignore rule. Files outside every
+  root are left alone; a full reindex reconciles those against the collection.
+  Returns the number of files purged.
+  """
+  def purge_out_of_scope(roots, in_scope) do
+    scope = MapSet.new(in_scope)
+    prefixes = Enum.map(roots, &(String.trim_trailing(&1, "/") <> "/"))
+
+    stale =
+      (ElixirNexus.ChunkCache.file_paths() ++ ElixirNexus.DirtyTracker.known_files())
+      |> Enum.uniq()
+      |> Enum.filter(fn path -> Enum.any?(prefixes, &String.starts_with?(path, &1)) end)
+      |> Enum.reject(&MapSet.member?(scope, &1))
+
+    Enum.each(stale, fn path ->
+      Logger.info("Removing from index (deleted or out of scope): #{path}")
       ElixirNexus.Indexer.delete_file(path)
     end)
 
-    length(deleted_paths)
+    length(stale)
   end
 
   @doc """

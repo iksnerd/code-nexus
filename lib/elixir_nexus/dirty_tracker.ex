@@ -40,6 +40,11 @@ defmodule ElixirNexus.DirtyTracker do
     GenServer.call(__MODULE__, {:get_dirty_files_recursive, directories}, 30_000)
   end
 
+  @doc "The files among `paths` whose content differs from their stored checksum."
+  def dirty_among(paths) when is_list(paths) do
+    GenServer.call(__MODULE__, {:dirty_among, paths}, 30_000)
+  end
+
   @doc """
   Forget a file's checksum (e.g. when it's been deleted).
   """
@@ -142,21 +147,13 @@ defmodule ElixirNexus.DirtyTracker do
   end
 
   def handle_call({:get_dirty_files_recursive, directories}, _from, state) do
-    dirty_files =
-      directories
-      |> Enum.flat_map(&collect_files_recursive/1)
-      |> Enum.filter(fn path ->
-        case File.read(path) do
-          {:ok, content} ->
-            current_checksum = :crypto.hash(:sha256, content) |> Base.encode16()
-            Map.get(state, path) != current_checksum
+    # Same scope as a reindex walk (.gitignore, .nexusignore, deny list), so
+    # the dirty pass never indexes a file a reindex excludes.
+    {:reply, {:ok, changed(ElixirNexus.FileScope.files(directories), state)}, state}
+  end
 
-          {:error, _} ->
-            false
-        end
-      end)
-
-    {:reply, {:ok, dirty_files}, state}
+  def handle_call({:dirty_among, paths}, _from, state) do
+    {:reply, changed(paths, state), state}
   end
 
   def handle_call({:forget, file_path}, _from, state) do
@@ -182,29 +179,12 @@ defmodule ElixirNexus.DirtyTracker do
     {:reply, :ok, new_state}
   end
 
-  @ignored_dirs ~w(node_modules .next dist build .expo .turbo coverage __generated__ .cache vendor _build deps .elixir_ls .git)
-
-  defp collect_files_recursive(directory) do
-    indexable = ElixirNexus.IndexingHelpers.all_indexable_extensions()
-
-    case File.ls(directory) do
-      {:ok, entries} ->
-        Enum.flat_map(entries, fn entry ->
-          if entry in @ignored_dirs do
-            []
-          else
-            full_path = Path.join(directory, entry)
-
-            cond do
-              File.dir?(full_path) -> collect_files_recursive(full_path)
-              Path.extname(entry) in indexable -> [full_path]
-              true -> []
-            end
-          end
-        end)
-
-      {:error, _} ->
-        []
-    end
+  defp changed(paths, state) do
+    Enum.filter(paths, fn path ->
+      case File.read(path) do
+        {:ok, content} -> Map.get(state, path) != :crypto.hash(:sha256, content) |> Base.encode16()
+        {:error, _} -> false
+      end
+    end)
   end
 end

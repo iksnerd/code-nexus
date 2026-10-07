@@ -25,6 +25,16 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
 - [x] Contra (iksnerd/contra, 438 files): dead 2 -> 89 (86 with lib/contra/config indexed), 17 unsure.
 - [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
 - [ ] Transitive dead code (a function whose only callers are dead) is not reported.
+- [x] **Deleted files stayed in the index** (Contra's deleted `Repo.Paging` was still reported dead hours later).
+  Over Streamable HTTP each request gets an empty MCP state, so `indexed_dirs` was never there and the
+  query-time dirty pass never ran in Docker; it also cleaned deleted files only when some other file was
+  dirty. Roots now live in `IndexScope` (tied to the collection), and every query purges files under them
+  that are gone or out of scope. The watcher purges a directory moved away. **Files:** `index_scope.ex`,
+  `mcp_server/index_management.ex`, `file_watcher.ex`.
+- [x] **The watcher and the query-time pass ignored `.nexusignore`/`.gitignore`** (Contra: 455 files after a
+  reindex, 538 later). One scope check, `FileScope`, for the walk, the query pass and the watcher;
+  anchored globs (`lib/**/*.gen.ex`) now match the path. **Files:** `file_scope.ex`, `ignore_filter.ex`,
+  `dirty_tracker.ex`, `indexer.ex`.
 
 ## ✅ v1.19.1 — dogfood fixes: data integrity, analysis accuracy, UI (2026-09-14)
 

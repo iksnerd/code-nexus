@@ -70,27 +70,28 @@ defmodule ElixirNexus.FileWatcher do
   end
 
   @impl true
-  def handle_info({:file_event, _watcher_pid, {path, events}}, state) do
-    if indexable_file?(path) and not ignored_path?(path) and watched?(path, state) do
-      if file_deleted?(events, path) do
-        # File was deleted — clean up immediately (no debounce needed)
-        Logger.info("File deleted, removing from index: #{path}")
+  def handle_info({:file_event, _watcher_pid, {event_path, events}}, state) do
+    case locate(event_path, state) do
+      nil ->
+        {:noreply, state}
 
-        try do
-          ElixirNexus.Indexer.delete_file(path)
-        rescue
-          e -> Logger.warning("Failed to delete #{path} from index: #{inspect(e)}")
+      {root, path} ->
+        cond do
+          deleted?(events, event_path) ->
+            # A deleted file, or a deleted or renamed-away directory: purge what
+            # the index holds at or under the path, whatever the ignore rules
+            # say now. No debounce needed.
+            forget_deleted(path)
+            {:noreply, %{state | pending: Map.delete(state.pending, path)}}
+
+          ElixirNexus.FileScope.in_scope?(root, path) ->
+            # Debounce: schedule flush, replacing any pending timer for same path
+            Process.send_after(self(), {:flush, path}, @debounce_ms)
+            {:noreply, %{state | pending: Map.put(state.pending, path, true)}}
+
+          true ->
+            {:noreply, state}
         end
-
-        {:noreply, %{state | pending: Map.delete(state.pending, path)}}
-      else
-        # Debounce: schedule flush, replacing any pending timer for same path
-        new_pending = Map.put(state.pending, path, true)
-        Process.send_after(self(), {:flush, path}, @debounce_ms)
-        {:noreply, %{state | pending: new_pending}}
-      end
-    else
-      {:noreply, state}
     end
   end
 
@@ -136,15 +137,27 @@ defmodule ElixirNexus.FileWatcher do
   # Only act on paths under a directory currently being watched. Anything else
   # belongs to a project that is no longer active. Each root is matched both as
   # given and resolved, because FSEvents reports resolved paths (a watched
-  # /var/... directory produces /private/var/... events on macOS).
-  defp watched?(path, state) do
+  # /var/... directory produces /private/var/... events on macOS). Returns the
+  # root as given and the path rewritten under it, the form the index stores.
+  defp locate(path, state) do
     state.watchers
     |> Map.keys()
-    |> Enum.flat_map(&Enum.uniq([&1, resolve_symlinks(&1)]))
-    |> Enum.any?(fn dir ->
-      path == dir or String.starts_with?(path, String.trim_trailing(dir, "/") <> "/")
+    |> Enum.find_value(fn root ->
+      root = String.trim_trailing(root, "/")
+
+      [root, resolve_symlinks(root)]
+      |> Enum.uniq()
+      |> Enum.find_value(fn form ->
+        cond do
+          path == form -> {root, root}
+          String.starts_with?(path, form <> "/") -> {root, root <> String.replace_prefix(path, form, "")}
+          true -> nil
+        end
+      end)
     end)
   end
+
+  defp watched?(path, state), do: locate(path, state) != nil
 
   defp resolve_symlinks(path) do
     path
@@ -160,21 +173,27 @@ defmodule ElixirNexus.FileWatcher do
     end)
   end
 
-  # Check if file system events indicate deletion and file is gone from disk
-  defp file_deleted?(events, path) do
-    deletion_event = Enum.any?(events, &(&1 in [:removed, :deleted, :renamed]))
-    deletion_event and not File.exists?(path)
+  # The events name a removal and the path is gone from disk.
+  defp deleted?(events, path) do
+    Enum.any?(events, &(&1 in [:removed, :deleted, :renamed])) and not File.exists?(path)
   end
 
-  defp indexable_file?(path) do
-    Path.extname(path) in ElixirNexus.IndexingHelpers.all_indexable_extensions()
-  end
+  defp forget_deleted(path) do
+    prefix = path <> "/"
 
-  @ignored_dirs ~w(node_modules .next dist build .expo .turbo coverage __generated__ .cache vendor _build deps .elixir_ls .git)
+    indexed =
+      (ElixirNexus.ChunkCache.file_paths() ++ ElixirNexus.DirtyTracker.known_files())
+      |> Enum.uniq()
+      |> Enum.filter(&(&1 == path or String.starts_with?(&1, prefix)))
 
-  defp ignored_path?(path) do
-    path
-    |> Path.split()
-    |> Enum.any?(fn segment -> segment in @ignored_dirs end)
+    Enum.each(indexed, fn file ->
+      Logger.info("File deleted, removing from index: #{file}")
+
+      try do
+        ElixirNexus.Indexer.delete_file(file)
+      catch
+        kind, reason -> Logger.warning("Failed to delete #{file} from index: #{inspect({kind, reason})}")
+      end
+    end)
   end
 end

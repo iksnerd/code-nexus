@@ -29,7 +29,9 @@ defmodule ElixirNexus.IgnoreFilter do
           nexusignore_path_patterns: [String.t()],
           default_file_regexes: [Regex.t()],
           gitignore_file_regexes: [Regex.t()],
-          nexusignore_file_regexes: [Regex.t()]
+          nexusignore_file_regexes: [Regex.t()],
+          gitignore_anchored_regexes: [Regex.t()],
+          nexusignore_anchored_regexes: [Regex.t()]
         }
 
   defstruct default_dirs: MapSet.new(),
@@ -39,14 +41,16 @@ defmodule ElixirNexus.IgnoreFilter do
             nexusignore_path_patterns: [],
             default_file_regexes: [],
             gitignore_file_regexes: [],
-            nexusignore_file_regexes: []
+            nexusignore_file_regexes: [],
+            gitignore_anchored_regexes: [],
+            nexusignore_anchored_regexes: []
 
   @doc "Load ignore patterns from defaults, .gitignore, and .nexusignore if present."
   def load(project_root) do
-    {git_dirs, git_path_patterns, git_patterns} =
+    {git_dirs, git_path_patterns, git_patterns, git_anchored} =
       parse_ignore_file_extended(Path.join(project_root, ".gitignore"))
 
-    {nexus_dirs, nexus_path_patterns, nexus_patterns} =
+    {nexus_dirs, nexus_path_patterns, nexus_patterns, nexus_anchored} =
       parse_ignore_file_extended(Path.join(project_root, ".nexusignore"))
 
     %__MODULE__{
@@ -57,7 +61,9 @@ defmodule ElixirNexus.IgnoreFilter do
       nexusignore_path_patterns: nexus_path_patterns,
       default_file_regexes: Enum.flat_map(@default_file_patterns, &compile_glob/1),
       gitignore_file_regexes: Enum.flat_map(git_patterns, &compile_glob/1),
-      nexusignore_file_regexes: Enum.flat_map(nexus_patterns, &compile_glob/1)
+      nexusignore_file_regexes: Enum.flat_map(nexus_patterns, &compile_glob/1),
+      gitignore_anchored_regexes: Enum.flat_map(git_anchored, &compile_glob/1),
+      nexusignore_anchored_regexes: Enum.flat_map(nexus_anchored, &compile_glob/1)
     }
   end
 
@@ -109,10 +115,29 @@ defmodule ElixirNexus.IgnoreFilter do
   def classify_dir_path(relative_path, %__MODULE__{} = filter) do
     cond do
       path_match?(filter.nexusignore_path_patterns, relative_path) -> {:ignored, :nexusignore}
+      anchored_match?(filter.nexusignore_anchored_regexes, relative_path) -> {:ignored, :nexusignore}
       path_match?(filter.gitignore_path_patterns, relative_path) -> {:ignored, :gitignore}
+      anchored_match?(filter.gitignore_anchored_regexes, relative_path) -> {:ignored, :gitignore}
       true -> classify_dir(Path.basename(relative_path), filter)
     end
   end
+
+  @doc """
+  Classify a file by its path relative to the project root: anchored globs
+  (a pattern with a slash, such as `lib/**/*.gen.ex`) against the whole
+  relative path, then `classify_file/2` on the name. Directory rules are the
+  caller's: `classify_dir_path/2` on each directory above the file.
+  """
+  @spec classify_file_path(String.t(), String.t(), t()) :: classification()
+  def classify_file_path(relative_path, filename, %__MODULE__{} = filter) do
+    cond do
+      anchored_match?(filter.nexusignore_anchored_regexes, relative_path) -> {:ignored, :nexusignore}
+      anchored_match?(filter.gitignore_anchored_regexes, relative_path) -> {:ignored, :gitignore}
+      true -> classify_file(filename, filter)
+    end
+  end
+
+  defp anchored_match?(regexes, relative_path), do: Enum.any?(regexes, &Regex.match?(&1, relative_path))
 
   @doc """
   Add the rules of a `.gitignore` inside a subdirectory. Git applies them only
@@ -123,16 +148,19 @@ defmodule ElixirNexus.IgnoreFilter do
   @spec merge_gitignore(t(), String.t(), String.t()) :: t()
   def merge_gitignore(%__MODULE__{} = filter, dir, relative_dir) do
     case parse_ignore_file_extended(Path.join(dir, ".gitignore")) do
-      {[], [], []} ->
+      {[], [], [], []} ->
         filter
 
-      {dirs, path_patterns, globs} ->
+      {dirs, path_patterns, globs, anchored} ->
         %{
           filter
           | gitignore_dirs: MapSet.union(filter.gitignore_dirs, MapSet.new(dirs)),
             gitignore_path_patterns:
               filter.gitignore_path_patterns ++ Enum.map(path_patterns, &Path.join(relative_dir, &1)),
-            gitignore_file_regexes: filter.gitignore_file_regexes ++ Enum.flat_map(globs, &compile_glob/1)
+            gitignore_file_regexes: filter.gitignore_file_regexes ++ Enum.flat_map(globs, &compile_glob/1),
+            gitignore_anchored_regexes:
+              filter.gitignore_anchored_regexes ++
+                Enum.flat_map(anchored, &compile_glob(Path.join(relative_dir, &1)))
         }
     end
   end
@@ -159,7 +187,9 @@ defmodule ElixirNexus.IgnoreFilter do
     classify_file(filename, filter) != :include
   end
 
-  # Returns {simple dir names, path patterns (contain a slash, no globs), globs}.
+  # Returns {simple dir names, path patterns (contain a slash, no globs),
+  # globs without a slash (match a name at any depth), anchored globs (contain
+  # a slash, so git matches them against the path from the ignore file's dir)}.
   defp parse_ignore_file_extended(path) do
     case File.read(path) do
       {:ok, content} ->
@@ -175,11 +205,14 @@ defmodule ElixirNexus.IgnoreFilter do
           |> Enum.map(&String.trim_leading(&1, "/"))
           |> Enum.reject(&(&1 == ""))
 
-        glob_patterns = Enum.filter(stripped, &glob_pattern?/1)
-        {dirs, path_patterns, glob_patterns}
+        {anchored_globs, glob_patterns} =
+          stripped |> Enum.filter(&glob_pattern?/1) |> Enum.split_with(&String.contains?(&1, "/"))
+
+        anchored_globs = anchored_globs |> Enum.map(&String.trim_leading(&1, "/")) |> Enum.reject(&(&1 == ""))
+        {dirs, path_patterns, glob_patterns, anchored_globs}
 
       {:error, _} ->
-        {[], [], []}
+        {[], [], [], []}
     end
   end
 
@@ -211,21 +244,34 @@ defmodule ElixirNexus.IgnoreFilter do
     String.contains?(pattern, "*") or String.contains?(pattern, "?")
   end
 
+  # `**` matches across directories; `a/**/b` also matches `a/b` and `**/b`
+  # matches `b` at the top, as in git.
+  defp compile_glob("**/" <> rest) do
+    Enum.flat_map(compile_glob(rest), fn re -> [Regex.compile!("^(?:.*/)?" <> String.trim_leading(re.source, "^"))] end)
+  end
+
   defp compile_glob(pattern) do
     regex_str =
       pattern
-      |> String.split("**")
-      |> Enum.map(fn part ->
-        part
-        |> Regex.escape()
-        |> String.replace("\\*", "[^/]*")
-        |> String.replace("\\?", "[^/]")
-      end)
-      |> Enum.join(".*")
+      |> String.split("/**/")
+      |> Enum.map(&glob_segment_regex/1)
+      |> Enum.join("/(?:.*/)?")
 
     case Regex.compile("^#{regex_str}$") do
       {:ok, re} -> [re]
       _ -> []
     end
+  end
+
+  defp glob_segment_regex(pattern) do
+    pattern
+    |> String.split("**")
+    |> Enum.map(fn part ->
+      part
+      |> Regex.escape()
+      |> String.replace("\\*", "[^/]*")
+      |> String.replace("\\?", "[^/]")
+    end)
+    |> Enum.join(".*")
   end
 end

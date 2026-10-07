@@ -7,7 +7,7 @@ defmodule ElixirNexus.Indexer do
   use GenServer
   require Logger
 
-  alias ElixirNexus.{ChunkCache, GraphCache, Events, IgnoreFilter, IndexingHelpers}
+  alias ElixirNexus.{ChunkCache, GraphCache, Events, FileScope, IndexScope, IndexingHelpers}
 
   @max_concurrency System.schedulers_online()
 
@@ -124,6 +124,7 @@ defmodule ElixirNexus.Indexer do
 
   def handle_call({:index_directory, path}, from, state) do
     Logger.info("Starting Broadway indexing of directory: #{path}")
+    IndexScope.put([path])
 
     case collect_files(path) do
       {:ok, [], stats} ->
@@ -150,6 +151,7 @@ defmodule ElixirNexus.Indexer do
 
   def handle_call({:index_directories, paths}, from, state) do
     Logger.info("Starting Broadway indexing of directories: #{inspect(paths)}")
+    IndexScope.put(paths)
 
     {all_files, combined_stats} =
       Enum.reduce(paths, {[], empty_skip_stats()}, fn path, {acc_files, acc_stats} ->
@@ -246,6 +248,7 @@ defmodule ElixirNexus.Indexer do
 
   def handle_call(:purge, _from, state) do
     Logger.info("Purging current collection and caches")
+    IndexScope.clear()
 
     case prepare_reindex(state) do
       {:ok, clean_state} ->
@@ -287,6 +290,7 @@ defmodule ElixirNexus.Indexer do
 
   def handle_cast({:async_index_directories, paths}, state) do
     Logger.info("Starting async Broadway indexing of directories: #{inspect(paths)}")
+    IndexScope.put(paths)
 
     {all_files, combined_stats} =
       Enum.reduce(paths, {[], empty_skip_stats()}, fn path, {acc_files, acc_stats} ->
@@ -618,68 +622,9 @@ defmodule ElixirNexus.Indexer do
     end
   end
 
-  # Collect all indexable files recursively. Returns the list of file paths
-  # plus a skip-stats breakdown so the reindex response can report what was
-  # filtered out and why.
-  defp collect_files(path) do
-    filter = IgnoreFilter.load(path)
-    initial_stats = empty_skip_stats()
-
-    case File.ls(path) do
-      {:ok, entries} ->
-        {files, stats} = collect_files_recursive(path, path, entries, filter, [], initial_stats)
-        {:ok, files, stats}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp collect_files_recursive(root_path, base_path, entries, filter, acc_files, acc_stats) do
-    Enum.reduce(entries, {acc_files, acc_stats}, fn entry, {files, stats} ->
-      full_path = Path.join(base_path, entry)
-
-      cond do
-        File.dir?(full_path) ->
-          relative_path = Path.relative_to(full_path, root_path)
-
-          case IgnoreFilter.classify_dir_path(relative_path, filter) do
-            :include ->
-              case File.ls(full_path) do
-                {:ok, sub_entries} ->
-                  # A .gitignore in this directory applies to its subtree only.
-                  sub_filter =
-                    if ".gitignore" in sub_entries,
-                      do: IgnoreFilter.merge_gitignore(filter, full_path, relative_path),
-                      else: filter
-
-                  collect_files_recursive(root_path, full_path, sub_entries, sub_filter, files, stats)
-
-                {:error, _} ->
-                  {files, stats}
-              end
-
-            {:ignored, source} ->
-              # A skipped directory contributes one count per source. We don't
-              # walk the subtree to estimate file counts since that would defeat
-              # the point of skipping it.
-              {files, bump(stats, dir_key(source))}
-          end
-
-        true ->
-          ext = Path.extname(entry)
-
-          if indexable_extension?(ext) do
-            case IgnoreFilter.classify_file(entry, filter) do
-              :include -> {[full_path | files], stats}
-              {:ignored, source} -> {files, bump(stats, file_key(source))}
-            end
-          else
-            {files, bump(stats, :unsupported_extension)}
-          end
-      end
-    end)
-  end
+  # Every in-scope file plus the skip-stats breakdown the reindex reply
+  # reports, from the one scope check every indexing path shares.
+  defp collect_files(path), do: FileScope.collect(path)
 
   # Delete chunks/vectors/graph nodes for files that were indexed in a prior pass
   # but are no longer in the current scope (deleted on disk or newly ignored).
@@ -775,36 +720,9 @@ defmodule ElixirNexus.Indexer do
       "is mounted into the container."
   end
 
-  defp empty_skip_stats do
-    %{
-      default_deny_dirs: 0,
-      gitignore_dirs: 0,
-      nexusignore_dirs: 0,
-      default_deny_files: 0,
-      gitignore_files: 0,
-      nexusignore_files: 0,
-      unsupported_extension: 0
-    }
-  end
+  defp empty_skip_stats, do: FileScope.empty_skip_stats()
 
-  defp dir_key(:default), do: :default_deny_dirs
-  defp dir_key(:gitignore), do: :gitignore_dirs
-  defp dir_key(:nexusignore), do: :nexusignore_dirs
-
-  defp file_key(:default), do: :default_deny_files
-  defp file_key(:gitignore), do: :gitignore_files
-  defp file_key(:nexusignore), do: :nexusignore_files
-
-  defp bump(stats, key), do: Map.update!(stats, key, &(&1 + 1))
-
-  defp merge_skip_stats(a, b) do
-    Map.merge(a, b, fn _, va, vb -> va + vb end)
-  end
-
-  defp indexable_extension?(ext) do
-    ext in IndexingHelpers.elixir_extensions() or
-      Map.has_key?(IndexingHelpers.polyglot_extensions(), ext)
-  end
+  defp merge_skip_stats(a, b), do: FileScope.merge_skip_stats(a, b)
 
   # Scroll Qdrant for file_sha values and seed DirtyTracker.
   # Lightweight: reads payload metadata only, no embeddings or cache rebuilds.

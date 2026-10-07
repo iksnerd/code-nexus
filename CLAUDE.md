@@ -176,11 +176,15 @@ Only build/push a Docker image once the change is verified locally and you're cu
 
 ### Auto-reindex on queries
 
-MCP query tools (`search_code`, `find_all_callees`, `find_all_callers`, `analyze_impact`, `get_community_context`, `get_graph_stats`, `find_module_hierarchy`, `find_dead_code`) automatically check for dirty files via `DirtyTracker.get_dirty_files_recursive/1` before executing. Changed files are reindexed individually via `Indexer.index_file/1` (fast, single-file) so queries always return fresh results. Deleted files are also cleaned up from all caches during this pass. Only active after an initial `reindex` (state must have `:indexed_dirs`).
+MCP query tools (`search_code`, `find_all_callees`, `find_all_callers`, `analyze_impact`, `get_community_context`, `get_graph_stats`, `find_module_hierarchy`, `find_dead_code`) call `IndexManagement.maybe_reindex_dirty/1` first. It lists the in-scope files under the indexed roots (`FileScope.files/1`), reindexes the changed ones individually via `Indexer.index_file/1`, and purges every indexed file under those roots that is no longer in scope (deleted, moved away, or newly ignored) from Qdrant, ChunkCache, GraphCache and DirtyTracker. The roots come from `ElixirNexus.IndexScope` (app env, recorded by the Indexer when a directory index starts, tied to the active collection), never from the MCP state: over Streamable HTTP ExMCP runs each request in a fresh server process with empty state, so roots kept there disappeared and this pass never ran in Docker. Skipped while an index run is in progress.
+
+### One scope check
+
+`ElixirNexus.FileScope` decides what is indexed: `collect/1` (the reindex walk, with skip stats), `files/1` (the query-time pass) and `in_scope?/2` (the file watcher, per path, also for a path that no longer exists). All three use `IgnoreFilter` (`.gitignore` including nested ones, `.nexusignore`, the deny list; a pattern with a leading or middle slash is anchored, as in git). Never add a separate ignore list or extension check to an indexing path.
 
 ### File deletion handling
 
-When the FileWatcher detects a `:removed`/`:deleted` event and confirms the file is gone from disk, it calls `Indexer.delete_file/1` which orchestrates cleanup across ChunkCache, GraphCache, Qdrant, and DirtyTracker. The `maybe_reindex_dirty/1` pass before queries also scans for files in ChunkCache that no longer exist on disk.
+When the FileWatcher sees a `:removed`/`:deleted`/`:renamed` event for a path that is gone from disk, it calls `Indexer.delete_file/1` (ChunkCache, GraphCache, Qdrant, DirtyTracker) for every indexed file at or under that path, so a directory moved away is purged too (it reports one event for the directory, not one per file). Watcher events can be missed (Docker bind mounts on macOS, a server that was down), so the `maybe_reindex_dirty/1` pass before each query reconciles against the disk as well.
 
 ### Concurrency & safety
 
