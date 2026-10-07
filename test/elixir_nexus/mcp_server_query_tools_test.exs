@@ -326,6 +326,57 @@ defmodule ElixirNexus.MCPServerQueryToolsTest do
     end
   end
 
+  describe "Elixir exact graph over MCP" do
+    setup do
+      alias ElixirNexus.{Chunker, ChunkCache, GraphCache, Parser}
+
+      sources = %{
+        "/w/lib/a.ex" => "defmodule A do\n  def used(x), do: B.run(x)\n  def go(mod), do: mod.maybe(1)\nend\n",
+        "/w/lib/b.ex" => "defmodule B do\n  def run(x), do: x\n  def maybe(x), do: x\n  def tested(x), do: x\nend\n",
+        "/w/test/b_test.exs" => "defmodule BTest do\n  use ExUnit.Case\n  test \"t\", do: B.tested(1)\nend\n"
+      }
+
+      chunks =
+        Enum.flat_map(sources, fn {path, src} ->
+          {:ok, entities} = Parser.parse_source(path, src)
+          entities |> Chunker.chunk_entities() |> Enum.map(&Map.put(&1, :language, :elixir))
+        end)
+
+      ChunkCache.clear()
+      GraphCache.clear()
+      ChunkCache.insert_many(chunks)
+      GraphCache.rebuild_from_chunks(chunks)
+
+      on_exit(fn ->
+        ChunkCache.clear()
+        GraphCache.clear()
+      end)
+
+      :ok
+    end
+
+    test "find_all_callers carries qualified_name, resolves_to and match" do
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_all_callers", %{"entity_name" => "B.run"}, %{project_root: "/w"})
+
+      assert [%{"entity" => %{"qualified_name" => "A.used/1", "resolves_to" => "B.run/1", "match" => "exact"}}] =
+               Jason.decode!(json)
+    end
+
+    test "find_dead_code returns unsure entries and honours count_test_callers" do
+      {:ok, %{content: [%{text: json}]}, _} =
+        MCPServer.handle_tool_call("find_dead_code", %{"count_test_callers" => "false"}, %{project_root: "/w"})
+
+      result = Jason.decode!(json)
+      dead = Map.new(result["dead_functions"], &{&1["qualified_name"], &1})
+      assert dead["B.tested/1"]["called_from_tests"] == true
+      assert [%{"qualified_name" => "B.maybe/1", "reason" => reason}] = result["unsure"]
+      assert reason =~ "?maybe/1"
+      assert result["unsure_count"] == 1
+      assert result["elixir_resolution"]["count_test_callers"] == false
+    end
+  end
+
   describe "queries during a graph rebuild" do
     test "wait for the rebuild instead of answering from an empty graph" do
       # gpt-alpha: for ~47s after a reindex, find_all_callers returned [] (the

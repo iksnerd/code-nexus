@@ -1,13 +1,72 @@
 defmodule ElixirNexus.Search.CallerFinder do
   @moduledoc "Find entities that call a given function, with enclosing-function refinement."
 
-  alias ElixirNexus.Search.DataFetching
+  alias ElixirNexus.Search.{DataFetching, ElixirCallIndex}
 
   @doc """
   Find all entities that call a specific function.
   Inverse of find_callees — walks call edges inbound.
+
+  When the name matches Elixir definitions indexed with call-graph data, the
+  answer is exact (`Mod.fun/arity`); callers that only a short-name match could
+  reach (a call on a variable module) are listed after them with `"match" => "fallback"`.
   """
   def find_callers(entity_name, limit \\ 20) do
+    case elixir_callers(entity_name, limit) do
+      {:ok, results} -> {:ok, results}
+      :not_elixir -> find_callers_by_name(entity_name, limit)
+    end
+  end
+
+  defp elixir_callers(entity_name, limit) do
+    with {:ok, all_entities} <- DataFetching.get_all_entities_cached(:all),
+         true <- Enum.any?(all_entities, &ElixirCallIndex.xref?/1),
+         index = ElixirCallIndex.build(all_entities),
+         [_ | _] = targets <- ElixirCallIndex.targets(index, entity_name) do
+      {:ok, index |> elixir_caller_edges(targets) |> Enum.take(limit) |> Enum.map(&elixir_caller_result/1)}
+    else
+      _ -> :not_elixir
+    end
+  end
+
+  @doc false
+  # `[{edge, target_qn, match}]`, exact first, one per caller function and target.
+  def elixir_caller_edges(index, targets) do
+    exact = for qn <- targets, edge <- ElixirCallIndex.exact_callers(index, qn), do: {edge, qn, "exact"}
+    fallback = for qn <- targets, edge <- ElixirCallIndex.fallback_callers(index, qn), do: {edge, qn, "fallback"}
+
+    (exact ++ fallback)
+    |> Enum.uniq_by(fn {edge, qn, _} ->
+      {ElixirCallIndex.identity(edge.caller), edge.caller.entity["file_path"], qn}
+    end)
+    |> Enum.sort_by(fn {edge, _qn, match} ->
+      {match != "exact", edge.caller.entity["file_path"] || "", edge.caller.entity["start_line"] || 0}
+    end)
+  end
+
+  defp elixir_caller_result({%{caller: caller, call: call}, qn, match}) do
+    entity = caller.entity
+
+    %{
+      id: caller.id,
+      score: 0.0,
+      entity: %{
+        "name" => entity["name"],
+        "qualified_name" => ElixirCallIndex.identity(caller),
+        "file_path" => entity["file_path"],
+        "entity_type" => entity["entity_type"],
+        "start_line" => entity["start_line"] || 0,
+        "end_line" => entity["end_line"] || 0,
+        "calls" => [call],
+        "is_a" => entity["is_a"] || [],
+        "contains" => entity["contains"] || [],
+        "resolves_to" => qn,
+        "match" => match
+      }
+    }
+  end
+
+  defp find_callers_by_name(entity_name, limit) do
     call_callers = ElixirNexus.GraphCache.find_callers(entity_name)
     import_callers = ElixirNexus.GraphCache.find_importers(entity_name)
 

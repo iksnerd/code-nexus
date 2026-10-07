@@ -3,7 +3,7 @@ defmodule ElixirNexus.Search.CalleeFinder do
 
   require Logger
 
-  alias ElixirNexus.Search.{DataFetching, EntityResolution}
+  alias ElixirNexus.Search.{DataFetching, ElixirCallIndex, EntityResolution}
 
   @doc """
   Find all entities that a specific function calls.
@@ -13,18 +13,9 @@ defmodule ElixirNexus.Search.CalleeFinder do
 
     case DataFetching.get_all_entities_cached(:all) do
       {:ok, [_ | _] = all_entities} ->
-        # Try multi-strategy resolution first (exact, file-path, substring) —
-        # same as find_module_hierarchy. Falls back to Qdrant exact match.
-        entity =
-          EntityResolution.find_entity_multi_strategy(entity_name, all_entities) ||
-            case get_definition(entity_name) do
-              {:ok, e} -> e
-              _ -> nil
-            end
-
-        case entity do
-          nil -> {:error, :not_found}
-          e -> resolve_callees(e, all_entities, limit)
+        case elixir_callees(all_entities, entity_name, limit) do
+          {:ok, results} -> {:ok, results}
+          :not_elixir -> find_callees_by_name(all_entities, entity_name, limit)
         end
 
       _ ->
@@ -37,6 +28,55 @@ defmodule ElixirNexus.Search.CalleeFinder do
           error ->
             error
         end
+    end
+  end
+
+  # An Elixir function with call-graph data: its calls resolved to the exact
+  # definitions (all clauses' calls). A call that resolves to nothing in the
+  # project (a dependency, Kernel) or only by a short-name match is unresolved.
+  defp elixir_callees(all_entities, entity_name, limit) do
+    with true <- Enum.any?(all_entities, &ElixirCallIndex.xref?/1),
+         index = ElixirCallIndex.build(all_entities),
+         [qn | _] <- ElixirCallIndex.targets(index, entity_name) do
+      clauses = Map.get(index.defs, qn, [])
+
+      results =
+        clauses
+        |> Enum.flat_map(&(&1.entity["xref"]["calls"] || []))
+        |> Enum.uniq()
+        |> Enum.flat_map(fn call ->
+          case ElixirCallIndex.resolve(index, call, hd(clauses)) do
+            {:exact, qns} -> Enum.map(qns, &callee_result(index, &1))
+            _ -> [%{name: call, resolved: false}]
+          end
+        end)
+        |> Enum.uniq()
+        |> Enum.take(limit)
+
+      {:ok, results}
+    else
+      _ -> :not_elixir
+    end
+  end
+
+  defp callee_result(index, qn) do
+    [definition | _] = Map.fetch!(index.defs, qn)
+    %{definition | entity: Map.put(definition.entity, "qualified_name", qn)}
+  end
+
+  defp find_callees_by_name(all_entities, entity_name, limit) do
+    # Try multi-strategy resolution first (exact, file-path, substring) —
+    # same as find_module_hierarchy. Falls back to Qdrant exact match.
+    entity =
+      EntityResolution.find_entity_multi_strategy(entity_name, all_entities) ||
+        case get_definition(entity_name) do
+          {:ok, e} -> e
+          _ -> nil
+        end
+
+    case entity do
+      nil -> {:error, :not_found}
+      e -> resolve_callees(e, all_entities, limit)
     end
   end
 

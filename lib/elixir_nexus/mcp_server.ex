@@ -182,7 +182,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_all_callers")
 
       description(
-        "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Requires reindex first; returns an empty list if the entity isn't in the indexed call graph. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. Returns caller entities with file_path, entity_type, start_line."
+        "Find all callers of a function (inverse of find_callees). Use BEFORE renaming or changing a signature. Requires reindex first; returns an empty list if the entity isn't in the indexed call graph. Uses AST-parsed call edges — no false positives from comments or strings. Name matching is case-insensitive and supports short names. For Elixir, edges are exact by Module.fun/arity: query `Mod.fun`, `Mod.fun/2` or a bare `fun` (every definition); each caller has `qualified_name`, `resolves_to` (the definition it reaches) and `match` (`exact`, or `fallback` for a call only a short-name match can place, e.g. on a variable module). Returns caller entities with file_path, entity_type, start_line."
       )
     end
 
@@ -235,7 +235,7 @@ defmodule ElixirNexus.MCPServer do
       name("find_dead_code")
 
       description(
-        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Requires a fully reindexed call graph; returns an empty dead_functions list if nothing is indexed. Pre-filters known non-dead patterns: framework conventions (route handlers, page/layout/sitemap/manifest, Go Test*/Benchmark*), test/spec files, shadcn/ui primitives, port implementors (functions typed as a known interface — DI-wired), and any path matching `[entry_points]` in `.nexus.toml`. Residual false positives are still possible for code reached only via reflection or DI the graph can't see — verify with analyze_impact before deleting. Optionally filter by file path prefix. Returns {dead_functions, total_public, dead_count, warning}."
+        "Find exported functions/methods with zero callers — use before cleanup PRs or when deleting a module to confirm nothing depends on it. Requires a fully reindexed call graph; returns an empty dead_functions list if nothing is indexed. Pre-filters known non-dead patterns: framework conventions (route handlers, page/layout/sitemap/manifest, Go Test*/Benchmark*), test/spec files, shadcn/ui primitives, port implementors (functions typed as a known interface — DI-wired), and any path matching `[entry_points]` in `.nexus.toml`. Residual false positives are still possible for code reached only via reflection or DI the graph can't see — verify with analyze_impact before deleting. Optionally filter by file path prefix. Elixir is matched exactly by Module.fun/arity (aliases, imports, `use`-injected imports, pipes, captures, HEEx components, defdelegate); a function only a short-name match could reach (a call on a variable module, apply with a variable function) is listed under `unsure` with the reason instead of `dead_functions`. `count_test_callers: false` (Elixir; default from `.nexus.toml` `[dead_code]`, else true) reports functions only tests call, marked `called_from_tests`. Returns {dead_functions, total_public, dead_count, unsure, unsure_count, elixir_resolution, warning}."
       )
     end
 
@@ -245,6 +245,11 @@ defmodule ElixirNexus.MCPServer do
         path_prefix: %{
           type: "string",
           description: "Optional file path prefix to scope the search (e.g. '/workspace/myproject/src')"
+        },
+        count_test_callers: %{
+          type: "boolean",
+          description:
+            "Elixir: count calls from test files as callers (default from .nexus.toml [dead_code] count_test_callers, else true). False reports functions only tests call."
         }
       },
       required: []
@@ -597,10 +602,11 @@ defmodule ElixirNexus.MCPServer do
     {_reindexed, state} = IndexManagement.maybe_reindex_dirty(state)
 
     opts =
-      case Map.get(args, "path_prefix") do
-        nil -> []
-        prefix -> [path_prefix: prefix]
-      end
+      [
+        path_prefix: Map.get(args, "path_prefix"),
+        count_test_callers: ResponseFormat.to_bool(Map.get(args, "count_test_callers"))
+      ]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
     case ElixirNexus.Search.find_dead_code(opts) do
       {:ok, result} -> ResponseFormat.json_reply(result, state)

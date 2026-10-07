@@ -40,11 +40,21 @@ defmodule ElixirNexus.MCPServer.ResponseFormat do
       "parameters" => entity["parameters"] || [],
       "calls" => Enum.take(calls, 10)
     }
-    # Set by find_all_callers when several files define the queried name.
+    # Set by find_all_callers (several definitions, or Elixir's exact graph) and find_all_callees.
     |> then(fn compact ->
-      if entity["resolves_to"], do: Map.put(compact, "resolves_to", entity["resolves_to"]), else: compact
+      entity
+      |> Map.take(["resolves_to", "qualified_name", "match"])
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+      |> Map.merge(compact)
     end)
   end
+
+  @doc "Coerce an MCP boolean arg (true/false or \"true\"/\"false\"); nil when absent or unrecognised."
+  def to_bool(val) when is_boolean(val), do: val
+  def to_bool("true"), do: true
+  def to_bool("false"), do: false
+  def to_bool(_), do: nil
 
   @doc "Coerce MCP JSON string args to integer. MCP args arrive as strings even for numeric params."
   def to_int(val, _default) when is_integer(val), do: val

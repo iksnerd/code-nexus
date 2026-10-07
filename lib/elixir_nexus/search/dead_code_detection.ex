@@ -1,7 +1,7 @@
 defmodule ElixirNexus.Search.DeadCodeDetection do
   @moduledoc "Find exported functions and methods with zero callers (dead code)."
 
-  alias ElixirNexus.Search.DataFetching
+  alias ElixirNexus.Search.{DataFetching, ElixirCallIndex, ElixirDeadCode}
 
   # Exported names that frameworks call via file conventions, not explicit JS call sites.
   # Filtering these prevents false positives in find_dead_code for JS/TS projects.
@@ -47,10 +47,24 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
 
   @doc """
   Find exported functions/methods with zero callers (dead code).
+
+  Elixir functions indexed with call-graph data (`xref`) are judged on the exact
+  graph (`ElixirDeadCode`): matches are by `Module.fun/arity`, and what only a
+  short-name match could reach is listed under `unsure`. Everything else uses
+  the short-name matching below.
+
+  Options: `:path_prefix`; `:count_test_callers` (Elixir only; default from
+  `.nexus.toml` `[dead_code] count_test_callers`, else true).
   """
   def find_dead_code(opts \\ []) do
     path_prefix = Keyword.get(opts, :path_prefix)
     {config_root, config} = ElixirNexus.ProjectConfig.current()
+
+    count_test_callers? =
+      case Keyword.get(opts, :count_test_callers) do
+        nil -> ElixirNexus.ProjectConfig.count_test_callers?(config)
+        value -> value
+      end
 
     case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
@@ -87,7 +101,7 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
           end)
 
         # Find public functions/methods with zero callers
-        dead =
+        candidates =
           all_entities
           |> Enum.filter(fn e ->
             type = e.entity["entity_type"]
@@ -125,7 +139,7 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
               port_implementor?(e.entity, interface_names) or
               test_file?(file_path) or
               (lang == "elixir" and String.ends_with?(file_path, "_controller.ex")) or
-              (lang == "elixir" and name in @elixir_framework_callbacks) or
+              (lang == "elixir" and name in @elixir_framework_callbacks and not ElixirCallIndex.xref?(e)) or
               (lang == "go" and Enum.any?(@go_test_prefixes, &String.starts_with?(name, &1))) or
               go_interface_method?(lang, e.entity["entity_type"], name) or
               (js_or_ts?(lang) and
@@ -136,6 +150,20 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
                           Regex.match?(~r/^(get|fetch|load|generate)[A-Z]/, name))) or
                     shadcn_ui_export?(file_path)))
           end)
+
+        {elixir_candidates, legacy_candidates} = Enum.split_with(candidates, &ElixirCallIndex.xref?/1)
+
+        {elixir_dead, unsure, resolution} =
+          if elixir_candidates == [] do
+            {[], [], nil}
+          else
+            index = ElixirCallIndex.build(all_entities)
+            {dead, unsure} = ElixirDeadCode.judge(elixir_candidates, all_entities, index, count_test_callers?)
+            {dead, unsure, Map.put(index.stats, "count_test_callers", count_test_callers?)}
+          end
+
+        legacy_dead =
+          legacy_candidates
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
@@ -158,6 +186,8 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
               start_line: e.entity["start_line"]
             }
           end)
+
+        dead = legacy_dead ++ elixir_dead
 
         total_public =
           all_entities
@@ -183,6 +213,9 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
            dead_functions: dead,
            total_public: total_public,
            dead_count: length(dead),
+           unsure: unsure,
+           unsure_count: length(unsure),
+           elixir_resolution: resolution,
            warning: warning
          }}
 

@@ -1,7 +1,7 @@
 defmodule ElixirNexus.Search.ImpactAnalysis do
   @moduledoc "Transitive impact analysis — find everything affected by changing a given entity."
 
-  alias ElixirNexus.Search.{CallerFinder, DataFetching}
+  alias ElixirNexus.Search.{CallerFinder, DataFetching, ElixirCallIndex}
 
   @doc """
   Transitive impact analysis: given a function, find everything that would be
@@ -14,24 +14,78 @@ defmodule ElixirNexus.Search.ImpactAnalysis do
 
     case DataFetching.get_all_entities_cached(:all) do
       {:ok, all_entities} ->
-        # Build reverse edge index once: name_lower -> [referencing_entities]
-        # Includes both calls and imports so import-only dependencies are tracked
-        edge_index = build_reverse_edge_index(all_entities)
-        tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new(), all_entities)
-        flat = flatten_impact_tree(tree)
-
-        {:ok,
-         %{
-           root: entity_name,
-           depth: depth,
-           total_affected: length(flat),
-           impact: tree,
-           affected_files: flat |> Enum.map(& &1.file_path) |> Enum.uniq()
-         }}
+        case elixir_targets(all_entities, entity_name) do
+          {index, [_ | _] = targets} -> {:ok, elixir_impact(index, entity_name, targets, depth)}
+          _ -> legacy_impact(all_entities, entity_name, depth)
+        end
 
       error ->
         error
     end
+  end
+
+  defp elixir_targets(all_entities, entity_name) do
+    if Enum.any?(all_entities, &ElixirCallIndex.xref?/1) do
+      index = ElixirCallIndex.build(all_entities)
+      {index, ElixirCallIndex.targets(index, entity_name)}
+    end
+  end
+
+  # Exact Elixir impact: callers by qualified name, transitively. Each node is
+  # named by its qualified name; `match` says whether the edge is exact or only a
+  # short-name fallback (a call on a variable module).
+  defp elixir_impact(index, root, targets, depth) do
+    tree = elixir_tree(index, targets, depth, MapSet.new(targets))
+    flat = flatten_impact_tree(tree)
+
+    %{
+      root: root,
+      resolved_to: targets,
+      depth: depth,
+      total_affected: length(flat),
+      impact: tree,
+      affected_files: flat |> Enum.map(& &1.file_path) |> Enum.uniq()
+    }
+  end
+
+  defp elixir_tree(_index, _targets, 0, _visited), do: []
+
+  defp elixir_tree(index, targets, depth, visited) do
+    index
+    |> CallerFinder.elixir_caller_edges(targets)
+    |> Enum.uniq_by(fn {edge, _qn, _match} -> ElixirCallIndex.identity(edge.caller) end)
+    |> Enum.reject(fn {edge, _qn, _match} -> MapSet.member?(visited, ElixirCallIndex.identity(edge.caller)) end)
+    |> Enum.map(fn {%{caller: caller}, _qn, match} ->
+      name = ElixirCallIndex.identity(caller)
+      next = ElixirCallIndex.qualified_names(caller)
+
+      %{
+        name: name,
+        file_path: caller.entity["file_path"],
+        entity_type: caller.entity["entity_type"],
+        start_line: caller.entity["start_line"],
+        end_line: caller.entity["end_line"],
+        match: match,
+        affected_by: if(next == [], do: [], else: elixir_tree(index, next, depth - 1, MapSet.put(visited, name)))
+      }
+    end)
+  end
+
+  defp legacy_impact(all_entities, entity_name, depth) do
+    # Build reverse edge index once: name_lower -> [referencing_entities]
+    # Includes both calls and imports so import-only dependencies are tracked
+    edge_index = build_reverse_edge_index(all_entities)
+    tree = build_impact_tree(entity_name, edge_index, depth, MapSet.new(), all_entities)
+    flat = flatten_impact_tree(tree)
+
+    {:ok,
+     %{
+       root: entity_name,
+       depth: depth,
+       total_affected: length(flat),
+       impact: tree,
+       affected_files: flat |> Enum.map(& &1.file_path) |> Enum.uniq()
+     }}
   end
 
   # Build a reverse edge index: for each call or import name, list the entities that reference it.

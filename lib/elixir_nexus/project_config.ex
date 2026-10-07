@@ -17,12 +17,15 @@ defmodule ElixirNexus.ProjectConfig do
   [layers]
   ports = "core/ports/**"
   adapters = "infrastructure/**"
+
+  [dead_code]
+  count_test_callers = false   # Elixir: report functions only tests call
   ```
   """
 
-  defstruct entry_points: [], layers: %{}
+  defstruct entry_points: [], layers: %{}, count_test_callers: true
 
-  @type t :: %__MODULE__{entry_points: [String.t()], layers: map()}
+  @type t :: %__MODULE__{entry_points: [String.t()], layers: map(), count_test_callers: boolean()}
 
   @app :elixir_nexus
   @env_key :project_config
@@ -67,9 +70,18 @@ defmodule ElixirNexus.ProjectConfig do
         |> get_in(["entry_points", "include"])
         |> List.wrap()
         |> Enum.filter(&is_binary/1),
-      layers: Map.get(map, "layers", %{})
+      layers: Map.get(map, "layers", %{}),
+      count_test_callers: get_in(map, ["dead_code", "count_test_callers"]) != false
     }
   end
+
+  @doc """
+  Whether `find_dead_code` counts calls from test files as callers of Elixir
+  functions (`[dead_code] count_test_callers`, default true). False reports
+  functions only tests call, marked `called_from_tests`.
+  """
+  def count_test_callers?(%__MODULE__{count_test_callers: value}), do: value != false
+  def count_test_callers?(_), do: true
 
   @doc """
   Resolve the architectural layer for a project-root-relative path. A `[layers]` entry whose
