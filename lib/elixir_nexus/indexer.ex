@@ -809,25 +809,18 @@ defmodule ElixirNexus.Indexer do
   # Scroll Qdrant for file_sha values and seed DirtyTracker.
   # Lightweight: reads payload metadata only, no embeddings or cache rebuilds.
   defp seed_dirty_tracker_from_qdrant do
-    sha_map = collect_file_shas(nil, %{})
+    sha_map = nil |> seed_dirty_tracker_points([]) |> IndexingHelpers.file_sha_map()
 
     if map_size(sha_map) > 0 do
       ElixirNexus.DirtyTracker.seed_from_map(sha_map)
     end
   end
 
-  defp collect_file_shas(offset, acc) do
+  defp seed_dirty_tracker_points(offset, acc) do
     case ElixirNexus.QdrantClient.scroll_points(200, offset) do
       {:ok, %{"result" => %{"points" => points, "next_page_offset" => next}}}
       when is_list(points) and points != [] ->
-        new_acc =
-          Enum.reduce(points, acc, fn p, a ->
-            path = get_in(p, ["payload", "file_path"])
-            sha = get_in(p, ["payload", "file_sha"])
-            if is_binary(path) and is_binary(sha), do: Map.put(a, path, sha), else: a
-          end)
-
-        if next, do: collect_file_shas(next, new_acc), else: new_acc
+        if next, do: seed_dirty_tracker_points(next, points ++ acc), else: points ++ acc
 
       _ ->
         acc

@@ -49,13 +49,7 @@ defmodule ElixirNexus.ProjectSwitcher do
 
         # Seed DirtyTracker from stored file SHAs so the next reindex can skip
         # re-embedding unchanged files (survives container restarts).
-        sha_map =
-          Enum.reduce(points, %{}, fn p, acc ->
-            payload = p["payload"] || %{}
-            path = payload["file_path"]
-            sha = payload["file_sha"]
-            if is_binary(path) and is_binary(sha), do: Map.put(acc, path, sha), else: acc
-          end)
+        sha_map = ElixirNexus.IndexingHelpers.file_sha_map(points)
 
         if map_size(sha_map) > 0, do: DirtyTracker.seed_from_map(sha_map)
 

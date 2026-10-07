@@ -23,6 +23,36 @@ defmodule ElixirNexus.IndexingHelpers do
     ".swift" => :swift
   }
 
+  # Bump when parsing changes what a chunk carries (v2: Elixir `xref`). A file whose
+  # stored chunks have another version is parsed again on the next reindex even
+  # when its content is unchanged.
+  @index_version 2
+
+  @doc "The version stamped on every stored chunk (`index_version` in the payload)."
+  def index_version, do: @index_version
+
+  @doc """
+  `%{file_path => file_sha}` from stored points, for seeding `DirtyTracker`. A file
+  with any point from another index version is left out, so it counts as dirty.
+  """
+  def file_sha_map(points) do
+    {shas, stale} =
+      Enum.reduce(points, {%{}, MapSet.new()}, fn p, {shas, stale} ->
+        payload = p["payload"] || %{}
+        path = payload["file_path"]
+        sha = payload["file_sha"]
+
+        cond do
+          not is_binary(path) -> {shas, stale}
+          payload["index_version"] != @index_version -> {shas, MapSet.put(stale, path)}
+          is_binary(sha) -> {Map.put(shas, path, sha), stale}
+          true -> {shas, stale}
+        end
+      end)
+
+    Map.drop(shas, MapSet.to_list(stale))
+  end
+
   def elixir_extensions, do: @elixir_extensions
   def polyglot_extensions, do: @polyglot_extensions
   def all_indexable_extensions, do: @elixir_extensions ++ Map.keys(@polyglot_extensions)
@@ -295,6 +325,7 @@ defmodule ElixirNexus.IndexingHelpers do
           "payload" => %{
             "file_path" => chunk.file_path,
             "file_sha" => Map.get(sha_cache, chunk.file_path),
+            "index_version" => @index_version,
             "entity_type" => Atom.to_string(chunk.entity_type),
             "name" => chunk.name,
             "start_line" => chunk.start_line,

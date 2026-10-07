@@ -12,6 +12,23 @@ defmodule ElixirNexus.IndexingHelpersTest do
     {:ok, base: temp_dir}
   end
 
+  describe "file_sha_map/1" do
+    test "a file indexed by an older parser is left out, so the next reindex parses it again" do
+      # Upgrading to the Elixir call resolution left unchanged files with chunks
+      # that had no xref: their SHAs matched, so reindex skipped them.
+      v = IndexingHelpers.index_version()
+
+      points = [
+        %{"payload" => %{"file_path" => "a.ex", "file_sha" => "A", "index_version" => v}},
+        %{"payload" => %{"file_path" => "b.ex", "file_sha" => "B"}},
+        %{"payload" => %{"file_path" => "c.ex", "file_sha" => "C", "index_version" => v}},
+        %{"payload" => %{"file_path" => "c.ex", "file_sha" => "C", "index_version" => v - 1}}
+      ]
+
+      assert IndexingHelpers.file_sha_map(points) == %{"a.ex" => "A"}
+    end
+  end
+
   describe "process_file/1 with HEEx" do
     test "a .heex template becomes the embedding module's function with resolved calls", %{base: base} do
       File.mkdir_p!(Path.join(base, "page_html"))
