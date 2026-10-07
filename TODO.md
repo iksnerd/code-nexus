@@ -24,7 +24,7 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
 - [x] `index_version` on chunks: an upgrade reparses unchanged files.
 - [x] Contra (iksnerd/contra, 438 files): dead 2 -> 89 (86 with lib/contra/config indexed), 17 unsure.
 - [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
-- [ ] Transitive dead code (a function whose only callers are dead) is not reported.
+- [x] **Dead code by chains**: liveness is reachability from live roots (callbacks, entry points, module bodies, non-candidates, tests when counted), through private functions too. What only dead code calls is `dead_via_dead_callers` with its `dead_callers` and a `chain`; what only unsure code reaches stays `unsure`. The path prefix filters the report, not the graph. **Files:** `search/elixir_dead_code.ex`, `search/dead_code_detection.ex`.
 - [x] **Deleted files stayed in the index** (Contra's deleted `Repo.Paging` was still reported dead hours later).
   Over Streamable HTTP each request gets an empty MCP state, so `indexed_dirs` was never there and the
   query-time dirty pass never ran in Docker; it also cleaned deleted files only when some other file was

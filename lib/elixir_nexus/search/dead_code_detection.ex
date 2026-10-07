@@ -108,13 +108,6 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
             vis = e.entity["visibility"]
             type in ["function", "method"] and vis in ["public", nil]
           end)
-          |> then(fn entities ->
-            if path_prefix do
-              Enum.filter(entities, &String.starts_with?(&1.entity["file_path"] || "", path_prefix))
-            else
-              entities
-            end
-          end)
           |> Enum.reject(fn e ->
             lang = e.entity["language"] || ""
             name = e.entity["name"] || ""
@@ -153,17 +146,27 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
 
         {elixir_candidates, legacy_candidates} = Enum.split_with(candidates, &ElixirCallIndex.xref?/1)
 
-        {elixir_dead, unsure, resolution} =
+        # Elixir is judged over the whole project (a dead chain can cross the
+        # prefix) and filtered by the prefix afterwards.
+        in_prefix? = fn path -> is_nil(path_prefix) or String.starts_with?(path || "", path_prefix) end
+
+        {elixir_dead, via_dead, unsure, resolution} =
           if elixir_candidates == [] do
-            {[], [], nil}
+            {[], [], [], nil}
           else
             index = ElixirCallIndex.build(all_entities)
-            {dead, unsure} = ElixirDeadCode.judge(elixir_candidates, all_entities, index, count_test_callers?, config)
-            {dead, unsure, Map.put(index.stats, "count_test_callers", count_test_callers?)}
+
+            {dead, via, unsure} =
+              ElixirDeadCode.judge(elixir_candidates, all_entities, index, count_test_callers?, config)
+
+            {Enum.filter(dead, &in_prefix?.(&1.file_path)), Enum.filter(via, &in_prefix?.(&1.file_path)),
+             Enum.filter(unsure, &in_prefix?.(&1.file_path)),
+             Map.put(index.stats, "count_test_callers", count_test_callers?)}
           end
 
         legacy_dead =
           legacy_candidates
+          |> Enum.filter(&in_prefix?.(&1.entity["file_path"]))
           |> Enum.filter(fn e ->
             name = e.entity["name"] || ""
             name_lower = String.downcase(name)
@@ -213,6 +216,8 @@ defmodule ElixirNexus.Search.DeadCodeDetection do
            dead_functions: dead,
            total_public: total_public,
            dead_count: length(dead),
+           dead_via_dead_callers: via_dead,
+           dead_via_dead_callers_count: length(via_dead),
            unsure: unsure,
            unsure_count: length(unsure),
            elixir_resolution: resolution,

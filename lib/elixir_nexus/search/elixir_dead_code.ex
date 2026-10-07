@@ -67,45 +67,163 @@ defmodule ElixirNexus.Search.ElixirDeadCode do
 
   @doc """
   Judge `candidates` (public Elixir function entities already filtered for entry
-  points, test files and controllers). Returns `{dead, unsure}`.
+  points, test files and controllers). Returns `{dead, dead_via_dead_callers, unsure}`.
+
+  Liveness is reachability: a function is alive when a call reaches it from
+  something that is not itself a suspect (a callback, an entry point, a module
+  body, a function outside the candidates, a test when tests count), directly or
+  through other live functions. Private functions are links in that graph but
+  are never reported. What no live caller reaches is:
+
+    * `unsure` when it has its own unsure reason (a fallback edge, an atom
+      mention) or is reached from an unsure function: a function called only by
+      something unsure stays unsure;
+    * dead when nothing calls it (the `dead` list);
+    * dead via dead callers otherwise: every caller is dead, as in a chain under
+      a dead function or a cycle no live code enters. Each entry carries its
+      `dead_callers` and one `chain` of calls leading to it.
   """
   def judge(candidates, all_entities, index, count_test_callers?, config \\ nil) do
     groups =
       candidates
       |> Enum.reject(&(ElixirCallIndex.qualified_names(&1) == []))
-      |> Enum.group_by(&{&1.entity["file_path"], &1.entity["module_path"], &1.entity["name"]})
-      |> Enum.flat_map(fn {_key, clauses} -> functions(clauses) end)
+      |> group_functions()
       |> Enum.reject(&callback?(&1, index))
       |> Enum.reject(fn e ->
         Enum.any?(ElixirCallIndex.qualified_names(e), &ElixirNexus.ProjectConfig.entry_function?(config, &1))
       end)
 
-    {alive_or_pending, dead_by_tests} =
-      Enum.reduce(groups, {[], []}, fn e, {pending, test_only} ->
-        edges = Enum.flat_map(ElixirCallIndex.qualified_names(e), &ElixirCallIndex.exact_callers(index, &1))
-        {test_edges, app_edges} = Enum.split_with(edges, &ElixirCallIndex.test_caller?/1)
+    privates =
+      all_entities
+      |> Enum.filter(fn e ->
+        ElixirCallIndex.xref?(e) and e.entity["visibility"] == "private" and e.entity["entity_type"] == "function"
+      end)
+      |> Enum.reject(&(ElixirCallIndex.qualified_names(&1) == []))
+      |> group_functions()
+
+    graph = suspect_graph(groups ++ privates, index, count_test_callers?)
+    live = reach(graph, Map.keys(graph.nodes) |> Enum.filter(&(graph.nodes[&1].root? == true)))
+
+    public_left = Enum.reject(groups, &MapSet.member?(live, &1.id))
+    mentions = atom_mentions(public_left, all_entities)
+
+    own_reasons =
+      for e <- public_left, reason = unsure_reason(e, index, mentions), into: %{}, do: {e.id, reason}
+
+    maybe = reach(graph, Map.keys(own_reasons), live)
+
+    {dead, via, unsure} =
+      Enum.reduce(public_left, {[], [], []}, fn e, {dead, via, unsure} ->
+        node = graph.nodes[e.id]
 
         cond do
-          app_edges != [] -> {pending, test_only}
-          test_edges != [] and count_test_callers? -> {pending, test_only}
-          test_edges != [] -> {pending, [e | test_only]}
-          true -> {[e | pending], test_only}
+          reason = own_reasons[e.id] ->
+            {dead, via, [unsure_entry(e, reason) | unsure]}
+
+          MapSet.member?(maybe, e.id) ->
+            from = node.callers |> Enum.find(&MapSet.member?(maybe, &1)) |> then(&graph.nodes[&1].entity)
+
+            reason =
+              "called only from code that is itself unsure or dead; reached from #{ElixirCallIndex.identity(from)}"
+
+            {dead, via, [unsure_entry(e, reason) | unsure]}
+
+          node.callers == [] ->
+            {[dead_entry(e, node.test_callers?) | dead], via, unsure}
+
+          true ->
+            {dead, [via_entry(e, node, graph) | via], unsure}
         end
       end)
 
-    candidates_left = alive_or_pending ++ dead_by_tests
-    tested = MapSet.new(dead_by_tests, & &1.id)
-    mentions = atom_mentions(candidates_left, all_entities)
+    {sort(dead), sort(via), sort(unsure)}
+  end
 
-    {dead, unsure} =
-      Enum.reduce(candidates_left, {[], []}, fn e, {dead, unsure} ->
-        case unsure_reason(e, index, mentions) do
-          nil -> {[dead_entry(e, MapSet.member?(tested, e.id)) | dead], unsure}
-          reason -> {dead, [unsure_entry(e, reason) | unsure]}
-        end
+  defp group_functions(entities) do
+    entities
+    |> Enum.group_by(&{&1.entity["file_path"], &1.entity["module_path"], &1.entity["name"]})
+    |> Enum.flat_map(fn {_key, clauses} -> functions(clauses) end)
+  end
+
+  # Every suspect function (public candidates and private functions) with its
+  # callers among the suspects, and whether anything else calls it (`root?`).
+  # A caller outside the suspects is live by assumption: a callback, an entry
+  # point, a module body, a non-candidate. Test callers make a root only when
+  # tests count; otherwise they are ignored here and flagged `test_callers?`.
+  defp suspect_graph(suspects, index, count_test_callers?) do
+    owner =
+      for e <- suspects, qn <- ElixirCallIndex.qualified_names(e), into: %{}, do: {qn, e.id}
+
+    nodes =
+      Map.new(suspects, fn e ->
+        edges =
+          e
+          |> ElixirCallIndex.qualified_names()
+          |> Enum.flat_map(&ElixirCallIndex.exact_callers(index, &1))
+
+        {test_edges, app_edges} = Enum.split_with(edges, &ElixirCallIndex.test_caller?/1)
+
+        {callers, outside} =
+          Enum.reduce(app_edges, {[], false}, fn %{caller: caller}, {callers, outside} ->
+            case Enum.find_value(ElixirCallIndex.qualified_names(caller), &owner[&1]) do
+              nil -> {callers, true}
+              id when id == e.id -> {callers, outside}
+              id -> {[id | callers], outside}
+            end
+          end)
+
+        root? = outside or (count_test_callers? and test_edges != [])
+        {e.id, %{entity: e, callers: Enum.uniq(callers), root?: root?, test_callers?: test_edges != []}}
       end)
 
-    {sort(dead), sort(unsure)}
+    callees =
+      Enum.reduce(nodes, %{}, fn {id, node}, acc ->
+        Enum.reduce(node.callers, acc, fn caller, acc -> Map.update(acc, caller, [id], &[id | &1]) end)
+      end)
+
+    %{nodes: nodes, callees: callees}
+  end
+
+  # Everything reachable along calls from `start`, never entering `blocked`.
+  defp reach(graph, start, blocked \\ MapSet.new()) do
+    start = Enum.reject(start, &MapSet.member?(blocked, &1))
+    do_reach(graph, start, MapSet.new(start), blocked)
+  end
+
+  defp do_reach(_graph, [], seen, _blocked), do: seen
+
+  defp do_reach(graph, [id | rest], seen, blocked) do
+    next =
+      graph.callees
+      |> Map.get(id, [])
+      |> Enum.reject(&(MapSet.member?(seen, &1) or MapSet.member?(blocked, &1)))
+
+    do_reach(graph, next ++ rest, Enum.reduce(next, seen, &MapSet.put(&2, &1)), blocked)
+  end
+
+  # One chain of dead calls ending at `node`: walk up through the first caller
+  # until a function nothing calls, or until the walk comes back (a cycle).
+  defp chain(node, graph), do: do_chain(node, graph, [node.entity.id], [ElixirCallIndex.identity(node.entity)])
+
+  defp do_chain(%{callers: []}, _graph, _seen, names), do: names
+
+  defp do_chain(%{callers: [caller | _]}, graph, seen, names) do
+    up = graph.nodes[caller]
+    name = ElixirCallIndex.identity(up.entity)
+
+    if caller in seen,
+      do: [name <> " (cycle)" | names],
+      else: do_chain(up, graph, [caller | seen], [name | names])
+  end
+
+  defp via_entry(e, node, graph) do
+    e
+    |> dead_entry(node.test_callers?)
+    |> Map.put(
+      :dead_callers,
+      node.callers |> Enum.map(&ElixirCallIndex.identity(graph.nodes[&1].entity)) |> Enum.sort()
+    )
+    |> Map.put(:chain, chain(node, graph))
   end
 
   # The clauses of one function, as one entity: clauses whose arities overlap are

@@ -282,7 +282,7 @@ When adding a new skill, decide visibility by prefix. Don't expose internal-dev 
 | `lib/elixir_nexus/search/queries.ex` | Thin facade delegating to domain sub-modules (entity_resolution, caller_finder, callee_finder, impact_analysis, community_context, dead_code_detection, graph_stats, module_hierarchy) |
 | `lib/elixir_nexus/parsers/elixir_xref.ex` | Elixir call resolution at parse time: module context (aliases, imports, `use` injects), calls as `Mod.fun/arity`, HEEx components and expressions |
 | `lib/elixir_nexus/search/elixir_call_index.ex` | The exact Elixir call graph over `xref`: resolves bare calls through imports and use-injected imports, fallbacks for dynamic calls |
-| `lib/elixir_nexus/search/elixir_dead_code.ex` | Elixir dead-code verdicts: dead, `unsure` (with the reason), `called_from_tests` |
+| `lib/elixir_nexus/search/elixir_dead_code.ex` | Elixir dead-code verdicts by reachability from live roots (private functions are links, never reported): dead, `dead_via_dead_callers` (with `dead_callers` and `chain`), `unsure` (with the reason, propagated to what only unsure code calls), `called_from_tests` |
 | `lib/elixir_nexus/search/entity_resolution.ex` | Entity name matching — highest-centrality file; `matches_entity_name?/2`, `find_entity_multi_strategy/2` |
 | `lib/elixir_nexus/search/graph_boost.ex` | Relationship-aware search result re-ranking |
 | `lib/elixir_nexus/relationship_graph.ex` | Graph building with name-indexed O(1) resolution |
