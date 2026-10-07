@@ -17,7 +17,8 @@ defmodule ElixirNexus.CodeSchema do
     :calls,
     :is_a,
     :contains,
-    :language
+    :language,
+    :xref
   ]
 
   @type t :: %__MODULE__{
@@ -34,7 +35,8 @@ defmodule ElixirNexus.CodeSchema do
           calls: list(String.t()),
           is_a: list(String.t()),
           contains: list(String.t()),
-          language: atom() | nil
+          language: atom() | nil,
+          xref: map() | nil
         }
 
   @doc """
@@ -148,6 +150,24 @@ defmodule ElixirNexus.CodeSchema do
           parameters: extract_param_names(params),
           visibility: :public,
           calls: ElixirNexus.RelationshipExtractor.extract_calls(body),
+          is_a: [],
+          contains: []
+        }
+
+      # defdelegate fun(args), to: Mod — a public function whose body is the target.
+      {:defdelegate, meta, [{func_name, _, params} | _]} when is_atom(func_name) ->
+        {start_line, end_line} = extract_lines(meta)
+
+        %__MODULE__{
+          file_path: file_path,
+          entity_type: :function,
+          name: to_string(func_name),
+          content: extract_content(source_code, start_line, end_line),
+          start_line: start_line,
+          end_line: end_line,
+          parameters: extract_param_names(params),
+          visibility: :public,
+          calls: [],
           is_a: [],
           contains: []
         }

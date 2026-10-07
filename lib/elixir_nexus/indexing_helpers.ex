@@ -7,7 +7,7 @@ defmodule ElixirNexus.IndexingHelpers do
 
   @batch_size 96
 
-  @elixir_extensions [".ex", ".exs"]
+  @elixir_extensions [".ex", ".exs", ".heex"]
   @polyglot_extensions %{
     ".js" => :javascript,
     ".jsx" => :javascript,
@@ -157,6 +157,12 @@ defmodule ElixirNexus.IndexingHelpers do
     ext = Path.extname(file_path)
 
     cond do
+      ext == ".heex" ->
+        with {:ok, entities} <- ElixirNexus.Parser.parse_template(normalized_path),
+             chunks = ElixirNexus.Chunker.chunk_entities(entities) do
+          {:ok, Enum.map(chunks, &Map.put(&1, :language, :elixir))}
+        end
+
       ext in @elixir_extensions ->
         with {:ok, entities} <- ElixirNexus.Parser.parse_file(normalized_path),
              chunks = ElixirNexus.Chunker.chunk_entities(entities) do
@@ -300,7 +306,8 @@ defmodule ElixirNexus.IndexingHelpers do
             "is_a" => ElixirNexus.Search.filter_ast_noise(chunk.is_a),
             "contains" => ElixirNexus.Search.filter_ast_noise(chunk.contains),
             "content" => chunk.content,
-            "language" => chunk[:language] && Atom.to_string(chunk[:language])
+            "language" => chunk[:language] && Atom.to_string(chunk[:language]),
+            "xref" => chunk[:xref]
           }
         }
       end)

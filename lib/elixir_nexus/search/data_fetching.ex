@@ -36,7 +36,8 @@ defmodule ElixirNexus.Search.DataFetching do
               "is_a" => Map.get(chunk, :is_a, []) || [],
               "contains" => Map.get(chunk, :contains, []) || [],
               "content" => chunk.content,
-              "language" => chunk[:language] && to_string(chunk[:language])
+              "language" => chunk[:language] && to_string(chunk[:language]),
+              "xref" => chunk[:xref]
             }
           }
         end)

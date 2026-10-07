@@ -12,6 +12,26 @@ defmodule ElixirNexus.IndexingHelpersTest do
     {:ok, base: temp_dir}
   end
 
+  describe "process_file/1 with HEEx" do
+    test "a .heex template becomes the embedding module's function with resolved calls", %{base: base} do
+      File.mkdir_p!(Path.join(base, "page_html"))
+
+      File.write!(Path.join(base, "page_html.ex"), """
+      defmodule MyWeb.PageHTML do
+        embed_templates "page_html/*"
+      end
+      """)
+
+      path = Path.join(base, "page_html/home.html.heex")
+      File.write!(path, "<.header>{MyWeb.Fmt.title(@t)}</.header>\n")
+
+      assert {:ok, [chunk]} = IndexingHelpers.process_file(path)
+      assert chunk.language == :elixir
+      assert chunk.xref["qualified_names"] == ["MyWeb.PageHTML.home/1"]
+      assert "MyWeb.Fmt.title/1" in chunk.xref["calls"]
+    end
+  end
+
   describe "count_languages/1" do
     test "groups files by language and counts" do
       files = [

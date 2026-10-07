@@ -167,8 +167,7 @@ defmodule ElixirNexus.FileWatcher do
   end
 
   defp indexable_file?(path) do
-    ext = Path.extname(path)
-    ext in [".ex", ".exs", ".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".rb"]
+    Path.extname(path) in ElixirNexus.IndexingHelpers.all_indexable_extensions()
   end
 
   @ignored_dirs ~w(node_modules .next dist build .expo .turbo coverage __generated__ .cache vendor _build deps .elixir_ls .git)

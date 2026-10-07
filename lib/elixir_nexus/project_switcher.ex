@@ -97,7 +97,8 @@ defmodule ElixirNexus.ProjectSwitcher do
       calls: payload["calls"] || [],
       is_a: payload["is_a"] || [],
       contains: payload["contains"] || [],
-      language: Map.get(@languages, payload["language"])
+      language: Map.get(@languages, payload["language"]),
+      xref: payload["xref"]
     }
   end
 

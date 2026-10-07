@@ -101,6 +101,18 @@ defmodule ElixirNexus.ChunkerTest do
       assert Chunker.chunk_entity(tiny) == []
     end
 
+    test "keeps a tiny Elixir function that carries call-graph data" do
+      # `def f, do: g()` is short, but dropping it loses its call to g and
+      # makes g look dead.
+      tiny = %{
+        @sample_entity
+        | content: "def f, do: g()",
+          xref: %{"qualified_names" => ["M.f/0"], "calls" => ["M.g/0"]}
+      }
+
+      assert [%{xref: %{"calls" => ["M.g/0"]}}] = Chunker.chunk_entity(tiny)
+    end
+
     test "returns [] for nil content" do
       empty = %{@sample_entity | content: nil}
       assert Chunker.chunk_entity(empty) == []

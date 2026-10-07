@@ -67,7 +67,8 @@ defmodule ElixirNexus.ChunkCache do
           "is_a" => chunk.is_a,
           "contains" => chunk.contains,
           "content" => chunk.content,
-          "language" => chunk[:language] && Atom.to_string(chunk[:language])
+          "language" => chunk[:language] && Atom.to_string(chunk[:language]),
+          "xref" => chunk[:xref]
         }
       }
     end)

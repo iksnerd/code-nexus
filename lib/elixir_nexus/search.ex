@@ -200,7 +200,8 @@ defmodule ElixirNexus.Search do
       "calls" => filter_ast_noise(payload["calls"] || []),
       "is_a" => filter_ast_noise(payload["is_a"] || []),
       "contains" => filter_ast_noise(payload["contains"] || []),
-      "language" => payload["language"]
+      "language" => payload["language"],
+      "xref" => payload["xref"]
     }
   end
 

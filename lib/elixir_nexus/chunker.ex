@@ -15,7 +15,12 @@ defmodule ElixirNexus.Chunker do
   """
   @min_content_chars 30
 
-  def chunk_entity(%ElixirNexus.CodeSchema{content: c}) when is_binary(c) and byte_size(c) < @min_content_chars, do: []
+  # Tiny chunks are embedding noise, except an Elixir entity with call-graph data:
+  # dropping `def f, do: g()` loses its call to g and makes g look dead.
+  def chunk_entity(%ElixirNexus.CodeSchema{content: c, xref: xref})
+      when is_binary(c) and byte_size(c) < @min_content_chars and not is_map(xref),
+      do: []
+
   def chunk_entity(%ElixirNexus.CodeSchema{content: nil}), do: []
 
   def chunk_entity(%ElixirNexus.CodeSchema{} = entity) do
@@ -34,7 +39,8 @@ defmodule ElixirNexus.Chunker do
         parameters: entity.parameters,
         calls: entity.calls,
         is_a: entity.is_a,
-        contains: entity.contains
+        contains: entity.contains,
+        xref: entity.xref
       }
     ]
   end
