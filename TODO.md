@@ -1,20 +1,21 @@
 # CodeNexus TODO
 
-**Current version:** v1.19.1
-**Status:** v1.19.1 shipped (2026-09-14). CI built and pushed `iksnerd/code-nexus:v1.19.1` + `:latest`
-(`sha256:1a4e08a4…`). Smoke-tested on the published image: transport check script 6/6, weightless
-dead code = the 4 truly unused functions, `graph_status` ready, compiled CSS served.
+**Current version:** v1.20.0
+**Status:** v1.20.0 tagged (2026-10-07): exact Elixir call graph, dead code by chains, deleted and ignored
+files leave the index, no re-embed on project switch. CI publishes `iksnerd/code-nexus:v1.20.0` + `:latest`.
 
-Previous: v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
+Previous: v1.19.1 shipped (2026-09-14), `sha256:1a4e08a4…`.
+
+Before that: v1.18.11 shipped — `iksnerd/code-nexus:v1.18.11` + `:latest` (arm64) live on Docker
 Hub. Verified against a real polyglot codebase (`gpt-alpha`: 283 Python files + TS/TSX frontend +
 Go, 520 files total) — indexes cleanly, 3808 chunks, `error: null`. Python handling checked
 directly: class/method extraction, `find_module_hierarchy` correctly resolves a class's own
 methods, semantic `search_code` surfaces the right function for a natural-language query. 821
 tests green, CI green.
 
-## 🚧 Unreleased — exact Elixir call graph (branch `feat/elixir-call-resolution`, 2026-10-07)
+## ✅ v1.20.0 — exact Elixir call graph (2026-10-07)
 
-Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-call-resolution`.
+Council Hub room `code-nexus-elixir-call-resolution`.
 
 - [x] Elixir calls resolve to `Module.fun/arity` at parse time (`parsers/elixir_xref.ex`), stored as `xref`
   on each chunk; nested modules' functions are entities; `.heex` templates are their module's function.
@@ -31,7 +32,8 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
   project's data. The caches now record their collection (`ChunkCache.collection/0`); the incremental path
   reloads both from the active collection when it differs, so only changed files (or files stored by an
   older `index_version`) are parsed again. **Files:** `indexer.ex`, `chunk_cache.ex`, `project_switcher.ex`.
-- [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
+- [x] CLI `dead-code`: `--prefix` sent `file_prefix` (ignored by the server); now `path_prefix`, and the via-dead and unsure lists are shown. Go toolchain pinned to go1.26.6 (9 stdlib vulnerabilities in 1.26.2).
+- [x] Released as v1.20.0.
 - [x] **Dead code by chains**: liveness is reachability from live roots (callbacks, entry points, module bodies, non-candidates, tests when counted), through private functions too. What only dead code calls is `dead_via_dead_callers` with its `dead_callers` and a `chain`; what only unsure code reaches stays `unsure`. The path prefix filters the report, not the graph. **Files:** `search/elixir_dead_code.ex`, `search/dead_code_detection.ex`.
 - [x] **Nested modules** see the imports and aliases their enclosing module's `use` injects (module xref
   `enclosing`; `index_version` 3). **Files:** `parsers/elixir_xref.ex`, `search/elixir_call_index.ex`, `parser.ex`.
