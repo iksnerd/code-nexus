@@ -13,7 +13,8 @@ Code.require_file("support/mox_setup.ex", __DIR__)
 suite_collection? = fn name ->
   name == ElixirNexus.QdrantClient.collection_name() or
     name in ~w(nexus_force_switched nexus_temp_collection nexus_ensure_collection_test nexus_test_sizes_temp) or
-    Regex.match?(~r/^nexus_mcp_(reindex_test|lib_test|autoreindex_test|autoreindex)_\d+$/, name)
+    Regex.match?(~r/^nexus_mcp_(reindex_test|lib_test|autoreindex_test|autoreindex)_\d+$/, name) or
+    Regex.match?(~r/^nexus_reembed_test_[ab]_\d+$/, name)
 end
 
 ExUnit.after_suite(fn _results ->

@@ -95,6 +95,8 @@ When `MCP_HTTP_PORT` env var is set (docker-compose sets it to `3002`), `applica
 
 **Note:** Docker does not mount the host source (no `.:/app` volume) — the image is self-contained with its own Linux-compiled NIF and BEAM files. After code changes, rebuild with `make build` (`docker build -t iksnerd/code-nexus:latest .`; the compose file has no `build:` section, so `docker-compose build` does nothing), then `docker compose up -d --no-deps code_nexus`.
 
+**Caches belong to one collection:** `ChunkCache.collection/0` names the collection ChunkCache, GraphCache and DirtyTracker were loaded for. The Indexer's incremental path reloads them from the active collection when it differs (another project was indexed in between), then trusts the stored `file_sha` and `index_version` to skip unchanged files.
+
 **Index version:** every stored chunk carries `index_version` (`IndexingHelpers.@index_version`). Bump it when parsing changes what a chunk carries (v2 added the Elixir `xref`, v3 a nested module's `enclosing`): a reindex then parses files indexed by the older version again even though their content is unchanged. Without the bump, unchanged files keep their old chunks.
 
 ### Workspace mount (Docker)

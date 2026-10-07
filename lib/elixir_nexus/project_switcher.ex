@@ -34,6 +34,7 @@ defmodule ElixirNexus.ProjectSwitcher do
     # Clear ETS before reloading to avoid duplicates (ChunkCache is :bag type)
     ChunkCache.clear()
     GraphCache.clear()
+    ChunkCache.put_collection(QdrantClient.active_collection())
 
     # Scroll all points from Qdrant and rebuild ETS caches
     case scroll_all(100, nil, []) do

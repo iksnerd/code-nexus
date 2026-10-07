@@ -367,6 +367,7 @@ defmodule ElixirNexus.Indexer do
         ElixirNexus.DirtyTracker.reset()
         ChunkCache.clear()
         GraphCache.clear()
+        ChunkCache.put_collection(ElixirNexus.QdrantClient.active_collection())
 
         {:ok,
          %{
@@ -414,7 +415,7 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_async_index_files_incremental(files, skip_stats, state) do
-    hydrate_cold_caches()
+    align_caches_with_collection()
 
     if ElixirNexus.DirtyTracker.empty?() do
       seed_dirty_tracker_from_qdrant()
@@ -470,7 +471,7 @@ defmodule ElixirNexus.Indexer do
   end
 
   defp do_index_files_incremental(files, skip_stats, from, state) do
-    hydrate_cold_caches()
+    align_caches_with_collection()
 
     # On the first reindex after a container restart, DirtyTracker is empty even
     # though Qdrant already has vectors from the last session. Seed it now from the
@@ -658,14 +659,28 @@ defmodule ElixirNexus.Indexer do
     length(stale)
   end
 
-  # After a restart the ETS caches are cold while Qdrant still holds the data.
-  # The partial-reindex path assumes warm caches — skipping unchanged files would
-  # otherwise leave the graph empty, and re-embedding only dirty files would rebuild
-  # the graph from just those files. Hydrate from the current Qdrant collection first.
-  # No-op once warm (ChunkCache populated) and for fresh/empty collections.
-  defp hydrate_cold_caches do
-    if ChunkCache.count() == 0 do
-      ElixirNexus.ProjectSwitcher.reload_from_qdrant()
+  # The incremental path trusts the caches and DirtyTracker's checksums, so they
+  # must hold the active collection's data. After a restart they are empty; after
+  # another project was indexed they hold that project's chunks and checksums,
+  # which made every file of this one look changed and re-embedded it all
+  # (Contra: 457 of 457 after indexing a two-file project). Reload both from the
+  # collection then: its points carry each file's checksum and index_version, so
+  # only files that changed on disk, or were stored by an older parser, are
+  # parsed again.
+  defp align_caches_with_collection do
+    active = ElixirNexus.QdrantClient.active_collection()
+
+    cond do
+      ChunkCache.collection() != active ->
+        Logger.info("Caches belong to #{inspect(ChunkCache.collection())}, reloading them from #{active}")
+        ElixirNexus.DirtyTracker.reset()
+        ElixirNexus.ProjectSwitcher.reload_from_qdrant()
+
+      ChunkCache.count() == 0 ->
+        ElixirNexus.ProjectSwitcher.reload_from_qdrant()
+
+      true ->
+        :ok
     end
   end
 

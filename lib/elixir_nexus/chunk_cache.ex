@@ -101,6 +101,17 @@ defmodule ElixirNexus.ChunkCache do
     :ok
   end
 
+  @doc """
+  The Qdrant collection the cached chunks (and DirtyTracker's checksums) were
+  loaded for, or nil before any load. Set when the caches are reloaded from a
+  collection or reset with it; the Indexer compares it with the active
+  collection before trusting the caches.
+  """
+  def collection, do: Application.get_env(:elixir_nexus, :chunk_cache_collection)
+
+  @doc "Record that the caches now hold `collection`'s chunks."
+  def put_collection(collection), do: Application.put_env(:elixir_nexus, :chunk_cache_collection, collection)
+
   def delete_by_file(file_path) do
     :ets.delete(@table, file_path)
     :ok

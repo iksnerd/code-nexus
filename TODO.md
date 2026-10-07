@@ -26,8 +26,11 @@ Local only: not pushed, no image published. Council Hub room `code-nexus-elixir-
 - [x] Contra again (2026-10-07, after it removed the functions reported earlier): 457 files indexed = the 453
   tracked under lib/ plus 4 root .exs files; 22 dead (every one called only from test/, which its
   .nexusignore excludes on purpose), 5 dead via dead callers, 14 unsure (all dynamic dispatch), sampled by grep.
-- [ ] DirtyTracker is not per collection: after indexing another project, the next reindex of the first
-  re-embeds every file (Contra: 457/457, about 2 min) because the tracker is not empty and is never seeded.
+- [x] **Re-embed on project switch**: after indexing another project, the next reindex of the first re-embedded
+  every file (Contra: 457/457, about 2 min), because ChunkCache and DirtyTracker still held the other
+  project's data. The caches now record their collection (`ChunkCache.collection/0`); the incremental path
+  reloads both from the active collection when it differs, so only changed files (or files stored by an
+  older `index_version`) are parsed again. **Files:** `indexer.ex`, `chunk_cache.ex`, `project_switcher.ex`.
 - [ ] Release: version bump, CHANGELOG, image publish (not before the lead says so).
 - [x] **Dead code by chains**: liveness is reachability from live roots (callbacks, entry points, module bodies, non-candidates, tests when counted), through private functions too. What only dead code calls is `dead_via_dead_callers` with its `dead_callers` and a `chain`; what only unsure code reaches stays `unsure`. The path prefix filters the report, not the graph. **Files:** `search/elixir_dead_code.ex`, `search/dead_code_detection.ex`.
 - [x] **Nested modules** see the imports and aliases their enclosing module's `use` injects (module xref
