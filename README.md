@@ -18,6 +18,15 @@ It runs on Elixir/OTP. Ollama produces the dense embeddings, Qdrant does hybrid 
 
 ## Quick Start
 
+With Docker running and the [`nexus` CLI](#cli) installed, one command starts CodeNexus, adds it to the project's `.mcp.json` and indexes the project:
+
+```bash
+cd ~/projects/my-app
+nexus init
+```
+
+It uses Ollama embeddings if Ollama has the model and TF-IDF otherwise. Add `--dry-run` to see what it would do. The manual steps below are for a custom setup.
+
 You need [Docker](https://docs.docker.com/get-docker/) and [Ollama](https://ollama.com) with the embedding model pulled:
 
 ```bash
