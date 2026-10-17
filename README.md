@@ -69,7 +69,7 @@ curl -s localhost:4100/health
 
 It returns JSON with the status of MCP, Qdrant, and Ollama, and responds with HTTP 503 if Qdrant is down. An unreachable Ollama shows as `"degraded"` with HTTP 200, because embeddings fall back to TF-IDF; the container expects Ollama at `host.docker.internal:11434`.
 
-**Connect Claude Code** by adding this to your project's `.mcp.json`:
+**Connect Claude Code** with `claude mcp add --transport http code-nexus http://localhost:3002/mcp`, or by adding this to your project's `.mcp.json`:
 
 ```json
 {

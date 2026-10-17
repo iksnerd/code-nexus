@@ -38,8 +38,27 @@ release:
     owner: iksnerd
     name: code-nexus
   name_template: "CLI {{ .Tag }}"
+  # The repo's compose file, for running the server without the CLI.
+  extra_files:
+    - glob: ../docker-compose.yml
   header: |
     ## CodeNexus CLI {{ .Tag }}
+
+    ### Quick start
+
+    With Docker running, install the CLI below, then in your project:
+
+    ```bash
+    nexus init
+    ```
+
+    That starts the server, indexes the project and writes `.mcp.json`. To connect Claude Code to a server that is already running:
+
+    ```bash
+    claude mcp add --transport http code-nexus http://localhost:3002/mcp
+    ```
+
+    No CLI? Download `docker-compose.yml` from this release and run `WORKSPACE=~/projects WORKSPACE_HOST=~/projects docker compose up -d`.
 
     ### Install
 
