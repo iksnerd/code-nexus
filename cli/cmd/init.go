@@ -87,9 +87,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	_, probeErr := probe.CallTool("get_status", map[string]any{})
 	running := probeErr == nil
 
-	if running {
-		step("CodeNexus already answers at %s, leaving it as is", serverURL)
-	} else if err := startStack(workspace); err != nil {
+	dir, err := nexusDir()
+	if err != nil {
+		return err
+	}
+	current, managed := readEnv(filepath.Join(dir, ".env"))
+
+	if running && !managed {
+		step("CodeNexus already answers at %s and was not started by nexus init, leaving it as is", serverURL)
+	} else if err := ensureStack(dir, workspace, current, managed, running); err != nil {
 		return err
 	}
 
@@ -105,12 +111,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return indexProject(project)
 }
 
-// startStack writes the compose files under ~/.nexus and brings the stack up.
-func startStack(workspace string) error {
-	if err := checkDocker(); err != nil {
-		return err
+func nexusDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("find home directory: %w", err)
 	}
+	return filepath.Join(home, ".nexus"), nil
+}
 
+func readEnv(path string) (string, bool) {
+	b, err := os.ReadFile(path)
+	return string(b), err == nil
+}
+
+// chooseEmbeddings applies --embeddings against what Ollama has installed.
+func chooseEmbeddings() (string, error) {
 	model := os.Getenv("OLLAMA_MODEL")
 	if model == "" {
 		model = defaultOllamaModel
@@ -118,7 +133,7 @@ func startStack(workspace string) error {
 	available := ollamaHasModel(defaultOllamaURL, model)
 	embeddings, err := pickEmbeddings(initEmbeddings, available)
 	if err != nil {
-		return fmt.Errorf("%w\n\nInstall the model with: ollama pull %s", err, model)
+		return "", fmt.Errorf("%w\n\nInstall the model with: ollama pull %s", err, model)
 	}
 	if embeddings == "tfidf" && initEmbeddings == "auto" {
 		warn("Ollama model %s not found at %s: using TF-IDF embeddings (faster to index, weaker semantic matches)", model, defaultOllamaURL)
@@ -126,18 +141,61 @@ func startStack(workspace string) error {
 	} else {
 		step("Embeddings: %s", embeddings)
 	}
+	return embeddings, nil
+}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("find home directory: %w", err)
+// desiredEnv is the env the stack should run with. A stack nexus init already
+// manages keeps its settings and gains a mount when the project is not under
+// one; a first run builds the env from scratch.
+func desiredEnv(current string, managed bool, mountDir string) (string, error) {
+	if !managed {
+		embeddings, err := chooseEmbeddings()
+		if err != nil {
+			return "", err
+		}
+		return renderEnv(mountDir, embeddings), nil
 	}
-	dir := filepath.Join(home, ".nexus")
+
+	want := current
+	if initEmbeddings != "auto" {
+		embeddings, err := chooseEmbeddings()
+		if err != nil {
+			return "", err
+		}
+		backend := ""
+		if embeddings == "tfidf" {
+			backend = "tfidf"
+		}
+		want = envSet(want, "EMBEDDING_BACKEND", backend)
+	}
+	for _, dir := range workspaces(want) {
+		if within(dir, mountDir) {
+			return want, nil
+		}
+	}
+	return addWorkspace(want, mountDir)
+}
+
+// ensureStack brings the stack nexus init manages to the desired env: it
+// starts a stopped one and recreates a running one when a mount was added.
+func ensureStack(dir, mountDir, current string, managed, running bool) error {
+	env, err := desiredEnv(current, managed, mountDir)
+	if err != nil {
+		return err
+	}
+	if running && env == current {
+		step("CodeNexus is running and already mounts %s", mountDir)
+		return nil
+	}
+	if err := checkDocker(); err != nil {
+		return err
+	}
+
 	composePath := filepath.Join(dir, "docker-compose.yml")
 	envPath := filepath.Join(dir, ".env")
-	env := renderEnv(workspace, embeddings)
 
 	if initDryRun {
-		step("Would write %s and %s, mounting %s", composePath, envPath, workspace)
+		step("Would write %s and %s, mounting %s", composePath, envPath, strings.Join(workspaces(env), ", "))
 		step("Would run: %s", strings.Join(composeArgs(composePath, envPath, "up", "-d"), " "))
 		return nil
 	}
@@ -151,7 +209,7 @@ func startStack(workspace string) error {
 	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", envPath, err)
 	}
-	step("Wrote %s (mounts %s read-only)", composePath, workspace)
+	step("Wrote %s (mounts %s read-only)", composePath, strings.Join(workspaces(env), ", "))
 
 	var upErr error
 	ui.Spin("Starting CodeNexus and Qdrant…", func() {

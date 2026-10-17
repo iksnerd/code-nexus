@@ -16,6 +16,9 @@ var reindexCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		toolArgs := map[string]any{}
 		if len(args) == 1 && args[0] != "" {
+			cwd, _ := os.Getwd()
+			home, _ := os.UserHomeDir()
+			args[0] = resolveReindexPath(args[0], cwd, home)
 			toolArgs["path"] = args[0]
 		}
 
