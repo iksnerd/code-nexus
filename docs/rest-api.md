@@ -9,7 +9,7 @@ The Phoenix app on port `4100` serves these endpoints alongside the dashboard. R
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/metrics` | Prometheus metrics (text format 0.0.4): search latency, indexing throughput, Qdrant ops, BEAM VM stats |
-| GET | `/health` | Readiness for MCP, Qdrant, Ollama, and indexed projects. HTTP 200 when all dependencies are healthy, 503 otherwise |
+| GET | `/health` | Readiness for MCP, Qdrant, Ollama, and indexed projects. HTTP 200 when Qdrant is healthy, 503 otherwise. Ollama reports `healthy` or `degraded` and does not affect the status |
 
 ## Search and discovery
 

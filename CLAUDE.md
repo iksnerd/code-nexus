@@ -225,7 +225,7 @@ Set `NEXUS_INDEX_STRATEGY=curated` to opt into the legacy curated-fast-path that
 
 ### Health & observability
 
-- `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` JSON; HTTP 200 when all deps healthy, 503 otherwise (v1.6.0).
+- `GET /health` returns `{mcp, qdrant, ollama, indexed_projects}` JSON; HTTP 200 when Qdrant is healthy, 503 otherwise (v1.6.0). Ollama is optional (TF-IDF fallback), so it reports `healthy` or `degraded` and never fails the check.
 - `GET /metrics` exposes Prometheus telemetry (v1.4.0). Note: `:summary`-typed metrics currently get dropped by `telemetry_metrics_prometheus_core` — convert to `:distribution` if you need histogram data exposed.
 
 ### Telemetry events
