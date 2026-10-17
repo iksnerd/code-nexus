@@ -67,7 +67,7 @@ Check that everything came up:
 curl -s localhost:4100/health
 ```
 
-It returns JSON with the status of MCP, Qdrant, and Ollama, and responds with HTTP 503 if any of them is down. An unreachable Ollama is the usual culprit; the container expects it at `host.docker.internal:11434`.
+It returns JSON with the status of MCP, Qdrant, and Ollama, and responds with HTTP 503 if Qdrant is down. An unreachable Ollama shows as `"degraded"` with HTTP 200, because embeddings fall back to TF-IDF; the container expects Ollama at `host.docker.internal:11434`.
 
 **Connect Claude Code** by adding this to your project's `.mcp.json`:
 
