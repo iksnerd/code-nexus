@@ -93,7 +93,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	current, managed := readEnv(filepath.Join(dir, ".env"))
 
-	if running && !managed {
+	unmanaged := running && !managed
+	if unmanaged {
 		step("CodeNexus already answers at %s and was not started by nexus init, leaving it as is", serverURL)
 	} else if err := ensureStack(dir, workspace, current, managed, running); err != nil {
 		return err
@@ -108,7 +109,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if initNoIndex {
 		return nil
 	}
-	return indexProject(project)
+	if err := indexProject(project); err != nil {
+		if unmanaged {
+			return fmt.Errorf("%w\nThe server at %s was not started by nexus init, so it may not mount %s. Mount it (WORKSPACE in that server's compose file) and re-run", err, serverURL, project)
+		}
+		return err
+	}
+	return nil
 }
 
 func nexusDir() (string, error) {
@@ -188,7 +195,10 @@ func ensureStack(dir, mountDir, current string, managed, running bool) error {
 		return nil
 	}
 	if err := checkDocker(); err != nil {
-		return err
+		if !initDryRun {
+			return err
+		}
+		warn("%v (a real run would stop here)", err)
 	}
 
 	composePath := filepath.Join(dir, "docker-compose.yml")

@@ -124,20 +124,35 @@ func TestMergeMCPConfigRejectsBadJSON(t *testing.T) {
 	}
 }
 
-// The embedded compose file is a copy of the repo's. It may differ (the
-// embedded one binds Qdrant to loopback), but the images and container names
-// it starts must not drift.
+// composeLines is a compose file's content lines: no blanks, no comments, so a
+// reworded comment is not drift but a changed port or healthcheck is.
+func composeLines(s string) map[string]bool {
+	lines := map[string]bool{}
+	for line := range strings.SplitSeq(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			lines[trimmed] = true
+		}
+	}
+	return lines
+}
+
+// The embedded compose file is a copy of the repo's. Every content line must
+// match both ways, so a port, healthcheck or restart policy cannot drift.
 func TestEmbeddedComposeMatchesRepoCompose(t *testing.T) {
 	repo, err := os.ReadFile("../../docker-compose.yml")
 	if err != nil {
 		t.Skip("repo compose file not reachable:", err)
 	}
-	for line := range strings.SplitSeq(string(repo), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "image:") || strings.HasPrefix(trimmed, "container_name:") {
-			if !strings.Contains(composeYAML, trimmed) {
-				t.Errorf("embedded compose lacks %q", trimmed)
-			}
+	want, got := composeLines(string(repo)), composeLines(composeYAML)
+	for line := range want {
+		if !got[line] {
+			t.Errorf("embedded compose lacks %q", line)
+		}
+	}
+	for line := range got {
+		if !want[line] {
+			t.Errorf("repo compose lacks %q", line)
 		}
 	}
 }
